@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import type { Session } from '@supabase/supabase-js';
+import type { Session } from "@supabase/supabase-js";
+import { Stack, useRouter, useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useState } from "react";
 
-import { supabase } from '@/services/supabaseClient';
+import { supabase } from "@/services/supabaseClient";
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -13,7 +13,7 @@ export default function RootLayout() {
   useEffect(() => {
     // Initiale Session laden
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session:', session?.user?.email ?? 'keine');
+      console.log("Initial session:", session?.user?.email ?? "keine");
       setSession(session);
     });
 
@@ -21,7 +21,7 @@ export default function RootLayout() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, session?.user?.email ?? 'kein User');
+      console.log("Auth event:", event, session?.user?.email ?? "kein User");
       setSession(session);
     });
 
@@ -31,13 +31,18 @@ export default function RootLayout() {
   useEffect(() => {
     if (session === undefined) return; // noch am Laden
 
-    const inAuthGroup = segments[0] === '(auth)';
-    console.log('Redirect check — inAuthGroup:', inAuthGroup, '| session:', !!session);
+    const inAuthGroup = segments[0] === "(auth)";
+    console.log(
+      "Redirect check — inAuthGroup:",
+      inAuthGroup,
+      "| session:",
+      !!session,
+    );
 
     if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
+      router.replace("/(auth)/login");
     } else if (session && inAuthGroup) {
-      router.replace('/(app)/(tabs)');
+      router.replace("/(app)/(tabs)");
     }
   }, [session, segments]);
 
@@ -46,7 +51,10 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen
+          name="modal"
+          options={{ presentation: "modal", title: "Modal" }}
+        />
       </Stack>
       <StatusBar style="light" />
     </>

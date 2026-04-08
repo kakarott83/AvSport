@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 // ─────────────────────────────────────────
 // Types
@@ -40,7 +40,9 @@ export type PlanEditorProps = {
   restBetweenRounds: string;
   setRestBetweenRounds: (value: string) => void;
   exercises: ExerciseRow[];
-  setExercises: (exercises: ExerciseRow[] | ((prev: ExerciseRow[]) => ExerciseRow[])) => void;
+  setExercises: (
+    exercises: ExerciseRow[] | ((prev: ExerciseRow[]) => ExerciseRow[]),
+  ) => void;
   masterExercises: MasterExercise[];
   isEdit?: boolean;
 };
@@ -61,14 +63,15 @@ function ExerciseNamePicker({ value, onChange, masterList }: PickerProps) {
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (!value) setQuery('');
+    if (!value) setQuery("");
   }, [value]);
 
-  const suggestions = query.trim().length >= 1
-    ? masterList
-        .filter((ex) => ex.name.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 6)
-    : [];
+  const suggestions =
+    query.trim().length >= 1
+      ? masterList
+          .filter((ex) => ex.name.toLowerCase().includes(query.toLowerCase()))
+          .slice(0, 6)
+      : [];
 
   function handleChangeText(v: string) {
     setQuery(v);
@@ -115,22 +118,31 @@ function ExerciseNamePicker({ value, onChange, masterList }: PickerProps) {
 }
 
 const pickerStyles = StyleSheet.create({
-  wrapper:    { marginBottom: 10, zIndex: 10 },
+  wrapper: { marginBottom: 10, zIndex: 10 },
   input: {
-    backgroundColor: '#2a2a2a', borderRadius: 10,
-    padding: 13, fontSize: 15, color: '#fff',
-    borderWidth: 1, borderColor: '#333',
+    backgroundColor: "#2a2a2a",
+    borderRadius: 10,
+    padding: 13,
+    fontSize: 15,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "#333",
   },
   dropdown: {
-    backgroundColor: '#2a2a2a', borderRadius: 10,
-    borderWidth: 1, borderColor: '#0a7ea4',
-    marginTop: 4, overflow: 'hidden',
+    backgroundColor: "#2a2a2a",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#0a7ea4",
+    marginTop: 4,
+    overflow: "hidden",
   },
   suggestion: {
-    paddingVertical: 11, paddingHorizontal: 14,
-    borderBottomWidth: 1, borderBottomColor: '#333',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
   },
-  suggestionText: { color: '#fff', fontSize: 14 },
+  suggestionText: { color: "#fff", fontSize: 14 },
 });
 
 // ─────────────────────────────────────────
@@ -153,14 +165,13 @@ export default function WorkoutPlanEditor({
   masterExercises,
   isEdit = false,
 }: PlanEditorProps) {
-
   function newRow(): ExerciseRow {
     return {
       localId: Date.now().toString() + Math.random(),
-      name: '',
-      targetSets: '3',
-      targetReps: '10',
-      targetDuration: '',
+      name: "",
+      targetSets: "3",
+      targetReps: "10",
+      targetDuration: "",
     };
   }
 
@@ -178,14 +189,14 @@ export default function WorkoutPlanEditor({
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.heading}>
-          {isEdit ? 'Plan bearbeiten' : 'Neuen Plan erstellen'}
+          {isEdit ? "Plan bearbeiten" : "Neuen Plan erstellen"}
         </Text>
 
         {/* ── Plan Name ── */}
@@ -205,14 +216,15 @@ export default function WorkoutPlanEditor({
             <View style={{ flex: 1 }}>
               <Text style={styles.circuitToggleTitle}>Zirkeltraining</Text>
               <Text style={styles.circuitToggleHint}>
-                Alle Übungen werden in Runden absolviert, ohne feste Sätze pro Übung.
+                Alle Übungen werden in Runden absolviert, ohne feste Sätze pro
+                Übung.
               </Text>
             </View>
             <Switch
               value={isCircuit}
               onValueChange={setIsCircuit}
-              trackColor={{ false: '#2a2a2a', true: '#0a3a3a' }}
-              thumbColor={isCircuit ? '#0a7ea4' : '#555'}
+              trackColor={{ false: "#2a2a2a", true: "#0a3a3a" }}
+              thumbColor={isCircuit ? "#0a7ea4" : "#555"}
             />
           </View>
         </View>
@@ -220,13 +232,15 @@ export default function WorkoutPlanEditor({
         {/* ── Circuit Settings (only when is_circuit is enabled) ── */}
         {isCircuit && (
           <View style={styles.circuitSettingsCard}>
-            <Text style={styles.circuitSettingsTitle}>Zirkel-Einstellungen</Text>
+            <Text style={styles.circuitSettingsTitle}>
+              Zirkel-Einstellungen
+            </Text>
 
             <Text style={styles.sublabel}>Anzahl der Runden</Text>
             <TextInput
               style={styles.input}
               value={circuitRounds}
-              onChangeText={(v) => setCircuitRounds(v.replace(/[^0-9]/g, ''))}
+              onChangeText={(v) => setCircuitRounds(v.replace(/[^0-9]/g, ""))}
               keyboardType="number-pad"
               placeholder="3"
               placeholderTextColor="#555"
@@ -238,7 +252,9 @@ export default function WorkoutPlanEditor({
                 <TextInput
                   style={styles.input}
                   value={restBetweenExercises}
-                  onChangeText={(v) => setRestBetweenExercises(v.replace(/[^0-9]/g, ''))}
+                  onChangeText={(v) =>
+                    setRestBetweenExercises(v.replace(/[^0-9]/g, ""))
+                  }
                   keyboardType="number-pad"
                   placeholder="15"
                   placeholderTextColor="#555"
@@ -249,7 +265,9 @@ export default function WorkoutPlanEditor({
                 <TextInput
                   style={styles.input}
                   value={restBetweenRounds}
-                  onChangeText={(v) => setRestBetweenRounds(v.replace(/[^0-9]/g, ''))}
+                  onChangeText={(v) =>
+                    setRestBetweenRounds(v.replace(/[^0-9]/g, ""))
+                  }
                   keyboardType="number-pad"
                   placeholder="60"
                   placeholderTextColor="#555"
@@ -271,7 +289,12 @@ export default function WorkoutPlanEditor({
                 disabled={exercises.length <= 1}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={[styles.removeText, exercises.length <= 1 && styles.removeDisabled]}>
+                <Text
+                  style={[
+                    styles.removeText,
+                    exercises.length <= 1 && styles.removeDisabled,
+                  ]}
+                >
                   ✕
                 </Text>
               </TouchableOpacity>
@@ -279,7 +302,7 @@ export default function WorkoutPlanEditor({
 
             <ExerciseNamePicker
               value={ex.name}
-              onChange={(v) => updateRow(ex.localId, 'name', v)}
+              onChange={(v) => updateRow(ex.localId, "name", v)}
               masterList={masterExercises}
             />
 
@@ -291,7 +314,7 @@ export default function WorkoutPlanEditor({
                   <TextInput
                     style={styles.input}
                     value={ex.targetSets}
-                    onChangeText={(v) => updateRow(ex.localId, 'targetSets', v)}
+                    onChangeText={(v) => updateRow(ex.localId, "targetSets", v)}
                     keyboardType="number-pad"
                     placeholder="3"
                     placeholderTextColor="#555"
@@ -303,7 +326,7 @@ export default function WorkoutPlanEditor({
                 <TextInput
                   style={styles.input}
                   value={ex.targetReps}
-                  onChangeText={(v) => updateRow(ex.localId, 'targetReps', v)}
+                  onChangeText={(v) => updateRow(ex.localId, "targetReps", v)}
                   keyboardType="number-pad"
                   placeholder="10"
                   placeholderTextColor="#555"
@@ -312,9 +335,14 @@ export default function WorkoutPlanEditor({
               <View style={isCircuit ? styles.half : styles.third}>
                 <Text style={styles.sublabel}>Dauer (s)</Text>
                 <TextInput
-                  style={[styles.input, ex.targetDuration ? styles.inputHighlight : null]}
+                  style={[
+                    styles.input,
+                    ex.targetDuration ? styles.inputHighlight : null,
+                  ]}
                   value={ex.targetDuration}
-                  onChangeText={(v) => updateRow(ex.localId, 'targetDuration', v)}
+                  onChangeText={(v) =>
+                    updateRow(ex.localId, "targetDuration", v)
+                  }
                   keyboardType="number-pad"
                   placeholder="—"
                   placeholderTextColor="#444"
@@ -346,69 +374,109 @@ export default function WorkoutPlanEditor({
 // ─────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#121212' },
+  flex: { flex: 1, backgroundColor: "#121212" },
   container: { flexGrow: 1, padding: 24, paddingTop: 16, paddingBottom: 48 },
-  heading: { fontSize: 26, fontWeight: '800', color: '#fff', marginBottom: 24 },
+  heading: { fontSize: 26, fontWeight: "800", color: "#fff", marginBottom: 24 },
 
   label: {
-    fontSize: 13, fontWeight: '600', color: '#aaa',
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#aaa",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
   sublabel: {
-    fontSize: 11, fontWeight: '600', color: '#aaa',
-    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#aaa",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   sectionGap: { marginTop: 24, marginBottom: 12 },
 
   input: {
-    backgroundColor: '#2a2a2a', borderRadius: 10,
-    padding: 13, fontSize: 15, color: '#fff',
-    borderWidth: 1, borderColor: '#333', marginBottom: 10,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 10,
+    padding: 13,
+    fontSize: 15,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 10,
   },
-  inputHighlight: { borderColor: '#0a7ea4' },
+  inputHighlight: { borderColor: "#0a7ea4" },
 
   // Circuit toggle
   circuitToggleCard: {
-    backgroundColor: '#1e1e1e', borderRadius: 14,
-    padding: 16, marginBottom: 12,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
   },
-  circuitToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  circuitToggleTitle: { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 3 },
-  circuitToggleHint:  { color: '#555', fontSize: 12, lineHeight: 17 },
+  circuitToggleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  circuitToggleTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 3,
+  },
+  circuitToggleHint: { color: "#555", fontSize: 12, lineHeight: 17 },
 
   // Circuit settings
   circuitSettingsCard: {
-    backgroundColor: '#0d1f2a', borderRadius: 14,
-    padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#0a7ea4',
+    backgroundColor: "#0d1f2a",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#0a7ea4",
   },
   circuitSettingsTitle: {
-    color: '#0a7ea4', fontSize: 11, fontWeight: '700',
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16,
+    color: "#0a7ea4",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
   },
 
   exerciseCard: {
-    backgroundColor: '#1e1e1e', borderRadius: 14,
-    padding: 16, marginBottom: 12,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
   },
   exerciseHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
   },
-  exerciseIndex:  { color: '#0a7ea4', fontWeight: '700', fontSize: 14 },
-  removeText:     { color: '#555', fontSize: 16 },
+  exerciseIndex: { color: "#0a7ea4", fontWeight: "700", fontSize: 14 },
+  removeText: { color: "#555", fontSize: 16 },
   removeDisabled: { opacity: 0.2 },
 
-  row:   { flexDirection: 'row', gap: 8 },
+  row: { flexDirection: "row", gap: 8 },
   third: { flex: 1 },
-  half:  { flex: 1 },
+  half: { flex: 1 },
 
-  durationHint: { color: '#0a7ea4', fontSize: 12, marginTop: 2, marginBottom: 4 },
+  durationHint: {
+    color: "#0a7ea4",
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 4,
+  },
 
   addExButton: {
-    borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 12,
-    borderStyle: 'dashed', padding: 14,
-    alignItems: 'center', marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    borderRadius: 12,
+    borderStyle: "dashed",
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 24,
   },
-  addExText: { color: '#0a7ea4', fontWeight: '600', fontSize: 15 },
+  addExText: { color: "#0a7ea4", fontWeight: "600", fontSize: 15 },
 });
