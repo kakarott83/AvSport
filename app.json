@@ -17,7 +17,7 @@
       }
     },
     "android": {
-      "package": "com.avorasport.app",
+      "package": "com.avorasport.healthtest",
       "versionCode": 1,
       "permissions": [
         "CAMERA",
@@ -50,14 +50,7 @@
       [
         "react-native-health-connect",
         {
-          "permissions": ["Steps", "ActiveCaloriesBurned"],
-          "android": {
-            "intentFilter": [
-              {
-                "action": "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"
-              }
-            ]
-          }
+          "permissions": ["Steps", "ActiveCaloriesBurned"]
         }
       ]
     ],
