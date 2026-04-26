@@ -50,7 +50,14 @@
       [
         "react-native-health-connect",
         {
-          "permissions": ["Steps", "ActiveCaloriesBurned"]
+          "permissions": ["Steps", "ActiveCaloriesBurned"],
+          "android": {
+            "intentFilter": [
+              {
+                "action": "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"
+              }
+            ]
+          }
         }
       ]
     ],
