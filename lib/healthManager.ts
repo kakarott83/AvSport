@@ -29,25 +29,27 @@ if (Platform.OS === "android") {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AvailabilityReason =
-  | "not_android"             // running on iOS / web
-  | "simulator"               // emulator detected via expo-device
-  | "module_not_found"        // native bridge not linked
-  | "sdk_unavailable"         // Health Connect app not installed
-  | "sdk_update_required"     // Health Connect app is too old
-  | "init_failed"             // initialize() returned false or threw
-  | "error";                  // unexpected error in getSdkStatus()
+  | "not_android" // running on iOS / web
+  | "simulator" // emulator detected via expo-device
+  | "module_not_found" // native bridge not linked
+  | "sdk_unavailable" // Health Connect app not installed
+  | "sdk_update_required" // Health Connect app is too old
+  | "init_failed" // initialize() returned false or threw
+  | "error"; // unexpected error in getSdkStatus()
 
 export type HealthAvailability =
   | { available: true }
   | { available: false; reason: AvailabilityReason };
 
+export type InitStatus = "idle" | "pending" | "ready" | "unavailable";
+
 export type DateRange = {
   startTime: string; // ISO 8601, inclusive
-  endTime:   string; // ISO 8601, inclusive
+  endTime: string; // ISO 8601, inclusive
 };
 
 export type StepsAndCalories = {
-  steps:    number;
+  steps: number;
   calories: number;
 };
 
@@ -55,9 +57,9 @@ export type StepsAndCalories = {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const STEPS_GOAL  = 10_000;
-const        EMPTY_DATA  = Object.freeze<StepsAndCalories>({ steps: 0, calories: 0 });
-const        USE_MOCK    = __DEV__;
+export const STEPS_GOAL = 10_000;
+const EMPTY_DATA = Object.freeze<StepsAndCalories>({ steps: 0, calories: 0 });
+const USE_MOCK = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HealthManager singleton
@@ -73,13 +75,24 @@ const        USE_MOCK    = __DEV__;
  * All public methods are safe to call concurrently and from any render cycle.
  * They never throw — errors are caught, logged, and surfaced as false / 0 / EMPTY.
  */
-type InitStatus = "idle" | "pending" | "ready" | "unavailable";
-
 export const HealthManager = {
   // ── Private state ──────────────────────────────────────────────────────────
 
-  _status:      "idle" as InitStatus,
-  _initPromise: null   as Promise<boolean> | null,
+  _status: "idle" as InitStatus,
+  _initPromise: null as Promise<boolean> | null,
+  // Tracks whether the native HealthConnectPermissionDelegate has finished
+  // registering its ActivityResultLauncher (separate from SDK-init status).
+  _isNativeReady: false,
+
+  getStatus(): InitStatus {
+    return this._status;
+  },
+  isReady(): boolean {
+    return this._status === "ready";
+  },
+  isNativeReady(): boolean {
+    return this._isNativeReady;
+  },
 
   // ── init() ─────────────────────────────────────────────────────────────────
 
@@ -97,16 +110,17 @@ export const HealthManager = {
    * called exactly once per app lifetime.
    */
   async init(): Promise<boolean> {
-    if (this._status === "ready")       return true;
+    if (this._status === "ready") return true;
     if (this._status === "unavailable") return false;
-    if (this._initPromise)              return this._initPromise;
+    if (this._initPromise) return this._initPromise;
 
-    this._status      = "pending";
+    this._status = "pending";
     this._initPromise = (async (): Promise<boolean> => {
       try {
         // Guard 1: Android only
         if (Platform.OS !== "android") {
-          if (__DEV__) console.log("[HealthManager] init() skipped — not Android.");
+          if (__DEV__)
+            console.log("[HealthManager] init() skipped — not Android.");
           this._status = "unavailable";
           return false;
         }
@@ -114,7 +128,8 @@ export const HealthManager = {
         // Guard 2: physical device — emulators have no sensor stack or
         //          system Activity for Health Connect dialogs.
         if (!Device.isDevice) {
-          if (__DEV__) console.log("[HealthManager] init() skipped — simulator detected.");
+          if (__DEV__)
+            console.log("[HealthManager] init() skipped — simulator detected.");
           this._status = "unavailable";
           return false;
         }
@@ -154,10 +169,17 @@ export const HealthManager = {
           return false;
         }
 
+        // The native HealthConnectPermissionDelegate registers its
+        // ActivityResultLauncher (requestPermission lateinit var) via
+        // onHostResume(). We yield here so the Android main-thread can
+        // complete that registration before any requestPermission() call.
+        // 1000 ms gives slow devices enough headroom for the Kotlin lifecycle.
+        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+
+        this._isNativeReady = true;
         this._status = "ready";
         if (__DEV__) console.log("[HealthManager] ready ✓");
         return true;
-
       } catch (e) {
         console.error("[HealthManager] init() threw:", e);
         this._status = "unavailable";
@@ -180,7 +202,8 @@ export const HealthManager = {
    */
   async requestPermissions(): Promise<boolean> {
     if (USE_MOCK) {
-      if (__DEV__) console.log("[HealthManager] mock — requestPermissions() → true");
+      if (__DEV__)
+        console.log("[HealthManager] mock — requestPermissions() → true");
       return true;
     }
 
@@ -188,20 +211,38 @@ export const HealthManager = {
       const ready = await this.init();
       if (!ready) return false;
 
-      if (__DEV__) {
-        // In a DEV build on a real device we can open the dialog.
-        // On an emulator init() already returned false so we never reach here.
-        console.log("[HealthManager] requestPermission() — opening system dialog…");
+      // 1. ZUSÄTZLICHER SICHERHEITS-PUFFER
+      // Wir warten hier nochmal explizit, bevor wir die native Brücke überqueren.
+      console.log(
+        "[HealthManager] Waiting for Android activity to stabilize...",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      if (!this._isNativeReady || !hc) {
+        console.error(
+          "[HealthManager] requestPermissions() aborted — native launcher not attached.",
+        );
+        return false;
       }
 
-      await hc!.requestPermission([
+      if (__DEV__)
+        console.log(
+          "[HealthManager] requestPermission() — opening system dialog…",
+        );
+
+      // 2. DER KRITISCHE AUFRUF
+      await hc.requestPermission([
         { accessType: "read", recordType: "Steps" },
         { accessType: "read", recordType: "ActiveCaloriesBurned" },
       ]);
-      return true;
 
+      return true;
     } catch (e) {
       console.error("[HealthManager] requestPermissions() threw:", e);
+      // Reset
+      this._isNativeReady = false;
+      this._status = "idle";
+      this._initPromise = null;
       return false;
     }
   },
@@ -228,7 +269,10 @@ export const HealthManager = {
     // Simulator guard — identical to the one in init(), but explicit here so
     // callers that skip init() (e.g. read-only background fetches) are safe.
     if (!Device.isDevice) {
-      if (__DEV__) console.log("[HealthManager] getStepsToday() — simulator, returning 0.");
+      if (__DEV__)
+        console.log(
+          "[HealthManager] getStepsToday() — simulator, returning 0.",
+        );
       return 0;
     }
 
@@ -237,17 +281,18 @@ export const HealthManager = {
       if (!ready) return 0;
 
       // Midnight of the current day in local time
-      const now          = new Date();
-      const midnight     = new Date(now);
+      const now = new Date();
+      const midnight = new Date(now);
       midnight.setHours(0, 0, 0, 0);
 
       const timeRangeFilter = {
-        operator:  "between" as const,
+        operator: "between" as const,
         startTime: midnight.toISOString(),
-        endTime:   now.toISOString(),
+        endTime: now.toISOString(),
       };
 
-      if (__DEV__) console.log("[HealthManager] readRecords('Steps')…", timeRangeFilter);
+      if (__DEV__)
+        console.log("[HealthManager] readRecords('Steps')…", timeRangeFilter);
 
       const result = await hc!.readRecords("Steps", { timeRangeFilter });
 
@@ -259,7 +304,6 @@ export const HealthManager = {
 
       if (__DEV__) console.log(`[HealthManager] steps today: ${total}`);
       return total;
-
     } catch (e) {
       console.error("[HealthManager] getStepsToday() threw:", e);
       return 0;
@@ -285,21 +329,26 @@ export const HealthManager = {
       if (!ready) return { ...EMPTY_DATA };
 
       const timeRangeFilter = {
-        operator:  "between" as const,
+        operator: "between" as const,
         startTime: dateRange.startTime,
-        endTime:   dateRange.endTime,
+        endTime: dateRange.endTime,
       };
 
       const [stepsRes, caloriesRes] = await Promise.all([
-        hc!.readRecords("Steps",                { timeRangeFilter }),
+        hc!.readRecords("Steps", { timeRangeFilter }),
         hc!.readRecords("ActiveCaloriesBurned", { timeRangeFilter }),
       ]);
 
-      const steps    = (stepsRes.records    as any[]).reduce((s, r) => s + (r.count                  ?? 0), 0);
-      const calories = (caloriesRes.records as any[]).reduce((s, r) => s + (r.energy?.inKilocalories ?? 0), 0);
+      const steps = (stepsRes.records as any[]).reduce(
+        (s, r) => s + (r.count ?? 0),
+        0,
+      );
+      const calories = (caloriesRes.records as any[]).reduce(
+        (s, r) => s + (r.energy?.inKilocalories ?? 0),
+        0,
+      );
 
       return { steps, calories: Math.round(calories) };
-
     } catch (e) {
       console.error("[HealthManager] fetchStepsAndCalories() threw:", e);
       return { ...EMPTY_DATA };
@@ -314,16 +363,17 @@ export const HealthManager = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkAvailability(): Promise<HealthAvailability> {
-  if (Platform.OS !== "android") return { available: false, reason: "not_android" };
-  if (!Device.isDevice)          return { available: false, reason: "simulator"   };
-  if (!hc)                       return { available: false, reason: "module_not_found" };
+  if (Platform.OS !== "android")
+    return { available: false, reason: "not_android" };
+  if (!Device.isDevice) return { available: false, reason: "simulator" };
+  if (!hc) return { available: false, reason: "module_not_found" };
 
   try {
     const status = await hc.getSdkStatus();
     const { SDK_AVAILABLE, SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED } =
       hc.SdkAvailabilityStatus;
 
-    if (status === SDK_AVAILABLE)                         return { available: true };
+    if (status === SDK_AVAILABLE) return { available: true };
     if (status === SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED)
       return { available: false, reason: "sdk_update_required" };
 
@@ -334,27 +384,35 @@ export async function checkAvailability(): Promise<HealthAvailability> {
 }
 
 /** @deprecated  Use HealthManager.requestPermissions() */
-export const requestPermissions       = () => HealthManager.requestPermissions();
+export const requestPermissions = () => HealthManager.requestPermissions();
 /** @deprecated  Use HealthManager.requestPermissions() */
-export const requestHealthPermissions = () => HealthManager.requestPermissions();
+export const requestHealthPermissions = () =>
+  HealthManager.requestPermissions();
 /** @deprecated  Use HealthManager.fetchStepsAndCalories() */
-export const fetchStepsAndCalories    = (r: DateRange) => HealthManager.fetchStepsAndCalories(r);
+export const fetchStepsAndCalories = (r: DateRange) =>
+  HealthManager.fetchStepsAndCalories(r);
 
 /** Used by useHealthData — keeps the hook working without changes. */
 export async function getTodayActivity(): Promise<{
-  kcal: number; steps: number; protein: number;
+  kcal: number;
+  steps: number;
+  protein: number;
 }> {
   try {
     if (USE_MOCK) {
-      const { steps, calories, protein } = await mockHealthService.getTodayStats();
+      const { steps, calories, protein } =
+        await mockHealthService.getTodayStats();
       return { kcal: calories, steps, protein };
     }
 
-    const now       = new Date();
+    const now = new Date();
     const startTime = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-    const endTime   = now.toISOString();
+    const endTime = now.toISOString();
 
-    const { steps, calories } = await HealthManager.fetchStepsAndCalories({ startTime, endTime });
+    const { steps, calories } = await HealthManager.fetchStepsAndCalories({
+      startTime,
+      endTime,
+    });
     return { kcal: calories, steps, protein: 0 };
   } catch {
     return { kcal: 0, steps: 0, protein: 0 };

@@ -50,7 +50,7 @@
       [
         "react-native-health-connect",
         {
-          "permissions": ["READ_STEPS", "READ_ACTIVE_CALORIES_BURNED"]
+          "permissions": ["Steps", "ActiveCaloriesBurned"]
         }
       ]
     ],

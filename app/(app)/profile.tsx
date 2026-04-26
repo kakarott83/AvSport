@@ -19,7 +19,8 @@ import { DatePickerInput } from '@/components/DatePickerInput';
 import { Toast } from '@/components/Toast';
 import * as Device from 'expo-device';
 
-import { checkAvailability, requestPermissions } from '@/lib/healthManager';
+import { checkAvailability, HealthManager, requestPermissions } from '@/lib/healthManager';
+import { syncHealthToSupabase } from '@/lib/healthSync';
 import { clampStepper, parseProfileFloat, parseProfileInt, STEPPER_BOUNDS, validateProfileForm } from '@/lib/profile';
 import {
   ACTIVITY_LEVEL_LABELS,
@@ -83,6 +84,10 @@ export default function ProfileScreen() {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
   const [toast, setToast]     = useState<string | null>(null);
+  // Mirrors HealthManager._isNativeReady — the Health Connect permission
+  // launcher must be fully registered before handleToggleHealth may call into
+  // native code. Switch stays disabled until this becomes true.
+  const [isNativeReady, setIsNativeReady] = useState(HealthManager.isNativeReady());
 
   // Debounce timer for stepper auto-save
   const cycleDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +95,15 @@ export default function ProfileScreen() {
   function patch<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  // ── Native HC init ───────────────────────────────────────────────────────────
+  // Kick off HealthManager.init() as early as possible so the 1000 ms startup
+  // delay runs in parallel with the Supabase profile load. The Promise resolves
+  // only after the Android ActivityResultLauncher has been registered.
+
+  useEffect(() => {
+    HealthManager.init().then(() => setIsNativeReady(HealthManager.isNativeReady()));
+  }, []);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -156,6 +170,17 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Native-ready guard: the Android ActivityResultLauncher needs ~1 s after
+      // app start to register. Calling requestPermissions() before that causes
+      // "lateinit property requestPermission has not been initialized".
+      if (!isNativeReady) {
+        Alert.alert(
+          'Bitte einen Moment',
+          'Health Connect wird gerade initialisiert. Bitte versuche es in wenigen Sekunden erneut.',
+        );
+        return;
+      }
+
       try {
         // Step 1: check SDK availability before any native initialisation call.
         const availability = await checkAvailability();
@@ -206,11 +231,34 @@ export default function ProfileScreen() {
       }
     }
 
-    // UI toggle only reaches here after a successful permission grant (or on disable).
-    patch('sync_health', enabled);
+    // Supabase-Update ZUERST — UI springt nur auf den neuen Wert, wenn die DB
+    // erfolgreich aktualisiert wurde. Bei Fehler bleibt der Switch wo er war.
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await supabase.from('profiles').update({ sync_health: enabled }).eq('id', user.id);
+
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({ sync_health: enabled })
+      .eq('id', user.id);
+
+    if (dbError) {
+      console.error('[profile] sync_health update failed:', dbError.message);
+      // Rollback: Switch zurück auf den vorherigen Wert setzen
+      patch('sync_health', !enabled);
+      Alert.alert(
+        'Speichern fehlgeschlagen',
+        'Die Einstellung konnte nicht gespeichert werden. Bitte prüfe deine Internetverbindung und versuche es erneut.',
+      );
+      return;
+    }
+
+    // Erst jetzt UI aktualisieren — DB und UI sind jetzt synchron
+    patch('sync_health', enabled);
+
+    // Initialer Sync direkt nach dem Aktivieren
+    if (enabled) {
+      syncHealthToSupabase();
+    }
   }
 
   function onCycleToggle(enabled: boolean) {
@@ -546,8 +594,11 @@ export default function ProfileScreen() {
               <Switch
                 value={form.sync_health}
                 onValueChange={handleToggleHealth}
+                disabled={!isNativeReady}
                 trackColor={{ false: '#2a2a2a', true: '#0a3a3a' }}
-                thumbColor={form.sync_health ? '#00E5FF' : '#555'}
+                thumbColor={
+                  !isNativeReady ? '#333' : form.sync_health ? '#00E5FF' : '#555'
+                }
               />
             </View>
           </View>

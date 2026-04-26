@@ -31,7 +31,8 @@ import { useCalorieGoal } from "@/hooks/useCalorieGoal";
 import { useHealthData } from "@/hooks/useHealthData";
 import { useStepGoal } from "@/hooks/useStepGoal";
 import { isStale, loadCache, saveCache } from "@/lib/dashboardCache";
-import { healthManager } from "@/lib/healthManager";
+import { HealthManager } from "@/lib/healthManager";
+import { syncHealthToSupabase } from "@/lib/healthSync";
 import { supabase } from "@/services/supabaseClient";
 import type { FoodAnalysis } from "@/types/vision";
 
@@ -377,6 +378,10 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [hmStatus, setHmStatus] = useState(HealthManager.getStatus());
+  // Mirrors HealthManager._isNativeReady — prevents any HC call during the
+  // Android startup window before the permission launcher is registered.
+  const [nativeReady, setNativeReady] = useState(HealthManager.isNativeReady());
   // 'loading' = kein Cache + kein Live-Fetch fertig
   // 'cache'   = zeigt lokale Daten, Live-Fetch läuft noch/fehlgeschlagen
   // 'live'    = frische Daten aus Supabase/Health
@@ -414,6 +419,21 @@ export default function HomeScreen() {
   useEffect(() => {
     latestHealthRef.current = { steps: healthSteps, burnKcal: healthBurnKcal };
   }, [healthSteps, healthBurnKcal]);
+
+  // Startup guard: init() läuft einmalig beim Mount.
+  // syncHealthToSupabase() und alle nativen HC-Calls werden erst ausgeführt,
+  // wenn _isNativeReady true ist (nach initialize() + 500 ms Anlaufzeit).
+  // Solange nativeReady false ist, bleiben Sync-Button und Pull-to-Refresh
+  // für HC-Operationen gesperrt — kein Kotlin-Crash durch uninitialized launcher.
+  useEffect(() => {
+    setHmStatus("pending");
+    setNativeReady(false);
+    HealthManager.init().then(ready => {
+      setHmStatus(HealthManager.getStatus());
+      setNativeReady(HealthManager.isNativeReady());
+      if (ready) syncHealthToSupabase();
+    });
+  }, []);
 
   // Kcal ticker
   const [displayKcal, setDisplayKcal] = useState(0);
@@ -623,9 +643,16 @@ export default function HomeScreen() {
   const handleManualSync = useCallback(async () => {
     setIsSyncing(true);
     try {
+      // Guard: HC-Sync nur wenn nativer Launcher bereit ist.
+      // nativeReady spiegelt HealthManager._isNativeReady wider und ist erst
+      // true nachdem initialize() + 500 ms Wartezeit abgeschlossen sind.
       const [success] = await Promise.all([
         fetchDashboardData(),
-        healthManager.syncNow().then(() => refreshHealth()),
+        nativeReady
+          ? syncHealthToSupabase().then(() => refreshHealth())
+          : (__DEV__
+              ? Promise.resolve(void console.log("[HomeScreen] health sync skipped — native not ready"))
+              : Promise.resolve()),
       ]);
       setLastSynced(new Date());
       if (success) {
@@ -635,7 +662,7 @@ export default function HomeScreen() {
     } finally {
       setIsSyncing(false);
     }
-  }, [fetchDashboardData, refreshHealth]);
+  }, [fetchDashboardData, refreshHealth, nativeReady]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -764,7 +791,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.iconBtn, styles.devSyncBtn]}
                 onPress={handleManualSync}
-                disabled={isSyncing}
+                disabled={isSyncing || !nativeReady}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <MaterialIcons
