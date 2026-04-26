@@ -11,13 +11,27 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    // Initiale Session laden
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("Initial session:", session?.user?.email ?? "keine");
-      setSession(session);
-    });
+    // Initiale Session laden – try/catch schützt gegen Offline-Fehler beim Start.
+    // Supabase liest die Session normalerweise aus AsyncStorage (kein Netz nötig),
+    // aber ein abgelaufenes Refresh-Token kann einen Netzwerkaufruf auslösen.
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        console.log("Initial session:", session?.user?.email ?? "keine");
+        setSession(session);
+      })
+      .catch((error) => {
+        console.warn(
+          "[Auth] getSession fehlgeschlagen (offline?). Behandle als kein Login:",
+          error,
+        );
+        // null → Redirect-Effekt leitet zur Login-Seite weiter.
+        // Falls der User offline ist und ein gültiges Token hat, feuert
+        // onAuthStateChange sobald die Verbindung wiederhergestellt ist.
+        setSession(null);
+      });
 
-    // Live-Updates bei Login / Logout
+    // Live-Updates bei Login / Logout / Token-Refresh
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {

@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,27 +11,30 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { supabase } from '@/services/supabaseClient';
+import { supabase } from "@/services/supabaseClient";
 
 export default function RegisterScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
     if (!email.trim() || !password) {
-      Alert.alert('Pflichtfelder', 'Bitte E-Mail und Passwort eingeben.');
+      Alert.alert("Pflichtfelder", "Bitte E-Mail und Passwort eingeben.");
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Passwörter stimmen nicht überein', 'Bitte beide Felder prüfen.');
+      Alert.alert(
+        "Passwörter stimmen nicht überein",
+        "Bitte beide Felder prüfen.",
+      );
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Passwort zu kurz', 'Mindestens 6 Zeichen erforderlich.');
+      Alert.alert("Passwort zu kurz", "Mindestens 6 Zeichen erforderlich.");
       return;
     }
 
@@ -43,20 +46,23 @@ export default function RegisterScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Registrierung fehlgeschlagen', error.message);
+      Alert.alert("Registrierung fehlgeschlagen", error.message);
     } else {
-      router.replace('/(auth)/login');
+      router.replace("/(auth)/login");
     }
   }
 
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
-          <Text style={styles.logo}>AvoraSport</Text>
+          <Text style={styles.logo}>AvSport</Text>
           <Text style={styles.tagline}>Starte deine Fitness-Reise</Text>
         </View>
 
@@ -87,7 +93,9 @@ export default function RegisterScreen() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, styles.labelSpacing]}>Passwort bestätigen</Text>
+          <Text style={[styles.label, styles.labelSpacing]}>
+            Passwort bestätigen
+          </Text>
           <TextInput
             style={styles.input}
             value={confirmPassword}
@@ -115,7 +123,7 @@ export default function RegisterScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Bereits ein Konto? </Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+          <TouchableOpacity onPress={() => router.push("/(auth)/login")}>
             <Text style={styles.footerLink}>Anmelden</Text>
           </TouchableOpacity>
         </View>
@@ -127,44 +135,44 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: "#121212",
   },
   container: {
     flexGrow: 1,
     padding: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 48,
   },
   logo: {
     fontSize: 36,
-    fontWeight: '800',
-    color: '#0a7ea4',
+    fontWeight: "800",
+    color: "#0a7ea4",
     letterSpacing: 1,
   },
   tagline: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   card: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: "#1e1e1e",
     borderRadius: 20,
     padding: 24,
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
+    fontWeight: "700",
+    color: "#fff",
     marginBottom: 24,
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#aaa',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#aaa",
+    textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 8,
   },
@@ -172,41 +180,41 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   input: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: "#333",
   },
   button: {
     marginTop: 24,
-    backgroundColor: '#0a7ea4',
+    backgroundColor: "#0a7ea4",
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     marginTop: 24,
   },
   footerText: {
-    color: '#666',
+    color: "#666",
     fontSize: 14,
   },
   footerLink: {
-    color: '#0a7ea4',
+    color: "#0a7ea4",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

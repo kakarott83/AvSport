@@ -1,3 +1,5 @@
+// TODO: Kamera-Workflow: 1. expo-camera öffnen 2. Foto aufnehmen 3. Base64 an analyzeFoodImage() senden 4. Ergebnis-Modal mit Makros (JSON) anzeigen & Speichern-Option bieten.
+
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -15,32 +17,10 @@ import {
 import { BarChart } from 'react-native-gifted-charts';
 
 import { Toast } from '@/components/Toast';
+import { FoodScanner } from '@/components/FoodScanner';
+import { useCalorieGoal } from '@/hooks/useCalorieGoal';
+import { buildWeekDays, computeDayTotals, type FoodLog, type WeekDay } from '@/lib/nutrition';
 import { supabase } from '@/services/supabaseClient';
-
-// ─────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────
-
-type Profile = {
-  display_name: string | null;
-  gender: 'male' | 'female' | null;
-  date_of_birth: string | null;
-  height_cm: number | null;
-  weight_kg: number | null;
-  manual_calorie_offset: number | null;
-};
-
-type FoodLog = {
-  id: string;
-  meal_name: string;
-  calories: number;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-  created_at: string;
-};
-
-type WeekDay = { date: string; eaten: number; label: string };
 
 // ─────────────────────────────────────────
 // Helpers
@@ -56,40 +36,8 @@ function offsetISO(days: number): string {
   return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 }
 
-function ageFromDOB(dob: string | null): number {
-  if (!dob) return 0;
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return Math.max(0, age);
-}
-
-/** Harris-Benedict TDEE + Standard-Offset */
-function calcBaseTDEE(p: Profile): number {
-  const age = ageFromDOB(p.date_of_birth);
-  if (!p.weight_kg || !p.height_cm || !age || !p.gender) {
-    return 2500 + (p.manual_calorie_offset ?? 0);
-  }
-  const bmr =
-    p.gender === 'male'
-      ? 88.362 + 13.397 * p.weight_kg + 4.799 * p.height_cm - 5.677 * age
-      : 447.593 + 9.247 * p.weight_kg + 3.098 * p.height_cm - 4.33 * age;
-  return Math.round(bmr * 1.55) + (p.manual_calorie_offset ?? 0);
-}
-
 function macroColor(macro: 'protein' | 'carbs' | 'fat'): string {
   return macro === 'protein' ? '#0a7ea4' : macro === 'carbs' ? '#e67e22' : '#c0392b';
-}
-
-function buildWeekDays(dayMap: Record<string, number>): WeekDay[] {
-  const DE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(Date.now() - (6 - i) * 86400000);
-    const iso = d.toISOString().slice(0, 10);
-    return { date: iso, eaten: dayMap[iso] ?? 0, label: i === 6 ? 'Heute' : DE[d.getDay()] };
-  });
 }
 
 // ─────────────────────────────────────────
@@ -325,11 +273,11 @@ const modalStyles = StyleSheet.create({
 
 export default function NutritionScreen() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
-  const [baseTdee, setBaseTdee] = useState(2500);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [weekData, setWeekData] = useState<WeekDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   // Tages-Anpassung (lokal, kein DB-Speicher)
@@ -337,49 +285,42 @@ export default function NutritionScreen() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustInput, setAdjustInput] = useState('');
 
-  const effectiveTdee = baseTdee + dailyAdjustment;
+  // Ziel-Kalorien aus dem zentralen Hook (inkl. Zyklus-Bonus)
+  const { currentGoal, bonusActive, cycleBonus } = useCalorieGoal();
+
+  const effectiveTdee = currentGoal + dailyAdjustment;
 
   async function loadData() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    // Profil
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, gender, date_of_birth, height_cm, weight_kg, manual_calorie_offset')
-      .eq('id', user.id)
-      .single();
+    const today    = todayISO();
+    const tomorrow = offsetISO(1);
 
-    if (profile) {
-      setBaseTdee(calcBaseTDEE(profile));
-      setDisplayName(profile.display_name ?? null);
+    const [profileRes, foodRes, weekRes] = await Promise.all([
+      supabase.from('profiles')
+        .select('display_name')
+        .eq('id', user.id).single(),
+      supabase.from('food_logs')
+        .select('id, meal_name, calories, protein, carbs, fat, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', today).lt('created_at', tomorrow)
+        .order('created_at', { ascending: false }),
+      supabase.from('food_logs')
+        .select('created_at, calories')
+        .eq('user_id', user.id)
+        .gte('created_at', offsetISO(-6)).lt('created_at', tomorrow),
+    ]);
+
+    if (profileRes.data) {
+      setDisplayName(profileRes.data.display_name ?? null);
     }
 
-    // Heutige Mahlzeiten
-    const today = todayISO();
-    const tomorrow = offsetISO(1);
-    const { data: foodData } = await supabase
-      .from('food_logs')
-      .select('id, meal_name, calories, protein, carbs, fat, created_at')
-      .eq('user_id', user.id)
-      .gte('created_at', today)
-      .lt('created_at', tomorrow)
-      .order('created_at', { ascending: false });
-
-    if (foodData) setLogs(foodData);
-
-    // Wochendaten
-    const sevenDaysAgo = offsetISO(-6);
-    const { data: weekRaw } = await supabase
-      .from('food_logs')
-      .select('created_at, calories')
-      .eq('user_id', user.id)
-      .gte('created_at', sevenDaysAgo)
-      .lt('created_at', tomorrow);
+    if (foodRes.data) setLogs(foodRes.data as FoodLog[]);
 
     const dayMap: Record<string, number> = {};
-    weekRaw?.forEach((l) => {
+    weekRes.data?.forEach(l => {
       const day = l.created_at.slice(0, 10);
       dayMap[day] = (dayMap[day] ?? 0) + l.calories;
     });
@@ -409,10 +350,7 @@ export default function NutritionScreen() {
   }
 
   // ── Berechnungen ──
-  const totalKcal = logs.reduce((s, l) => s + l.calories, 0);
-  const totalProtein = Math.round(logs.reduce((s, l) => s + (l.protein ?? 0), 0));
-  const totalCarbs = Math.round(logs.reduce((s, l) => s + (l.carbs ?? 0), 0));
-  const totalFat = Math.round(logs.reduce((s, l) => s + (l.fat ?? 0), 0));
+  const { totalKcal, totalProtein, totalCarbs, totalFat } = computeDayTotals(logs);
   const remaining = effectiveTdee - totalKcal;
 
   return (
@@ -435,6 +373,9 @@ export default function NutritionScreen() {
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{effectiveTdee}</Text>
                 <Text style={styles.summaryLabel}>Ziel kcal</Text>
+                {bonusActive && (
+                  <Text style={styles.lutealBonusHint}>+{cycleBonus} kcal Bonus</Text>
+                )}
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryItem}>
@@ -504,10 +445,15 @@ export default function NutritionScreen() {
         {/* ══ JOURNAL HEADER ══ */}
         <View style={styles.journalHeader}>
           <Text style={styles.sectionTitle}>Tages-Journal</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setModalOpen(true)} activeOpacity={0.8}>
-            <MaterialIcons name="add" size={18} color="#fff" />
-            <Text style={styles.addButtonText}>Mahlzeit</Text>
-          </TouchableOpacity>
+          <View style={styles.journalActions}>
+            <TouchableOpacity style={styles.cameraBtn} onPress={() => setScannerOpen(true)} activeOpacity={0.8}>
+              <MaterialIcons name="camera-alt" size={18} color="#00E5FF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={() => setModalOpen(true)} activeOpacity={0.8}>
+              <MaterialIcons name="add" size={18} color="#fff" />
+              <Text style={styles.addButtonText}>Mahlzeit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ══ MAHLZEITEN-LISTE ══ */}
@@ -556,6 +502,12 @@ export default function NutritionScreen() {
         onSaved={() => { setModalOpen(false); setToast('Mahlzeit gespeichert!'); loadData(); }}
       />
 
+      <FoodScanner
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={() => { setToast('Mahlzeit gespeichert!'); loadData(); }}
+      />
+
       {toast && <Toast message={toast} type="success" duration={2000} onDismiss={() => setToast(null)} />}
     </View>
   );
@@ -584,7 +536,8 @@ const styles = StyleSheet.create({
   ringSummary: { flex: 1, marginLeft: 20, gap: 14 },
   summaryItem: { gap: 2 },
   summaryValue: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 28 },
-  summaryLabel: { color: '#666', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  summaryLabel:     { color: '#666', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  lutealBonusHint:  { color: '#FF9100', fontSize: 10, fontWeight: '700', marginTop: 2 },
   summaryDivider: { height: 1, backgroundColor: '#2a2a2a' },
 
   // Daily adjustment
@@ -617,6 +570,12 @@ const styles = StyleSheet.create({
     marginBottom: 12, marginTop: 8,
   },
   sectionTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  journalActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cameraBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#00E5FF44',
+    alignItems: 'center', justifyContent: 'center',
+  },
   addButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#0a7ea4', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,

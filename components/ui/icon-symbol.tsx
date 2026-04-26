@@ -20,6 +20,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'list.bullet.rectangle': 'list-alt',
   'fork.knife': 'restaurant',
+  'calendar': 'event',
 } as IconMapping;
 
 /**

@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -9,15 +9,15 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { Toast } from '@/components/Toast';
-import { supabase } from '@/services/supabaseClient';
+import { Toast } from "@/components/Toast";
+import { supabase } from "@/services/supabaseClient";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -29,7 +29,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email.trim() || !password) {
-      showToast('Bitte E-Mail und Passwort eingeben.');
+      showToast("Bitte E-Mail und Passwort eingeben.");
       return;
     }
 
@@ -41,42 +41,42 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (error) {
-      console.error('Login Fehler:', error);
+      console.error("Login Fehler:", error);
       const isNoAccount =
-        error.message.toLowerCase().includes('invalid login credentials') ||
-        error.message.toLowerCase().includes('user not found');
+        error.message.toLowerCase().includes("invalid login credentials") ||
+        error.message.toLowerCase().includes("user not found");
 
       showToast(
         isNoAccount
-          ? 'Kein Konto gefunden. Bitte zuerst registrieren.'
+          ? "Kein Konto gefunden. Bitte zuerst registrieren."
           : `Fehler: ${error.message}`,
       );
     } else {
-      console.log('Login erfolgreich, Session:', data.session?.user?.email);
+      console.log("Login erfolgreich, Session:", data.session?.user?.email);
     }
     // Bei Erfolg: _layout.tsx leitet automatisch zu /(app)/(tabs) weiter
   }
 
   async function debugSession() {
     const { data, error } = await supabase.auth.getSession();
-    console.log('=== SESSION DEBUG ===');
-    console.log('Session:', JSON.stringify(data.session, null, 2));
-    if (error) console.error('Session Fehler:', error);
+    console.log("=== SESSION DEBUG ===");
+    console.log("Session:", JSON.stringify(data.session, null, 2));
+    if (error) console.error("Session Fehler:", error);
     showToast(
       data.session
         ? `Session aktiv: ${data.session.user.email}`
-        : 'Keine aktive Session gefunden.',
+        : "Keine aktive Session gefunden.",
     );
   }
 
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.logo}>AvoraSport</Text>
+          <Text style={styles.logo}>AvSport</Text>
           <Text style={styles.tagline}>Dein Fitness-Begleiter</Text>
         </View>
 
@@ -124,7 +124,7 @@ export default function LoginScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Noch kein Konto? </Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+          <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
             <Text style={styles.footerLink}>Registrieren</Text>
           </TouchableOpacity>
         </View>
@@ -148,44 +148,44 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: "#121212",
   },
   container: {
     flex: 1,
     padding: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 48,
   },
   logo: {
     fontSize: 36,
-    fontWeight: '800',
-    color: '#0a7ea4',
+    fontWeight: "800",
+    color: "#0a7ea4",
     letterSpacing: 1,
   },
   tagline: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   card: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: "#1e1e1e",
     borderRadius: 20,
     padding: 24,
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
+    fontWeight: "700",
+    color: "#fff",
     marginBottom: 24,
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#aaa',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#aaa",
+    textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 8,
   },
@@ -193,50 +193,50 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   input: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: "#333",
   },
   button: {
     marginTop: 24,
-    backgroundColor: '#0a7ea4',
+    backgroundColor: "#0a7ea4",
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     marginTop: 24,
   },
   footerText: {
-    color: '#666',
+    color: "#666",
     fontSize: 14,
   },
   footerLink: {
-    color: '#0a7ea4',
+    color: "#0a7ea4",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   debugButton: {
     marginTop: 32,
-    alignItems: 'center',
+    alignItems: "center",
     padding: 10,
   },
   debugText: {
-    color: '#444',
+    color: "#444",
     fontSize: 12,
   },
 });

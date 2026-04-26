@@ -7,42 +7,58 @@
     "icon": "./assets/images/icon.png",
     "scheme": "avorasport",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.avorasport.app",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
+        "NSHealthUpdateUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
+        "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen."
+      }
     },
     "android": {
+      "package": "com.avorasport.app",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      }
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       [
-        "expo-splash-screen",
+        "expo-camera",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
+          "recordAudioPermission": false,
+          "cameraPermission": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 28
           }
+        }
+      ],
+      [
+        "react-native-health-connect",
+        {
+          "permissions": ["READ_STEPS", "READ_ACTIVE_CALORIES_BURNED"]
         }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "46171678-bdf5-485d-8805-5d858c84421f"
+      }
     }
   }
 }

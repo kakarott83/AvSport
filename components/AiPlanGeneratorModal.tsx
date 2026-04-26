@@ -1,0 +1,589 @@
+/**
+ * AiPlanGeneratorModal.tsx
+ * Coach-Modal: Ziel → Fokus → Dauer → Trainingstage → Laden → Vorschau → Speichern
+ */
+
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+import { generateAiPlan, saveAiPlan } from '@/services/gemini/aiTrainingService';
+import { supabase } from '@/services/supabaseClient';
+import type { AiPlanInput, FitnessGoal, FocusArea, TargetWeeks, WorkoutPlanInsert } from '@/types/workout';
+
+// ─── Konstanten ───────────────────────────────────────────────────────────────
+
+const C_BG     = '#121212';
+const C_CARD   = '#1e1e1e';
+const C_INPUT  = '#2a2a2a';
+const C_ACCENT = '#00E5FF';
+const C_ORANGE = '#FF9100';
+const C_TEXT   = '#fff';
+const C_MUTED  = '#888';
+const C_BORDER = '#2a2a2a';
+
+// DB-Mapping: 0=So, 1=Mo … 6=Sa  (wie Date.getDay() / create-plan.tsx)
+const WEEK_DAYS = [
+  { label: 'Mo', value: 1 },
+  { label: 'Di', value: 2 },
+  { label: 'Mi', value: 3 },
+  { label: 'Do', value: 4 },
+  { label: 'Fr', value: 5 },
+  { label: 'Sa', value: 6 },
+  { label: 'So', value: 0 },
+] as const;
+
+type Step = 'goal' | 'focus' | 'weeks' | 'days' | 'loading' | 'preview';
+
+const QUESTION_STEPS: Step[] = ['goal', 'focus', 'weeks', 'days'];
+
+const PREV_STEP: Partial<Record<Step, Step>> = {
+  focus: 'goal',
+  weeks: 'focus',
+  days:  'weeks',
+};
+
+const LOADING_MESSAGES = [
+  'Coach analysiert Daten...',
+  'Trainingsplan wird erstellt...',
+  'Übungen werden ausgewählt...',
+  'Fast fertig...',
+];
+
+// ─── Chip-Komponente ──────────────────────────────────────────────────────────
+
+function OptionChip({
+  label, sub, selected, onPress, icon,
+}: {
+  label: string; sub?: string; selected: boolean; onPress: () => void; icon?: string;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.chip, selected && styles.chipSelected]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {icon && (
+        <MaterialIcons
+          name={icon as any}
+          size={20}
+          color={selected ? C_ACCENT : C_MUTED}
+          style={{ marginBottom: 4 }}
+        />
+      )}
+      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
+      {sub && (
+        <Text style={[styles.chipSub, selected && styles.chipSubSelected]}>{sub}</Text>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ─── Step-Dots ────────────────────────────────────────────────────────────────
+
+function StepDots({ current }: { current: Step }) {
+  const idx = QUESTION_STEPS.indexOf(current as any);
+  return (
+    <View style={styles.dots}>
+      {QUESTION_STEPS.map((_, i) => (
+        <View key={i} style={[styles.dot, i <= idx && styles.dotActive]} />
+      ))}
+    </View>
+  );
+}
+
+// ─── Übungszeile in der Vorschau ──────────────────────────────────────────────
+
+function ExercisePreviewRow({ name, sets, reps, duration }: {
+  name: string; sets: number; reps: number; duration: number | null;
+}) {
+  const detail = duration ? `${sets} × ${duration}s` : `${sets} × ${reps} Wdh.`;
+  return (
+    <View style={styles.exRow}>
+      <MaterialIcons name="fiber-manual-record" size={6} color={C_ACCENT} style={styles.exBullet} />
+      <Text style={styles.exName} numberOfLines={1}>{name}</Text>
+      <Text style={styles.exDetail}>{detail}</Text>
+    </View>
+  );
+}
+
+// ─── Haupt-Komponente ─────────────────────────────────────────────────────────
+
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+  onSaved: (planId: string, planTitle: string) => void;
+};
+
+export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
+  const [step,          setStep]          = useState<Step>('goal');
+  const [goal,          setGoal]          = useState<FitnessGoal | null>(null);
+  const [focusArea,     setFocusArea]     = useState<FocusArea | null>(null);
+  const [weeks,         setWeeks]         = useState<TargetWeeks | null>(null);
+  const [scheduledDays, setScheduledDays] = useState<number[]>([]);
+  const [plan,          setPlan]          = useState<WorkoutPlanInsert | null>(null);
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState<string | null>(null);
+
+  // Lade-Text-Rotation
+  const loadingOpacity = useRef(new Animated.Value(1)).current;
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const msgIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (step !== 'loading') {
+      if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
+      return;
+    }
+    setLoadingMsgIdx(0);
+    msgIntervalRef.current = setInterval(
+      () => setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length),
+      1800,
+    );
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(loadingOpacity, { toValue: 0.25, duration: 700, useNativeDriver: true }),
+        Animated.timing(loadingOpacity, { toValue: 1,    duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
+    };
+  }, [step]);
+
+  // Reset beim Öffnen
+  useEffect(() => {
+    if (visible) {
+      setStep('goal');
+      setGoal(null);
+      setFocusArea(null);
+      setWeeks(null);
+      setScheduledDays([]);
+      setPlan(null);
+      setError(null);
+    }
+  }, [visible]);
+
+  // ── Tage-Toggle ─────────────────────────────────────────────────────────────
+
+  function toggleDay(value: number) {
+    setScheduledDays((prev) =>
+      prev.includes(value) ? prev.filter((d) => d !== value) : [...prev, value],
+    );
+  }
+
+  // ── API-Call ─────────────────────────────────────────────────────────────────
+
+  async function triggerGeneration() {
+    if (!goal || !focusArea || !weeks) return;
+    setStep('loading');
+    setError(null);
+
+    const input: AiPlanInput = {
+      goal,
+      focusArea,
+      targetWeeks: weeks,
+      scheduledDays,
+    };
+
+    try {
+      const generated = await generateAiPlan(input);
+      setPlan(generated);
+      setStep('preview');
+    } catch {
+      setError('Plan konnte nicht generiert werden. Bitte versuche es erneut.');
+      setStep('days');
+    }
+  }
+
+  // ── Speichern ────────────────────────────────────────────────────────────────
+
+  async function handleSave() {
+    if (!plan) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Nicht eingeloggt.');
+      const id = await saveAiPlan(plan, user.id, supabase);
+      onSaved(id, plan.title);
+      onClose();
+    } catch (e: any) {
+      setError(e.message ?? 'Fehler beim Speichern.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Header-Titel ─────────────────────────────────────────────────────────────
+
+  const headerTitle =
+    step === 'loading' ? 'Coach arbeitet...' :
+    step === 'preview' ? 'Dein KI-Plan'     :
+                         'Neuer KI-Plan';
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={styles.root}>
+
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            {PREV_STEP[step] !== undefined && (
+              <TouchableOpacity
+                onPress={() => setStep(PREV_STEP[step]!)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="arrow-back" size={22} color={C_MUTED} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.headerTitle}>{headerTitle}</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialIcons name="close" size={22} color={C_MUTED} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Fortschritts-Punkte (nur bei Frage-Schritten) */}
+        {QUESTION_STEPS.includes(step as any) && <StepDots current={step} />}
+
+        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+
+          {/* ── SCHRITT 1: Ziel ── */}
+          {step === 'goal' && (
+            <>
+              <Text style={styles.coachText}>Was ist dein Trainingsziel? 💪</Text>
+              <View style={styles.chipRow}>
+                <OptionChip
+                  label="Abnehmen"
+                  sub="Fettverbrennung & Ausdauer"
+                  icon="local-fire-department"
+                  selected={goal === 'abnehmen'}
+                  onPress={() => { setGoal('abnehmen'); setStep('focus'); }}
+                />
+                <OptionChip
+                  label="Muskeln aufbauen"
+                  sub="Kraft & Hypertrophie"
+                  icon="fitness-center"
+                  selected={goal === 'muskeln'}
+                  onPress={() => { setGoal('muskeln'); setStep('focus'); }}
+                />
+              </View>
+            </>
+          )}
+
+          {/* ── SCHRITT 2: Fokus ── */}
+          {step === 'focus' && (
+            <>
+              <Text style={styles.coachText}>Welchen Bereich fokussierst du?</Text>
+              <View style={styles.chipRow}>
+                <OptionChip label="Bauch"      icon="crop-free"          selected={focusArea === 'bauch'}       onPress={() => { setFocusArea('bauch');       setStep('weeks'); }} />
+                <OptionChip label="Beine"      icon="directions-run"     selected={focusArea === 'beine'}       onPress={() => { setFocusArea('beine');       setStep('weeks'); }} />
+                <OptionChip label="Oberkörper" icon="sports-gymnastics"  selected={focusArea === 'oberkoerper'} onPress={() => { setFocusArea('oberkoerper'); setStep('weeks'); }} />
+                <OptionChip label="Ganzkörper" icon="self-improvement"   selected={focusArea === 'ganzkörper'}  onPress={() => { setFocusArea('ganzkörper');  setStep('weeks'); }} />
+              </View>
+            </>
+          )}
+
+          {/* ── SCHRITT 3: Dauer ── */}
+          {step === 'weeks' && (
+            <>
+              <Text style={styles.coachText}>Wie lange soll der Plan laufen?</Text>
+              <View style={styles.chipRow}>
+                {([4, 8, 12] as TargetWeeks[]).map((w) => (
+                  <OptionChip
+                    key={w}
+                    label={`${w} Wochen`}
+                    sub={w === 4 ? 'Schnell-Start' : w === 8 ? 'Empfohlen' : 'Intensiv'}
+                    selected={weeks === w}
+                    onPress={() => { setWeeks(w); setStep('days'); }}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* ── SCHRITT 4: Trainingstage ── */}
+          {step === 'days' && (
+            <>
+              <Text style={styles.coachText}>Wann trainierst du?</Text>
+              <Text style={styles.coachSub}>
+                Wähle deine Wochentage — der Coach stimmt den Plan darauf ab.
+              </Text>
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              <View style={styles.dayRow}>
+                {WEEK_DAYS.map(({ label, value }) => {
+                  const active = scheduledDays.includes(value);
+                  return (
+                    <TouchableOpacity
+                      key={value}
+                      style={[styles.dayChip, active && styles.dayChipActive]}
+                      onPress={() => toggleDay(value)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {scheduledDays.length > 0 && (
+                <View style={styles.daySummary}>
+                  <MaterialIcons name="info-outline" size={13} color={C_MUTED} />
+                  <Text style={styles.daySummaryText}>
+                    {scheduledDays.length}× pro Woche
+                    {scheduledDays.length >= 4
+                      ? ' · Split-Training'
+                      : scheduledDays.length === 3
+                        ? ' · Push/Pull/Beine'
+                        : ' · Ganzkörper'}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.nextBtn}
+                onPress={triggerGeneration}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="auto-awesome" size={17} color="#121212" />
+                <Text style={styles.nextBtnText}>Plan generieren</Text>
+              </TouchableOpacity>
+
+              {scheduledDays.length === 0 && (
+                <Text style={styles.skipHint}>
+                  Ohne Auswahl erstellt der Coach einen flexiblen Plan.
+                </Text>
+              )}
+            </>
+          )}
+
+          {/* ── LADE-ANIMATION ── */}
+          {step === 'loading' && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={C_ACCENT} />
+              <Animated.Text style={[styles.loadingText, { opacity: loadingOpacity }]}>
+                {LOADING_MESSAGES[loadingMsgIdx]}
+              </Animated.Text>
+              <Text style={styles.loadingSubText}>
+                Gemini erstellt deinen personalisierten Plan
+              </Text>
+              {goal && focusArea && weeks && (
+                <View style={styles.loadingMeta}>
+                  <Text style={styles.loadingMetaText}>
+                    {goal === 'abnehmen' ? 'Fettverbrennung' : 'Muskelaufbau'}
+                    {'  ·  '}
+                    {focusArea === 'ganzkörper' ? 'Ganzkörper' : focusArea === 'oberkoerper' ? 'Oberkörper' : focusArea.charAt(0).toUpperCase() + focusArea.slice(1)}
+                    {'  ·  '}{weeks} Wo.
+                    {scheduledDays.length > 0 ? `  ·  ${scheduledDays.length}×/Woche` : ''}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── VORSCHAU ── */}
+          {step === 'preview' && plan && (
+            <>
+              <View style={styles.previewHeader}>
+                <MaterialIcons name="auto-awesome" size={20} color={C_ACCENT} />
+                <Text style={styles.previewTitle}>{plan.title}</Text>
+              </View>
+
+              <View style={styles.previewMeta}>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaText}>{plan.target_weeks} Wochen</Text>
+                </View>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaText}>
+                    {plan.fitness_goal === 'abnehmen' ? 'Fettverbrennung' : 'Muskelaufbau'}
+                  </Text>
+                </View>
+                {plan.is_circuit && (
+                  <View style={[styles.metaChip, { borderColor: C_ORANGE }]}>
+                    <Text style={[styles.metaText, { color: C_ORANGE }]}>Zirkel</Text>
+                  </View>
+                )}
+                {plan.scheduled_days && plan.scheduled_days.length > 0 && (
+                  <View style={[styles.metaChip, { borderColor: '#4caf50' }]}>
+                    <Text style={[styles.metaText, { color: '#4caf50' }]}>
+                      {plan.scheduled_days.length}×/Woche
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {plan.scheduled_days && plan.scheduled_days.length > 0 && (
+                <View style={styles.scheduleDays}>
+                  {WEEK_DAYS.filter(({ value }) => plan.scheduled_days!.includes(value)).map(({ label, value }) => (
+                    <View key={value} style={styles.scheduleDayChip}>
+                      <Text style={styles.scheduleDayText}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <Text style={styles.previewSectionLabel}>{plan.exercises.length} ÜBUNGEN</Text>
+              <View style={styles.exerciseList}>
+                {plan.exercises.map((ex, i) => (
+                  <ExercisePreviewRow
+                    key={i}
+                    name={ex.exercise_name}
+                    sets={ex.sets}
+                    reps={ex.reps}
+                    duration={ex.target_duration}
+                  />
+                ))}
+              </View>
+
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                onPress={handleSave}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                {saving
+                  ? <ActivityIndicator size="small" color="#121212" />
+                  : <>
+                      <MaterialIcons name="check" size={18} color="#121212" />
+                      <Text style={styles.saveBtnText}>Plan speichern</Text>
+                    </>
+                }
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.regenerateBtn} onPress={() => setStep('goal')} activeOpacity={0.7}>
+                <MaterialIcons name="refresh" size={16} color={C_MUTED} />
+                <Text style={styles.regenerateBtnText}>Neu generieren</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C_BG },
+
+  header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: 20,
+    paddingTop:        56,
+    paddingBottom:     12,
+    borderBottomWidth: 1,
+    borderBottomColor: C_BORDER,
+  },
+  headerLeft:  { width: 32 },
+  headerTitle: { color: C_TEXT, fontSize: 16, fontWeight: '700' },
+
+  dots:      { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 14 },
+  dot:       { width: 7, height: 7, borderRadius: 4, backgroundColor: C_INPUT },
+  dotActive: { backgroundColor: C_ACCENT },
+
+  body: { padding: 24, paddingBottom: 48 },
+
+  coachText: { color: C_TEXT, fontSize: 20, fontWeight: '700', marginBottom: 8, lineHeight: 28 },
+  coachSub:  { color: C_MUTED, fontSize: 13, marginBottom: 20 },
+
+  // Auswahl-Chips (Ziel / Fokus / Wochen)
+  chipRow:           { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  chip:              { flex: 1, minWidth: '44%', backgroundColor: C_CARD, borderRadius: 14, borderWidth: 1, borderColor: C_BORDER, padding: 16, alignItems: 'center' },
+  chipSelected:      { borderColor: C_ACCENT, backgroundColor: '#051e22' },
+  chipLabel:         { color: C_MUTED, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  chipLabelSelected: { color: C_ACCENT },
+  chipSub:           { color: '#555', fontSize: 11, marginTop: 4, textAlign: 'center' },
+  chipSubSelected:   { color: '#4a9ca8' },
+
+  // Wochentage
+  dayRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  dayChip: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: C_INPUT, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: C_BORDER,
+  },
+  dayChipActive:     { backgroundColor: '#051e22', borderColor: C_ACCENT },
+  dayChipText:       { color: C_MUTED, fontSize: 12, fontWeight: '700' },
+  dayChipTextActive: { color: C_ACCENT },
+
+  daySummary: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginBottom: 20,
+  },
+  daySummaryText: { color: C_MUTED, fontSize: 12 },
+
+  nextBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, backgroundColor: C_ACCENT, borderRadius: 16, paddingVertical: 15,
+    marginTop: 4,
+  },
+  nextBtnText: { color: '#121212', fontSize: 15, fontWeight: '700' },
+
+  skipHint: { color: '#555', fontSize: 12, textAlign: 'center', marginTop: 10 },
+
+  // Loading
+  loadingContainer: { alignItems: 'center', paddingTop: 60, gap: 16 },
+  loadingText:      { color: C_ACCENT, fontSize: 18, fontWeight: '700', marginTop: 8 },
+  loadingSubText:   { color: C_MUTED, fontSize: 13, textAlign: 'center' },
+  loadingMeta: {
+    marginTop: 8, backgroundColor: C_CARD, borderRadius: 10,
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
+  loadingMetaText: { color: '#555', fontSize: 12, textAlign: 'center' },
+
+  // Vorschau
+  previewHeader:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  previewTitle:   { color: C_TEXT, fontSize: 18, fontWeight: '700', flex: 1 },
+  previewMeta:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  metaChip:       { borderWidth: 1, borderColor: C_ACCENT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  metaText:       { color: C_ACCENT, fontSize: 12, fontWeight: '600' },
+
+  scheduleDays:    { flexDirection: 'row', gap: 6, marginBottom: 20, flexWrap: 'wrap' },
+  scheduleDayChip: { backgroundColor: '#0d2a14', borderRadius: 8, borderWidth: 1, borderColor: '#4caf50', paddingHorizontal: 10, paddingVertical: 4 },
+  scheduleDayText: { color: '#4caf50', fontSize: 12, fontWeight: '700' },
+
+  previewSectionLabel: { color: C_MUTED, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
+  exerciseList:        { backgroundColor: C_CARD, borderRadius: 12, padding: 14, gap: 8, marginBottom: 24 },
+  exRow:               { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  exBullet:            { marginTop: 1 },
+  exName:              { color: C_TEXT, fontSize: 13, flex: 1 },
+  exDetail:            { color: C_MUTED, fontSize: 12 },
+
+  saveBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C_ACCENT, borderRadius: 16, paddingVertical: 15, marginBottom: 12 },
+  saveBtnText:     { color: '#121212', fontSize: 15, fontWeight: '700' },
+  regenerateBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  regenerateBtnText: { color: C_MUTED, fontSize: 13 },
+
+  errorText: { color: '#FF5252', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+});

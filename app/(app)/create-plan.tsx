@@ -149,6 +149,15 @@ export default function CreatePlanScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  // ── Wochentage ──
+  const [scheduledDays, setScheduledDays] = useState<number[]>([]);
+
+  function toggleDay(day: number) {
+    setScheduledDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
+  }
+
   // ── Zirkel-Einstellungen ──
   const [isCircuit, setIsCircuit] = useState(false);
   const [circuitRounds, setCircuitRounds] = useState('3');
@@ -167,7 +176,7 @@ export default function CreatePlanScreen() {
       if (isEdit) {
         const { data: plan, error: planError } = await supabase
           .from('workout_plans')
-          .select('title, is_circuit, circuit_rounds, rest_between_exercises_seconds, rest_between_rounds_seconds')
+          .select('title, is_circuit, circuit_rounds, rest_between_exercises_seconds, rest_between_rounds_seconds, scheduled_days')
           .eq('id', planId)
           .single();
 
@@ -188,6 +197,7 @@ export default function CreatePlanScreen() {
           setCircuitRounds(plan.circuit_rounds ? String(plan.circuit_rounds) : '3');
           setRestBetweenExercises(plan.rest_between_exercises_seconds ? String(plan.rest_between_exercises_seconds) : '15');
           setRestBetweenRounds(plan.rest_between_rounds_seconds ? String(plan.rest_between_rounds_seconds) : '60');
+          setScheduledDays(plan.scheduled_days ?? []);
         }
         if (exs && exs.length > 0) {
           setExercises(
@@ -238,6 +248,7 @@ export default function CreatePlanScreen() {
 
     const planPayload = {
       title: planName.trim(),
+      scheduled_days: scheduledDays.length > 0 ? scheduledDays.sort((a, b) => a - b) : null,
       is_circuit: isCircuit,
       circuit_rounds: isCircuit ? (parseInt(circuitRounds, 10) || 3) : null,
       rest_between_exercises_seconds: isCircuit ? (parseInt(restBetweenExercises, 10) || 15) : null,
@@ -329,6 +340,28 @@ export default function CreatePlanScreen() {
           placeholderTextColor="#555"
           returnKeyType="next"
         />
+
+        {/* ── Wochentage ── */}
+        <Text style={styles.label}>Trainingstage</Text>
+        <View style={styles.dayRow}>
+          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label, i) => {
+            // DB: 0=Sun … 6=Sat → Mo=1 … So=0
+            const day = i === 6 ? 0 : i + 1;
+            const active = scheduledDays.includes(day);
+            return (
+              <TouchableOpacity
+                key={day}
+                style={[styles.dayChip, active && styles.dayChipActive]}
+                onPress={() => toggleDay(day)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         {/* ── Zirkeltraining-Toggle ── */}
         <View style={styles.circuitToggleCard}>
@@ -591,4 +624,14 @@ const styles = StyleSheet.create({
   saveButtonText:     { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelButton:       { padding: 14, alignItems: 'center' },
   cancelText:         { color: '#555', fontSize: 15 },
+
+  dayRow: { flexDirection: 'row', gap: 6, marginBottom: 24 },
+  dayChip: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: '#2a2a2a', alignItems: 'center',
+    borderWidth: 1, borderColor: '#333',
+  },
+  dayChipActive:     { backgroundColor: '#0a3a3a', borderColor: '#0a7ea4' },
+  dayChipText:       { color: '#555', fontSize: 12, fontWeight: '700' },
+  dayChipTextActive: { color: '#0a7ea4' },
 });
