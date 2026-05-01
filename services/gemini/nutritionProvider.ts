@@ -1,32 +1,25 @@
-/**
- * services/gemini/nutritionProvider.ts
- *
- * Analysiert Lebensmittelbilder über den Gemini-Vision-Client.
- */
+import { geminiRequest, type GeminiPart } from './client';
 
-import { geminiRequest } from './client';
-
-// ─── Öffentliches Interface (KI-Antwort-Shape) ────────────────────────────────
-
-/** Nährwertdaten, wie sie Gemini zurückgibt. Kompatibel mit types/vision.ts FoodAnalysis. */
 export interface FoodAnalysisResponse {
   name:       string;
   calories:   number;
   protein:    number;
   carbs:      number;
   fat:        number;
-  /** Immer 1.0 — Gemini liefert keinen Konfidenzwert; gesetzt für Abwärtskompatibilität. */
   confidence: number;
 }
 
-// ─── Prompt ───────────────────────────────────────────────────────────────────
-
-const FOOD_PROMPT =
-  'Analyze this food image. Return ONLY a valid JSON object with exactly these keys: ' +
-  '{"name": string, "calories": number, "protein": number, "carbs": number, "fat": number}. ' +
-  'No markdown, no explanation, no extra text — just the JSON object.';
-
-// ─── Response-Validierung ─────────────────────────────────────────────────────
+function buildPrompt(notes?: string): string {
+  let p =
+    'Analyze the provided food image(s). ' +
+    'If a second image is provided, it shows a reference object (like a hand or cutlery) next to the plate — use it to estimate portion size more accurately. ';
+  if (notes?.trim()) p += `Additional context from the user: "${notes.trim()}". `;
+  p +=
+    'Return ONLY a valid JSON object with exactly these keys: ' +
+    '{"name": string, "calories": number, "protein": number, "carbs": number, "fat": number}. ' +
+    'No markdown, no explanation, no extra text — just the JSON object.';
+  return p;
+}
 
 interface RawFoodAnalysis {
   name?:     unknown;
@@ -39,33 +32,37 @@ interface RawFoodAnalysis {
 function validateResponse(raw: RawFoodAnalysis): asserts raw is {
   name: string; calories: number; protein: number; carbs: number; fat: number;
 } {
-  const numFields = ['calories', 'protein', 'carbs', 'fat'] as const;
   if (typeof raw.name !== 'string' || !raw.name.trim()) {
     throw new Error('FoodAnalysis: "name" fehlt');
   }
-  for (const field of numFields) {
+  for (const field of ['calories', 'protein', 'carbs', 'fat'] as const) {
     if (typeof raw[field] !== 'number') {
       throw new Error(`FoodAnalysis: "${field}" muss eine Zahl sein`);
     }
   }
 }
 
-// ─── Öffentliche API ──────────────────────────────────────────────────────────
-
 /**
- * Analysiert ein Base64-kodiertes JPEG-Bild und gibt Nährwertdaten zurück.
- * Wirft bei API-Fehler oder ungültigem JSON (kein Fallback — Caller entscheidet).
+ * Analysiert ein oder zwei Base64-kodierte JPEG-Bilder und optionale Notizen.
+ * Das zweite Bild (Referenzobjekt) verbessert die Portionsschätzung.
  */
-export async function analyzeFoodImage(base64: string): Promise<FoodAnalysisResponse> {
-  const text = await geminiRequest([
-    { text: FOOD_PROMPT },
-    { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-  ]);
+export async function analyzeFoodImage(
+  base64_1: string,
+  base64_2?: string,
+  notes?: string,
+): Promise<FoodAnalysisResponse> {
+  const parts: GeminiPart[] = [
+    { text: buildPrompt(notes) },
+    { inline_data: { mime_type: 'image/jpeg', data: base64_1 } },
+  ];
 
-  // geminiRequest wirft bereits bei leerer Antwort — hier zur Sicherheit nochmal prüfen
-  if (!text) {
-    throw new Error('[Nutrition] Gemini: leere Antwort — kein Speicherversuch');
+  if (base64_2) {
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64_2 } });
   }
+
+  const text = await geminiRequest(parts);
+
+  if (!text) throw new Error('[Nutrition] Gemini: leere Antwort');
 
   console.log('[Nutrition] Gemini-Antwort (Vorschau):', text.slice(0, 120));
 

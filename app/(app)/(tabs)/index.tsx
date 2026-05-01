@@ -334,7 +334,7 @@ const ringStyles = StyleSheet.create({
     justifyContent: "center",
   },
   noch: {
-    color: "#555",
+    color: "#888",
     fontSize: 9,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -348,7 +348,7 @@ const ringStyles = StyleSheet.create({
     lineHeight: 24,
   },
   sub: {
-    color: "#555",
+    color: "#888",
     fontSize: 9,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -1311,7 +1311,7 @@ const styles = StyleSheet.create({
   },
   syncText: {
     fontSize: 10,
-    color: "#444",
+    color: "#777",
     marginTop: 3,
   },
   card: {
@@ -1329,9 +1329,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardLabel: {
-    color: "#555",
+    color: "#BBBBBB",
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 16,
@@ -1362,7 +1362,7 @@ const styles = StyleSheet.create({
   },
   nutritionInfo: { flex: 1 },
   kcalValue: { color: "#fff", fontSize: 30, fontWeight: "800", lineHeight: 34 },
-  kcalUnit: { color: "#666", fontSize: 11, marginBottom: 2 },
+  kcalUnit: { color: "#999", fontSize: 11, marginBottom: 2 },
   lutealBonusText: {
     color: "#FF9100",
     fontSize: 11,
@@ -1375,7 +1375,7 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
   legendChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot: { width: 7, height: 7, borderRadius: 4 },
-  legendText: { color: "#666", fontSize: 10, fontWeight: "600" },
+  legendText: { color: "#999", fontSize: 10, fontWeight: "600" },
 
   weightBadge: {
     backgroundColor: "#0a1a1e",
@@ -1410,7 +1410,7 @@ const styles = StyleSheet.create({
   },
   tooltipWeight: { color: "#fff", fontSize: 14, fontWeight: "800" },
   tooltipTags: { color: "#aaa", fontSize: 11, fontWeight: "600" },
-  tooltipDate: { color: "#555", fontSize: 10 },
+  tooltipDate: { color: "#888", fontSize: 10 },
 
   sectionTitle: {
     color: "#fff",
@@ -1465,7 +1465,7 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   trainingBadgeActive: { backgroundColor: "#0d2a14", borderColor: "#4caf50" },
-  trainingBadgeText: { color: "#555", fontSize: 11, fontWeight: "600" },
+  trainingBadgeText: { color: "#888", fontSize: 11, fontWeight: "600" },
   trainingBadgeTextActive: { color: "#4caf50" },
 
   fab: {
@@ -1545,7 +1545,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   ringLegendText: {
-    color: "#555",
+    color: "#888",
     fontSize: 9,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -1567,7 +1567,7 @@ const styles = StyleSheet.create({
   },
   activitySubtitle: {
     fontSize: 11,
-    color: "#555",
+    color: "#999",
     marginTop: 2,
   },
   activityBadge: {
@@ -1610,14 +1610,14 @@ const styles = StyleSheet.create({
   },
   activityExtraLabel: {
     fontSize: 9,
-    color: "#444",
+    color: "#888",
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   activityExtraValue: {
     fontSize: 12,
-    color: "#666",
+    color: "#999",
     fontWeight: "600",
   },
 });

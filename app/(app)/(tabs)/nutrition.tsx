@@ -67,8 +67,8 @@ function CalorieRing({ eaten, goal }: { eaten: number; goal: number }) {
       </View>
       <View style={{ position: 'absolute', top: RING, left: RING, width: INNER, height: INNER, borderRadius: INNER / 2, backgroundColor: '#1e1e1e', alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: arcColor, fontSize: 26, fontWeight: '800', lineHeight: 30 }}>{eaten}</Text>
-        <Text style={{ color: '#666', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 }}>kcal</Text>
-        <Text style={{ color: '#555', fontSize: 10, marginTop: 2 }}>von {goal}</Text>
+        <Text style={{ color: '#BBBBBB', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 }}>kcal</Text>
+        <Text style={{ color: '#999', fontSize: 10, marginTop: 2 }}>von {goal}</Text>
       </View>
     </View>
   );
@@ -92,7 +92,7 @@ function MacroBar({ label, value, color }: { label: string; value: number; color
 
 const macroStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  label: { color: '#888', fontSize: 12, width: 52 },
+  label: { color: '#BBBBBB', fontSize: 12, width: 52 },
   barBg: { flex: 1, height: 6, backgroundColor: '#2a2a2a', borderRadius: 3, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
   value: { fontSize: 12, fontWeight: '700', width: 44, textAlign: 'right' },
@@ -110,7 +110,7 @@ function WeeklyChart({ weekData, tdee }: { weekData: WeekDay[]; tdee: number }) 
     frontColor: d.eaten === 0 ? '#252525' : d.eaten > tdee ? '#c0392b' : '#0a7ea4',
     topLabelComponent:
       d.eaten > 0
-        ? () => <Text style={{ color: '#555', fontSize: 9, marginBottom: 2 }}>{d.eaten}</Text>
+        ? () => <Text style={{ color: '#fff', fontSize: 9, marginBottom: 2 }}>{d.eaten}</Text>
         : undefined,
   }));
 
@@ -139,8 +139,8 @@ function WeeklyChart({ weekData, tdee }: { weekData: WeekDay[]; tdee: number }) 
         referenceLine1Config={{ color: '#e67e22', dashWidth: 4, dashGap: 4, thickness: 1.5, zIndex: 2 }}
         yAxisColor="transparent"
         xAxisColor="#2a2a2a"
-        yAxisTextStyle={{ color: '#444', fontSize: 9 }}
-        xAxisLabelTextStyle={{ color: '#888', fontSize: 10 }}
+        yAxisTextStyle={{ color: '#BBBBBB', fontSize: 9 }}
+        xAxisLabelTextStyle={{ color: '#BBBBBB', fontSize: 10 }}
         backgroundColor="transparent"
         rulesColor="#1e1e1e"
         initialSpacing={8}
@@ -156,7 +156,7 @@ const weekStyles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   line: { width: 14, height: 2, borderRadius: 1 },
-  legendText: { color: '#888', fontSize: 11 },
+  legendText: { color: '#BBBBBB', fontSize: 11 },
 });
 
 // ─────────────────────────────────────────
@@ -524,11 +524,11 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#1e1e1e', borderRadius: 20, padding: 20, marginBottom: 16 },
   greeting: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 2 },
   cardTitle: {
-    color: '#888', fontSize: 11, fontWeight: '600',
+    color: '#999', fontSize: 11, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 20,
   },
   cardTitlePlain: {
-    color: '#888', fontSize: 11, fontWeight: '600',
+    color: '#999', fontSize: 11, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 16,
   },
 
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
   ringSummary: { flex: 1, marginLeft: 20, gap: 14 },
   summaryItem: { gap: 2 },
   summaryValue: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 28 },
-  summaryLabel:     { color: '#666', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  summaryLabel:     { color: '#999', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
   lutealBonusHint:  { color: '#FF9100', fontSize: 10, fontWeight: '700', marginTop: 2 },
   summaryDivider: { height: 1, backgroundColor: '#2a2a2a' },
 
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 8, marginBottom: 12,
   },
-  adjustTriggerText: { flex: 1, color: '#555', fontSize: 12 },
+  adjustTriggerText: { flex: 1, color: '#999', fontSize: 12 },
   adjustPanel: { marginBottom: 12 },
   adjustInput: {
     backgroundColor: '#2a2a2a', borderRadius: 8, padding: 10,
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     flex: 1, padding: 10, borderRadius: 8,
     backgroundColor: '#2a2a2a', alignItems: 'center',
   },
-  adjustResetText: { color: '#666', fontSize: 13, fontWeight: '600' },
+  adjustResetText: { color: '#999', fontSize: 13, fontWeight: '600' },
   adjustApply: {
     flex: 1, padding: 10, borderRadius: 8,
     backgroundColor: '#0a7ea4', alignItems: 'center',
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  emptyText: { color: '#555', fontSize: 14 },
+  emptyText: { color: '#888', fontSize: 14 },
   emptyButton: { backgroundColor: '#0a7ea4', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
   emptyButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
   },
   logInfo: { flex: 1 },
   logName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  logMacros: { color: '#555', fontSize: 11, marginTop: 2 },
+  logMacros: { color: '#999', fontSize: 11, marginTop: 2 },
   logRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logKcal: { color: '#0a7ea4', fontSize: 14, fontWeight: '700' },
 });

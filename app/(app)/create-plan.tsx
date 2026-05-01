@@ -555,11 +555,11 @@ const styles = StyleSheet.create({
   heading: { fontSize: 26, fontWeight: '800', color: '#fff', marginBottom: 24 },
 
   label: {
-    fontSize: 13, fontWeight: '600', color: '#aaa',
+    fontSize: 13, fontWeight: '600', color: '#BBBBBB',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
   },
   sublabel: {
-    fontSize: 11, fontWeight: '600', color: '#aaa',
+    fontSize: 11, fontWeight: '600', color: '#BBBBBB',
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
   },
   sectionGap: { marginTop: 24, marginBottom: 12 },
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   },
   circuitToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   circuitToggleTitle: { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 3 },
-  circuitToggleHint:  { color: '#555', fontSize: 12, lineHeight: 17 },
+  circuitToggleHint:  { color: '#999', fontSize: 12, lineHeight: 17 },
 
   // Circuit settings
   circuitSettingsCard: {
@@ -632,6 +632,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#333',
   },
   dayChipActive:     { backgroundColor: '#0a3a3a', borderColor: '#0a7ea4' },
-  dayChipText:       { color: '#555', fontSize: 12, fontWeight: '700' },
+  dayChipText:       { color: '#BBBBBB', fontSize: 12, fontWeight: '700' },
   dayChipTextActive: { color: '#0a7ea4' },
 });

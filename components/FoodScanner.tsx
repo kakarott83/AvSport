@@ -3,9 +3,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -20,7 +25,7 @@ import { analyzeFoodImage } from '@/services/gemini/nutritionProvider';
 import { supabase } from '@/services/supabaseClient';
 import type { FoodAnalysis } from '@/types/vision';
 
-// ─── Ring constants (mirrors Dashboard proportions) ───────────────────────────
+// ─── Ring constants ───────────────────────────────────────────────────────────
 
 const RING_SIZE = 140;
 const R_OUT = 62;  const W_OUT = 11;
@@ -42,7 +47,8 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'camera' | 'analyzing' | 'result' | 'saving';
+type Phase = 'camera' | 'tip' | 'camera2' | 'review' | 'analyzing' | 'result' | 'saving';
+type CapturedPhoto = { base64: string; uri: string };
 
 type Props = {
   visible: boolean;
@@ -55,15 +61,9 @@ type Props = {
 // ─── MealRing ─────────────────────────────────────────────────────────────────
 
 function MealRing({
-  calProgress,
-  carbProgress,
-  protProgress,
-  calPct,
+  calProgress, carbProgress, protProgress, calPct,
 }: {
-  calProgress: number;
-  carbProgress: number;
-  protProgress: number;
-  calPct: number;
+  calProgress: number; carbProgress: number; protProgress: number; calPct: number;
 }) {
   const offOut = useSharedValue(CIRC_OUT);
   const offMid = useSharedValue(CIRC_MID);
@@ -114,14 +114,22 @@ export function FoodScanner({
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [phase,  setPhase]  = useState<Phase>('camera');
+  const [image1, setImage1] = useState<CapturedPhoto | null>(null);
+  const [image2, setImage2] = useState<CapturedPhoto | null>(null);
+  const [notes,  setNotes]  = useState('');
   const [result, setResult] = useState<FoodAnalysis | null>(null);
   const [error,  setError]  = useState<string | null>(null);
-  const cameraRef           = useRef<CameraView>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
 
   function reset() {
     setPhase('camera');
+    setImage1(null);
+    setImage2(null);
+    setNotes('');
     setResult(null);
     setError(null);
+    setIsCapturing(false);
   }
 
   function handleClose() {
@@ -129,27 +137,64 @@ export function FoodScanner({
     onClose();
   }
 
+  async function capturePhoto(): Promise<CapturedPhoto | null> {
+    if (!cameraRef.current || isCapturing) return null;
+    setIsCapturing(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.2 });
+      if (!photo?.base64 || !photo?.uri) throw new Error('Kein Bild erhalten');
+      return { base64: photo.base64, uri: photo.uri };
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
   async function handleCapture() {
-    if (!cameraRef.current) return;
+    setError(null);
+    try {
+      const photo = await capturePhoto();
+      if (!photo) return;
+      setImage1(photo);
+      setPhase('tip');
+    } catch (e: any) {
+      setError(e?.message || 'Aufnahme fehlgeschlagen');
+    }
+  }
+
+  async function handleCapture2() {
+    setError(null);
+    try {
+      const photo = await capturePhoto();
+      if (!photo) return;
+      setImage2(photo);
+      setPhase('review');
+    } catch (e: any) {
+      setError(e?.message || 'Aufnahme fehlgeschlagen');
+    }
+  }
+
+  async function handleAnalyze() {
+    if (!image1) return;
     setError(null);
     setPhase('analyzing');
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.2 });
-      if (!photo?.base64) throw new Error('Kein Bild-Daten erhalten');
-      const data = await analyzeFoodImage(photo.base64);
+      const data = await analyzeFoodImage(
+        image1.base64,
+        image2?.base64,
+        notes.trim() || undefined,
+      );
       setResult(data);
       setPhase('result');
     } catch (e: any) {
       const msg: string = e?.message ?? '';
       if (msg.includes('503')) {
-        setError('Die KI ist gerade stark ausgelastet. Bitte versuch es in ein paar Sekunden noch einmal! ☕');
+        setError('Die KI ist gerade stark ausgelastet. Bitte versuch es gleich nochmal! ☕');
       } else if (e instanceof TypeError || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
         setError('Verbindung fehlgeschlagen. Prüfe dein Internet.');
       } else {
         setError(msg || 'Analyse fehlgeschlagen');
       }
-    } finally {
-      setPhase(p => p === 'analyzing' ? 'camera' : p);
+      setPhase('review');
     }
   }
 
@@ -177,17 +222,19 @@ export function FoodScanner({
 
   if (!permission) return null;
 
-  const calPct      = result ? Math.round((result.calories / dailyKcalGoal) * 100) : 0;
-  const calProgress = result ? result.calories / dailyKcalGoal : 0;
+  const calPct       = result ? Math.round((result.calories / dailyKcalGoal) * 100) : 0;
+  const calProgress  = result ? result.calories / dailyKcalGoal : 0;
   const carbProgress = result ? result.carbs / CARBS_REF : 0;
   const protProgress = result ? result.protein / proteinGoal : 0;
+
+  const isCameraPhase = phase === 'camera' || phase === 'camera2';
 
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={handleClose}>
       <View style={s.root}>
 
-        {/* ── Camera / Analyzing phase ── */}
-        {(phase === 'camera' || phase === 'analyzing') && (
+        {/* ── Camera phases ── */}
+        {isCameraPhase && (
           <>
             {permission.granted ? (
               <CameraView ref={cameraRef} style={s.camera} facing="back" />
@@ -200,22 +247,139 @@ export function FoodScanner({
               </View>
             )}
 
-            {phase === 'analyzing' ? (
-              <View style={s.overlay}>
-                <ActivityIndicator size="large" color="#00E5FF" />
-                <Text style={s.overlayText}>KI analysiert…</Text>
-              </View>
-            ) : (
-              permission.granted && (
-                <View style={s.controls}>
-                  {error && <Text style={s.errorText}>{error}</Text>}
-                  <TouchableOpacity style={s.shutterBtn} onPress={handleCapture} activeOpacity={0.85}>
-                    <View style={s.shutterInner} />
+            {permission.granted && (
+              <View style={s.controls}>
+                {phase === 'camera2' && (
+                  <View style={s.camera2Banner}>
+                    <MaterialIcons name="straighten" size={14} color="#FF9100" />
+                    <Text style={s.camera2BannerText}>
+                      Referenzobjekt (z. B. Hand oder Besteck) neben den Teller legen
+                    </Text>
+                  </View>
+                )}
+                {error && <Text style={s.errorText}>{error}</Text>}
+                <TouchableOpacity
+                  style={[s.shutterBtn, isCapturing && s.shutterDisabled]}
+                  onPress={phase === 'camera' ? handleCapture : handleCapture2}
+                  disabled={isCapturing}
+                  activeOpacity={0.85}
+                >
+                  <View style={s.shutterInner} />
+                </TouchableOpacity>
+                {phase === 'camera2' && (
+                  <TouchableOpacity style={s.skipBtn} onPress={() => setPhase('review')} activeOpacity={0.7}>
+                    <Text style={s.skipText}>Überspringen</Text>
                   </TouchableOpacity>
-                </View>
-              )
+                )}
+              </View>
             )}
           </>
+        )}
+
+        {/* ── Tip phase ── */}
+        {phase === 'tip' && image1 && (
+          <View style={s.centeredBox}>
+            <Image source={{ uri: image1.uri }} style={s.tipThumb} resizeMode="cover" />
+
+            <View style={s.tipBox}>
+              <MaterialIcons name="lightbulb-outline" size={18} color="#FF9100" style={{ marginTop: 1 }} />
+              <Text style={s.tipText}>
+                Tipp: Mache ein zweites Foto mit einem Referenzobjekt (z.{' '}B. Hand oder Besteck) neben dem Teller für eine genauere Schätzung.
+              </Text>
+            </View>
+
+            <TouchableOpacity style={s.primaryBtn} onPress={() => setPhase('camera2')} activeOpacity={0.85}>
+              <MaterialIcons name="add-a-photo" size={18} color="#121212" />
+              <Text style={s.primaryBtnText}>Zweites Foto aufnehmen</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.skipBtn} onPress={() => setPhase('review')} activeOpacity={0.7}>
+              <Text style={s.skipText}>Überspringen</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Review phase ── */}
+        {phase === 'review' && image1 && (
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: '#121212' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <ScrollView
+              contentContainerStyle={s.reviewContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={s.sectionLabel}>MAHLZEIT ÜBERPRÜFEN</Text>
+
+              <View style={s.thumbnailRow}>
+                {/* image1 */}
+                <View style={s.thumbSlot}>
+                  <Image source={{ uri: image1.uri }} style={s.thumbImg} resizeMode="cover" />
+                  <View style={s.thumbBadge}>
+                    <MaterialIcons name="check" size={11} color="#4caf50" />
+                    <Text style={s.thumbBadgeText}>Mahlzeit</Text>
+                  </View>
+                </View>
+
+                {/* image2 or empty slot */}
+                {image2 ? (
+                  <View style={s.thumbSlot}>
+                    <Image source={{ uri: image2.uri }} style={s.thumbImg} resizeMode="cover" />
+                    <View style={[s.thumbBadge, { backgroundColor: '#0a1a1e' }]}>
+                      <MaterialIcons name="straighten" size={11} color={COLOR_CALORIES} />
+                      <Text style={[s.thumbBadgeText, { color: COLOR_CALORIES }]}>Referenz</Text>
+                    </View>
+                    <TouchableOpacity style={s.removeThumbBtn} onPress={() => setImage2(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <MaterialIcons name="close" size={13} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={[s.thumbSlot, s.emptySlot]} onPress={() => { setError(null); setPhase('camera2'); }} activeOpacity={0.7}>
+                    <MaterialIcons name="add-a-photo" size={22} color="#444" />
+                    <Text style={s.emptySlotTitle}>Optional</Text>
+                    <Text style={s.emptySlotSub}>Referenzobjekt</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={s.notesSection}>
+                <Text style={s.notesLabel}>DETAILS (OPTIONAL)</Text>
+                <TextInput
+                  style={s.notesInput}
+                  placeholder={'z. B. „200g Reis, Dressing separat“'}
+                  placeholderTextColor="#444"
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {error && <Text style={s.errorText}>{error}</Text>}
+
+              <TouchableOpacity style={s.analyzeBtn} onPress={handleAnalyze} activeOpacity={0.85}>
+                <MaterialIcons name="auto-awesome" size={18} color="#121212" />
+                <Text style={s.analyzeBtnText}>Analysieren</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
+                <Text style={s.retryText}>Nochmal aufnehmen</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        )}
+
+        {/* ── Analyzing phase ── */}
+        {phase === 'analyzing' && (
+          <View style={[s.centeredBox, { justifyContent: 'center' }]}>
+            <ActivityIndicator size="large" color="#00E5FF" />
+            <Text style={s.analyzingText}>KI analysiert…</Text>
+            {image2 && (
+              <Text style={s.analyzingSubText}>Beide Bilder werden ausgewertet</Text>
+            )}
+          </View>
         )}
 
         {/* ── Result / Saving phase ── */}
@@ -231,7 +395,6 @@ export function FoodScanner({
                   protProgress={protProgress}
                   calPct={calPct}
                 />
-
                 <View style={s.nutritionInfo}>
                   <Text style={s.mealName} numberOfLines={2}>{result.name}</Text>
                   <Text style={s.kcalValue}>{result.calories}</Text>
@@ -295,15 +458,6 @@ const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
 
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  overlayText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-
   controls: {
     position: 'absolute',
     bottom: 64,
@@ -311,6 +465,25 @@ const s = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     gap: 14,
+  },
+  camera2Banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3a2800',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 24,
+  },
+  camera2BannerText: {
+    color: '#FF9100',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 17,
   },
   shutterBtn: {
     width: 76,
@@ -322,20 +495,146 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
+  shutterDisabled: { opacity: 0.5 },
   shutterInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
-  errorText: { color: '#FF5252', fontSize: 13, fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
 
   centeredBox: {
     flex: 1,
     backgroundColor: '#121212',
     paddingHorizontal: 20,
-    paddingVertical: 48,
-    justifyContent: 'center',
+    paddingTop: 72,
+    paddingBottom: 48,
     gap: 16,
   },
   permText: { color: '#aaa', fontSize: 15, textAlign: 'center', lineHeight: 22 },
 
-  // Preview card (matches Dashboard card style)
+  // Tip
+  tipThumb: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    backgroundColor: '#1e1e1e',
+  },
+  tipBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#1a1200',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#3a2800',
+    padding: 14,
+  },
+  tipText: {
+    flex: 1,
+    color: '#ccc',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  // Review
+  reviewContent: {
+    paddingHorizontal: 20,
+    paddingTop: 72,
+    paddingBottom: 48,
+    gap: 16,
+  },
+  sectionLabel: {
+    color: '#999',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  thumbnailRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  thumbSlot: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    position: 'relative',
+  },
+  thumbImg: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+  },
+  thumbBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0d2a14',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  thumbBadgeText: {
+    color: '#4caf50',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  removeThumbBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptySlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 120,
+    borderStyle: 'dashed',
+    borderColor: '#333',
+  },
+  emptySlotTitle: { color: '#555', fontSize: 12, fontWeight: '700' },
+  emptySlotSub:   { color: '#3a3a3a', fontSize: 10 },
+
+  notesSection: { gap: 8 },
+  notesLabel: {
+    color: '#888',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  notesInput: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 80,
+  },
+
+  analyzeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLOR_CALORIES,
+    borderRadius: 16,
+    paddingVertical: 16,
+  },
+  analyzeBtnText: { color: '#121212', fontSize: 16, fontWeight: '800' },
+
+  analyzingText:    { color: '#fff', fontSize: 16, fontWeight: '600', marginTop: 16 },
+  analyzingSubText: { color: '#555', fontSize: 12, marginTop: 4 },
+
+  // Result card
   previewCard: {
     backgroundColor: '#1e1e1e',
     borderRadius: 20,
@@ -344,7 +643,7 @@ const s = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   cardLabel: {
-    color: '#555',
+    color: '#999',
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -353,14 +652,13 @@ const s = StyleSheet.create({
   },
   nutritionRow: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 12 },
   nutritionInfo: { flex: 1 },
-  mealName: { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 6, lineHeight: 18 },
+  mealName:  { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 6, lineHeight: 18 },
   kcalValue: { color: '#fff', fontSize: 28, fontWeight: '800', lineHeight: 32 },
   kcalUnit:  { color: '#666', fontSize: 11, marginBottom: 2 },
   kcalDivider: { height: 1, backgroundColor: '#2a2a2a', marginVertical: 8 },
   legendChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 },
   legendDot:  { width: 7, height: 7, borderRadius: 4 },
   legendText: { color: '#666', fontSize: 10, fontWeight: '600' },
-
   cardLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,12 +671,22 @@ const s = StyleSheet.create({
   },
   cardLinkText: { color: COLOR_CALORIES, fontSize: 12, fontWeight: '600' },
 
+  // Shared
+  errorText: { color: '#FF5252', fontSize: 13, fontWeight: '600', textAlign: 'center', paddingHorizontal: 8 },
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLOR_CALORIES,
+    borderRadius: 16,
+    paddingVertical: 16,
+  },
+  primaryBtnText: { color: '#121212', fontSize: 16, fontWeight: '800' },
+  skipBtn:  { alignItems: 'center', paddingVertical: 8 },
+  skipText: { color: '#555', fontSize: 14, fontWeight: '600' },
   retryBtn:  { alignItems: 'center', paddingVertical: 10 },
   retryText: { color: '#555', fontSize: 14, fontWeight: '600' },
-
-  // Permission grant
-  primaryBtn: { backgroundColor: '#00E5FF', borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  primaryBtnText: { color: '#121212', fontSize: 16, fontWeight: '800' },
 
   closeBtn: {
     position: 'absolute',

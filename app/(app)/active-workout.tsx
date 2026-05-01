@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   ringContainer: { alignItems: 'center', marginBottom: 24, gap: 12 },
   ringTime: { fontSize: 36, fontWeight: '800', lineHeight: 42 },
   ringSub: {
-    color: '#666', fontSize: 11, fontWeight: '600',
+    color: '#888', fontSize: 11, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 2,
   },
   countdownDoneHint: { color: '#2a7a4a', fontSize: 13, fontWeight: '600', textAlign: 'center' },
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
 
   logSection: { marginBottom: 20 },
   logTitle: {
-    color: '#666', fontSize: 12, fontWeight: '600',
+    color: '#999', fontSize: 12, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
   },
   logRow: {
@@ -744,6 +744,6 @@ const styles = StyleSheet.create({
   summaryStats: { flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' },
   summaryStat:  { flex: 1, alignItems: 'center' },
   summaryStatValue: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 28 },
-  summaryStatLabel: { color: '#666', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 4 },
+  summaryStatLabel: { color: '#999', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 4 },
   summaryDivider: { width: 1, height: 40, backgroundColor: '#2a2a2a', marginHorizontal: 8 },
 });

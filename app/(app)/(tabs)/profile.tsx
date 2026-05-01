@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 16, paddingBottom: 48 },
 
   card:      { backgroundColor: '#1e1e1e', borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a' },
-  cardTitle: { color: '#888', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 16 },
+  cardTitle: { color: '#999', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 16 },
 
   label: { color: '#aaa', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 },
   hint:  { color: '#555', fontSize: 12, lineHeight: 18, marginBottom: 16 },
