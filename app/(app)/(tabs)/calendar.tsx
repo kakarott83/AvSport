@@ -27,7 +27,7 @@ type DayLog  = { tagIds: string[]; note: string };
 
 const DEFAULT_TAGS: Tag[] = [
   { id: 'no_alcohol', label: 'Kein Alkohol', emoji: '🍷', color: '#00E5FF' },
-  { id: 'period',     label: 'Periode',      emoji: '🩸', color: '#FF5252' },
+  { id: 'period',     label: 'Periode',      emoji: '🩸', color: '#FF5252', pattern: 'striped' },
   { id: 'stress',     label: 'Viel Stress',  emoji: '🤯', color: '#FF9100' },
 ];
 
@@ -71,6 +71,33 @@ export default function CalendarScreen() {
   const monthStats = useMemo(
     () => computeMonthStats(allLogs, currentMonth, tags),
     [allLogs, currentMonth, tags]
+  );
+
+  // ── Per-day tag list for calendar bars (derived, live) ────────────────────
+
+  const tagsByDate = useMemo(() => {
+    const tagMap = new Map(tags.map((t) => [t.id, t]));
+    const visibleIds = new Set(
+      tags.filter((t) => cycleTracking || t.id !== 'period').map((t) => t.id)
+    );
+    const result = new Map<string, Tag[]>();
+    for (const row of allLogs) {
+      const dayTags = row.tag_ids
+        .filter((id) => visibleIds.has(id))
+        .map((id) => tagMap.get(id))
+        .filter((t): t is Tag => t !== undefined);
+      if (dayTags.length > 0) result.set(row.date, dayTags);
+    }
+    return result;
+  }, [allLogs, tags, cycleTracking]);
+
+  // ── Custom day renderer (memoised to avoid recreation on every render) ────
+
+  const DayCellRenderer = useCallback(
+    (props: any) => (
+      <DayCell {...props} tagsByDate={tagsByDate} selectedDate={selectedDate} />
+    ),
+    [tagsByDate, selectedDate],
   );
 
   // ── data loading ───────────────────────────────────────────────────────────
@@ -267,23 +294,15 @@ export default function CalendarScreen() {
               current={selectedDate}
               onDayPress={onDayPress}
               onMonthChange={onMonthChange}
-              markingType="multi-dot"
+              dayComponent={DayCellRenderer}
               markedDates={markedDates}
               theme={{
                 backgroundColor: '#1e1e1e',
                 calendarBackground: '#1e1e1e',
                 textSectionTitleColor: '#888',
-                selectedDayBackgroundColor: '#00E5FF',
-                selectedDayTextColor: '#121212',
-                todayTextColor: '#00E5FF',
-                dayTextColor: '#fff',
-                textDisabledColor: '#444',
-                dotColor: '#888',
-                selectedDotColor: '#fff',
                 arrowColor: '#00E5FF',
                 monthTextColor: '#fff',
                 indicatorColor: '#00E5FF',
-                textDayFontWeight: '600',
                 textMonthFontWeight: '800',
                 textDayHeaderFontWeight: '600',
               }}
@@ -431,6 +450,133 @@ export default function CalendarScreen() {
     </>
   );
 }
+
+// ─── Calendar Day Cell ────────────────────────────────────────────────────────
+
+const BAR_H   = 3;
+const MAX_BARS = 4;
+// Stripe x-offsets; overflow:hidden clips any excess
+const STRIPE_XS = [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45];
+
+type DateData = { dateString: string; day: number; month: number; year: number; timestamp: number };
+
+function TagBar({ tag }: { tag: Tag }) {
+  const striped = tag.pattern === 'striped';
+  return (
+    <View
+      style={[
+        dayStyles.bar,
+        { backgroundColor: striped ? tag.color + '55' : tag.color, overflow: 'hidden' },
+      ]}
+    >
+      {striped && STRIPE_XS.map((x) => (
+        <View
+          key={x}
+          style={{
+            position: 'absolute',
+            left: x,
+            top: -5,
+            width: 2,
+            height: 14,
+            backgroundColor: tag.color,
+            transform: [{ rotate: '45deg' }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function DayCell({
+  date,
+  state,
+  onPress,
+  tagsByDate,
+  selectedDate,
+}: {
+  date?: DateData;
+  state?: 'disabled' | 'today' | '';
+  marking?: any;
+  onPress?: (date: DateData) => void;
+  tagsByDate: Map<string, Tag[]>;
+  selectedDate: string;
+}) {
+  if (!date) return <View style={{ flex: 1 }} />;
+
+  const isSelected  = date.dateString === selectedDate;
+  const isToday     = state === 'today';
+  const isDisabled  = state === 'disabled';
+  const dayTags     = tagsByDate.get(date.dateString) ?? [];
+  const displayTags = dayTags.slice(0, MAX_BARS);
+  const hasOverflow = dayTags.length > MAX_BARS;
+
+  return (
+    <TouchableOpacity
+      style={dayStyles.container}
+      onPress={() => !isDisabled && onPress?.(date)}
+      activeOpacity={0.7}
+      disabled={isDisabled}
+    >
+      {/* Date number with selection / today indicator */}
+      <View style={[
+        dayStyles.circle,
+        isSelected            && dayStyles.circleSelected,
+        isToday && !isSelected && dayStyles.circleToday,
+      ]}>
+        <Text style={[
+          dayStyles.dayText,
+          isDisabled             && dayStyles.dayDisabled,
+          isToday && !isSelected && dayStyles.dayToday,
+          isSelected             && dayStyles.daySelected,
+        ]}>
+          {date.day}
+        </Text>
+      </View>
+
+      {/* Stacked color bars — layout is always reserved so date numbers stay aligned */}
+      <View style={dayStyles.barsArea}>
+        {displayTags.map((tag) => <TagBar key={tag.id} tag={tag} />)}
+        {hasOverflow && (
+          <View style={[dayStyles.bar, { backgroundColor: '#555' }]} />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const dayStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 5,
+    paddingBottom: 4,
+  },
+  circle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleSelected: { backgroundColor: '#00E5FF' },
+  circleToday:    { borderWidth: 1.5, borderColor: '#00E5FF' },
+  dayText:     { fontSize: 13, fontWeight: '600', color: '#fff' },
+  dayToday:    { color: '#00E5FF', fontWeight: '700' },
+  daySelected: { color: '#121212', fontWeight: '700' },
+  dayDisabled: { color: '#444' },
+  barsArea: {
+    alignSelf: 'stretch',
+    marginHorizontal: 2,
+    marginTop: 3,
+    gap: 2,
+    // Fixed height regardless of bar count → keeps the date row stable
+    minHeight: BAR_H * MAX_BARS + 2 * (MAX_BARS - 1),
+  },
+  bar: {
+    height: BAR_H,
+    borderRadius: 1.5,
+  },
+});
 
 // ─── Tag Chip ─────────────────────────────────────────────────────────────────
 

@@ -50,9 +50,13 @@
       [
         "react-native-health-connect",
         {
-          "permissions": ["Steps", "ActiveCaloriesBurned"]
+          "permissions": [
+            "Steps",
+            "ActiveCaloriesBurned"
+          ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "router": {},

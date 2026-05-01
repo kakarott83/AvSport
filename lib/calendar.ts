@@ -10,6 +10,8 @@ export type Tag = {
   label: string;
   emoji: string;
   color: string;
+  /** 'striped' renders a diagonal-hatch pattern instead of a solid bar. */
+  pattern?: 'solid' | 'striped';
 };
 
 export type LogRow = {
