@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,19 +12,42 @@ import {
 } from "react-native";
 
 import { Toast } from "@/components/Toast";
+import {
+  clearCredentials,
+  loadCredentials,
+  saveCredentials,
+} from "@/lib/credentialStore";
 import { supabase } from "@/services/supabaseClient";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [savePassword, setSavePassword] = useState(false);
+  const [loading, setLoading]       = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Pre-fill fields from SecureStore on first render
+  useEffect(() => {
+    loadCredentials().then((saved) => {
+      if (saved) {
+        setEmail(saved.email);
+        setPassword(saved.password);
+        setSavePassword(true);
+      }
+    });
+  }, []);
 
   function showToast(message: string) {
     setToastMessage(null);
-    // kurze Verzögerung damit die Animation neu startet, falls bereits eine aktiv ist
     setTimeout(() => setToastMessage(message), 50);
+  }
+
+  async function handleToggleSave(next: boolean) {
+    setSavePassword(next);
+    if (!next) {
+      await clearCredentials();
+    }
   }
 
   async function handleLogin() {
@@ -52,6 +75,11 @@ export default function LoginScreen() {
           : `Fehler: ${error.message}`,
       );
     } else {
+      if (savePassword) {
+        await saveCredentials(email.trim(), password);
+      } else {
+        await clearCredentials();
+      }
       console.log("Login erfolgreich, Session:", data.session?.user?.email);
     }
     // Bei Erfolg: _layout.tsx leitet automatisch zu /(app)/(tabs) weiter
@@ -107,6 +135,17 @@ export default function LoginScreen() {
             returnKeyType="done"
             onSubmitEditing={handleLogin}
           />
+
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => handleToggleSave(!savePassword)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, savePassword && styles.checkboxActive]}>
+              {savePassword && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>Passwort speichern</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -200,6 +239,36 @@ const styles = StyleSheet.create({
     color: "#fff",
     borderWidth: 1,
     borderColor: "#333",
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#444",
+    backgroundColor: "#2a2a2a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxActive: {
+    backgroundColor: "#0a7ea4",
+    borderColor: "#0a7ea4",
+  },
+  checkmark: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  checkboxLabel: {
+    color: "#888",
+    fontSize: 13,
   },
   button: {
     marginTop: 24,

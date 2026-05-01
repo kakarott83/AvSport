@@ -21,6 +21,7 @@ const MAPPING = {
   'list.bullet.rectangle': 'list-alt',
   'fork.knife': 'restaurant',
   'calendar': 'event',
+  'person.fill': 'person',
 } as IconMapping;
 
 /**

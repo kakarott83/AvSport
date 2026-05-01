@@ -40,15 +40,6 @@ export default function AppLayout() {
           headerShadowVisible: false,
         }}
       />
-      <Stack.Screen
-        name="profile"
-        options={{
-          title: 'Mein Profil',
-          headerStyle: { backgroundColor: '#121212' },
-          headerTintColor: '#fff',
-          headerShadowVisible: false,
-        }}
-      />
     </Stack>
   );
 }

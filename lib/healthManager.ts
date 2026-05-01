@@ -207,15 +207,17 @@ export const HealthManager = {
       return true;
     }
 
+    // Callers that trigger this immediately after navigation or login should
+    // wait at least 500 ms before calling, e.g.:
+    //   await new Promise(r => setTimeout(r, 500));
+    //   await HealthManager.requestPermissions();
+    // The Android Activity needs time to attach the HealthConnectPermissionDelegate
+    // ActivityResultLauncher (the lateinit var) via onHostResume().
+
     try {
       const ready = await this.init();
       if (!ready) return false;
 
-      // 1. ZUSÄTZLICHER SICHERHEITS-PUFFER
-      // Wir warten hier nochmal explizit, bevor wir die native Brücke überqueren.
-      console.log(
-        "[HealthManager] Waiting for Android activity to stabilize...",
-      );
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       if (!this._isNativeReady || !hc) {
@@ -230,16 +232,50 @@ export const HealthManager = {
           "[HealthManager] requestPermission() — opening system dialog…",
         );
 
-      // 2. DER KRITISCHE AUFRUF
-      await hc.requestPermission([
-        { accessType: "read", recordType: "Steps" },
-        { accessType: "read", recordType: "ActiveCaloriesBurned" },
-      ]);
+      // Retry loop guarding against the Android 14 race where the Kotlin
+      // lateinit property `requestPermission` inside HealthConnectPermissionDelegate
+      // has not yet been assigned by onHostResume() when this call arrives.
+      const MAX_ATTEMPTS = 3;
+      const RETRY_DELAY_MS = 500;
 
-      return true;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          await hc.requestPermission([
+            { accessType: "read", recordType: "Steps" },
+            { accessType: "read", recordType: "ActiveCaloriesBurned" },
+          ]);
+          return true;
+        } catch (e) {
+          const message =
+            e instanceof Error ? e.message : String(e ?? "");
+          const isLateInitError =
+            message.includes("UninitializedPropertyAccessException") ||
+            message.includes("lateinit property requestPermission");
+
+          if (isLateInitError && attempt < MAX_ATTEMPTS) {
+            console.warn(
+              `[HealthManager] requestPermission lateinit not ready` +
+                ` (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${RETRY_DELAY_MS} ms…`,
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, RETRY_DELAY_MS),
+            );
+          } else {
+            if (isLateInitError) {
+              console.warn(
+                "[HealthManager] requestPermission lateinit still not ready" +
+                  ` after ${MAX_ATTEMPTS} attempts — aborting without crash.`,
+              );
+              return false;
+            }
+            throw e;
+          }
+        }
+      }
+
+      return false;
     } catch (e) {
       console.error("[HealthManager] requestPermissions() threw:", e);
-      // Reset
       this._isNativeReady = false;
       this._status = "idle";
       this._initPromise = null;

@@ -31,6 +31,7 @@ import { useCalorieGoal } from "@/hooks/useCalorieGoal";
 import { useHealthData } from "@/hooks/useHealthData";
 import { useStepGoal } from "@/hooks/useStepGoal";
 import { isStale, loadCache, saveCache } from "@/lib/dashboardCache";
+import { clearCredentials } from "@/lib/credentialStore";
 import { HealthManager } from "@/lib/healthManager";
 import { syncHealthToSupabase } from "@/lib/healthSync";
 import { supabase } from "@/services/supabaseClient";
@@ -665,6 +666,7 @@ export default function HomeScreen() {
   }, [fetchDashboardData, refreshHealth, nativeReady]);
 
   async function handleLogout() {
+    await clearCredentials();
     await supabase.auth.signOut();
   }
 
@@ -803,13 +805,10 @@ export default function HomeScreen() {
             )}
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => router.push("/profile")}
+              onPress={handleLogout}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <MaterialIcons name="person-outline" size={22} color="#888" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout}>
-              <Text style={styles.logoutText}>Abmelden</Text>
+              <MaterialIcons name="logout" size={20} color="#888" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1315,8 +1314,6 @@ const styles = StyleSheet.create({
     color: "#444",
     marginTop: 3,
   },
-  logoutText: { color: "#555", fontSize: 13 },
-
   card: {
     backgroundColor: "#1e1e1e",
     borderRadius: 20,
