@@ -1,5 +1,5 @@
 import * as Device from "expo-device";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { mockHealthService } from "@/services/mockHealthService";
 
@@ -207,36 +207,72 @@ export const HealthManager = {
       return true;
     }
 
-    // Callers that trigger this immediately after navigation or login should
-    // wait at least 500 ms before calling, e.g.:
-    //   await new Promise(r => setTimeout(r, 500));
-    //   await HealthManager.requestPermissions();
-    // The Android Activity needs time to attach the HealthConnectPermissionDelegate
-    // ActivityResultLauncher (the lateinit var) via onHostResume().
-
     try {
       const ready = await this.init();
       if (!ready) return false;
 
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-
-      if (!this._isNativeReady || !hc) {
-        console.error(
-          "[HealthManager] requestPermissions() aborted — native launcher not attached.",
-        );
-        return false;
+      // Fast path: if permissions are already granted (e.g. user just came back
+      // from HC settings), skip the dialog entirely.
+      if (hc) {
+        const already = await hc.getGrantedPermissions();
+        if (
+          (already as any[]).some(
+            (p) =>
+              p.accessType === "read" &&
+              (p.recordType === "Steps" ||
+                p.recordType === "ActiveCaloriesBurned"),
+          )
+        ) {
+          if (__DEV__)
+            console.log(
+              "[HealthManager] permissions already granted — skipping dialog.",
+            );
+          return true;
+        }
       }
+
+      // Wait until the Android Activity is in the foreground. This is the
+      // reliable signal that onHostResume() has fired and the Kotlin
+      // HealthConnectPermissionDelegate.requestPermission lateinit var has
+      // been assigned by registerForActivityResult().
+      // A hardcoded setTimeout is not sufficient on slower devices or inside
+      // the Expo DevLauncher where the lifecycle fires later than expected.
+      if (AppState.currentState !== "active") {
+        if (__DEV__)
+          console.log(
+            "[HealthManager] waiting for AppState → active before requestPermission…",
+          );
+        await new Promise<void>((resolve, reject) => {
+          const guard = setTimeout(
+            () => reject(new Error("AppState active timeout")),
+            10_000,
+          );
+          const sub = AppState.addEventListener("change", (state) => {
+            if (state === "active") {
+              clearTimeout(guard);
+              sub.remove();
+              resolve();
+            }
+          });
+        });
+      }
+
+      // Small buffer so the Kotlin main-thread can finish the ActivityResultLauncher
+      // registration that happens synchronously inside onHostResume().
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      if (!hc) return false;
 
       if (__DEV__)
         console.log(
           "[HealthManager] requestPermission() — opening system dialog…",
         );
 
-      // Retry loop guarding against the Android 14 race where the Kotlin
-      // lateinit property `requestPermission` inside HealthConnectPermissionDelegate
-      // has not yet been assigned by onHostResume() when this call arrives.
-      const MAX_ATTEMPTS = 3;
-      const RETRY_DELAY_MS = 500;
+      // Retry loop: guards against residual cases where the lateinit var is
+      // still not ready even after the foreground signal (e.g. Expo DevLauncher
+      // double-Activity wrap delays the delegate attachment by another frame).
+      const MAX_ATTEMPTS = 6;
+      const RETRY_DELAY_MS = 1000;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
@@ -244,7 +280,30 @@ export const HealthManager = {
             { accessType: "read", recordType: "Steps" },
             { accessType: "read", recordType: "ActiveCaloriesBurned" },
           ]);
-          return granted.length > 0;
+
+          if (__DEV__)
+            console.log(
+              "[HealthManager] requestPermission result:",
+              JSON.stringify(granted),
+            );
+
+          if (granted.length > 0) return true;
+
+          // On Android 14 the system Health Connect service returns RESULT_OK
+          // but with no extras in the Intent, so parseResult() yields an empty
+          // set even when the user actually granted. Cross-check with the OS.
+          const actual = await hc.getGrantedPermissions();
+          if (__DEV__)
+            console.log(
+              "[HealthManager] getGrantedPermissions fallback:",
+              JSON.stringify(actual),
+            );
+          return (actual as any[]).some(
+            (p) =>
+              p.accessType === "read" &&
+              (p.recordType === "Steps" ||
+                p.recordType === "ActiveCaloriesBurned"),
+          );
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e ?? "");
           const isLateInitError =
@@ -325,15 +384,15 @@ export const HealthManager = {
       };
 
       if (__DEV__)
-        console.log("[HealthManager] readRecords('Steps')…", timeRangeFilter);
+        console.log("[HealthManager] aggregateRecord('Steps')…", timeRangeFilter);
 
-      const result = await hc!.readRecords("Steps", { timeRangeFilter });
+      const result = await hc!.aggregateRecord({
+        recordType: "Steps",
+        timeRangeFilter,
+        dataOriginFilter: ["com.google.android.apps.fitness"],
+      });
 
-      // readRecords returns a wide union — cast to access Steps-specific .count
-      const total = (result.records as any[]).reduce(
-        (sum, record) => sum + (record.count ?? 0),
-        0,
-      );
+      const total = (result as any).COUNT_TOTAL ?? 0;
 
       if (__DEV__) console.log(`[HealthManager] steps today: ${total}`);
       return total;
@@ -367,21 +426,19 @@ export const HealthManager = {
         endTime: dateRange.endTime,
       };
 
-      const [stepsRes, caloriesRes] = await Promise.all([
-        hc!.readRecords("Steps", { timeRangeFilter }),
-        hc!.readRecords("ActiveCaloriesBurned", { timeRangeFilter }),
-      ]);
+      const stepsRes = await hc!.aggregateRecord({
+        recordType: "Steps",
+        timeRangeFilter,
+        dataOriginFilter: ["com.google.android.apps.fitness"],
+      });
 
-      const steps = (stepsRes.records as any[]).reduce(
-        (s, r) => s + (r.count ?? 0),
-        0,
-      );
-      const calories = (caloriesRes.records as any[]).reduce(
-        (s, r) => s + (r.energy?.inKilocalories ?? 0),
-        0,
-      );
+      const steps    = (stepsRes as any).COUNT_TOTAL ?? 0;
+      const calories = Math.round(steps * 0.04);
 
-      return { steps, calories: Math.round(calories) };
+      if (__DEV__)
+        console.log(`[HealthManager] Steps (Fit): ${steps}, kcal (derived): ${calories}`);
+
+      return { steps, calories };
     } catch (e) {
       console.error("[HealthManager] fetchStepsAndCalories() threw:", e);
       return { ...EMPTY_DATA };
@@ -414,6 +471,12 @@ export async function checkAvailability(): Promise<HealthAvailability> {
   } catch {
     return { available: false, reason: "error" };
   }
+}
+
+/** Opens the Health Connect settings screen so the user can manage app permissions. */
+export function openHealthConnectSettings(): void {
+  if (Platform.OS !== "android" || !hc) return;
+  hc.openHealthConnectSettings();
 }
 
 /** @deprecated  Use HealthManager.requestPermissions() */

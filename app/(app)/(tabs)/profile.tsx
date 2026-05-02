@@ -20,7 +20,7 @@ import { Toast } from '@/components/Toast';
 import * as Device from 'expo-device';
 
 import { clearCredentials } from '@/lib/credentialStore';
-import { checkAvailability, HealthManager, requestPermissions } from '@/lib/healthManager';
+import { checkAvailability, HealthManager, openHealthConnectSettings, requestPermissions } from '@/lib/healthManager';
 import { syncHealthToSupabase } from '@/lib/healthSync';
 import { clampStepper, parseProfileFloat, parseProfileInt, STEPPER_BOUNDS, validateProfileForm } from '@/lib/profile';
 import {
@@ -186,6 +186,10 @@ export default function ProfileScreen() {
           Alert.alert(
             'Berechtigung verweigert',
             'Bitte erlaube den Zugriff auf Schritt- und Kaloriendaten in den Health Connect Einstellungen.',
+            [
+              { text: 'Abbrechen', style: 'cancel' },
+              { text: 'Health Connect öffnen', onPress: () => openHealthConnectSettings() },
+            ],
           );
           return;
         }
