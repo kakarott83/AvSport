@@ -20,7 +20,7 @@ import { Toast } from '@/components/Toast';
 import * as Device from 'expo-device';
 
 import { clearCredentials } from '@/lib/credentialStore';
-import { checkAvailability, HealthManager, openHealthConnectSettings, requestPermissions } from '@/lib/healthManager';
+import { checkAvailability, checkGoogleFitConnected, HealthManager, openHealthConnectSettings, requestPermissions } from '@/lib/healthManager';
 import { syncHealthToSupabase } from '@/lib/healthSync';
 import { clampStepper, parseProfileFloat, parseProfileInt, STEPPER_BOUNDS, validateProfileForm } from '@/lib/profile';
 import {
@@ -192,6 +192,18 @@ export default function ProfileScreen() {
             ],
           );
           return;
+        }
+
+        const fitConnected = await checkGoogleFitConnected();
+        if (!fitConnected) {
+          Alert.alert(
+            'Google Fit erforderlich',
+            'AvoraSport liest Schritt- und Aktivitätsdaten ausschließlich über Google Fit. ' +
+            'Bitte installiere Google Fit und verbinde es mit Health Connect, damit deine Daten synchronisiert werden können.',
+            [
+              { text: 'Verstanden' },
+            ],
+          );
         }
       } catch (e) {
         console.error('[profile] handleToggleHealth error:', e);

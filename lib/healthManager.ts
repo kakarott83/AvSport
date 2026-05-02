@@ -473,6 +473,34 @@ export async function checkAvailability(): Promise<HealthAvailability> {
   }
 }
 
+/**
+ * Returns true when Google Fit has written step data to Health Connect within
+ * the last 30 days — meaning it is installed AND connected to Health Connect.
+ * Returns false when Google Fit is missing or has never synced.
+ */
+export async function checkGoogleFitConnected(): Promise<boolean> {
+  if (Platform.OS !== "android" || !hc) return false;
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const result = await hc.aggregateRecord({
+      recordType: "Steps",
+      timeRangeFilter: {
+        operator: "between",
+        startTime: thirtyDaysAgo.toISOString(),
+        endTime: now.toISOString(),
+      },
+    });
+    return (
+      (result as any).dataOrigins?.includes(
+        "com.google.android.apps.fitness",
+      ) ?? false
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Opens the Health Connect settings screen so the user can manage app permissions. */
 export function openHealthConnectSettings(): void {
   if (Platform.OS !== "android" || !hc) return;
