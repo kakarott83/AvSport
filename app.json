@@ -22,7 +22,9 @@
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -32,6 +34,7 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "expo-secure-store",
       [
         "expo-camera",
         {
@@ -43,20 +46,23 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 28
+            "minSdkVersion": 28,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "kotlinVersion": "2.0.21",
+            "packagingOptions": {
+              "pickFirst": ["**/libc++_shared.so", "**/libfbjni.so"]
+            },
+            "extraMavenRepos": ["https://www.jitpack.io"]
           }
         }
       ],
       [
         "react-native-health-connect",
         {
-          "permissions": [
-            "Steps",
-            "ActiveCaloriesBurned"
-          ]
+          "permissions": ["Steps", "ActiveCaloriesBurned"]
         }
-      ],
-      "expo-secure-store"
+      ]
     ],
     "extra": {
       "router": {},

@@ -218,7 +218,7 @@ export const HealthManager = {
       const ready = await this.init();
       if (!ready) return false;
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 2500));
 
       if (!this._isNativeReady || !hc) {
         console.error(
@@ -240,14 +240,13 @@ export const HealthManager = {
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          await hc.requestPermission([
+          const granted = await hc.requestPermission([
             { accessType: "read", recordType: "Steps" },
             { accessType: "read", recordType: "ActiveCaloriesBurned" },
           ]);
-          return true;
+          return granted.length > 0;
         } catch (e) {
-          const message =
-            e instanceof Error ? e.message : String(e ?? "");
+          const message = e instanceof Error ? e.message : String(e ?? "");
           const isLateInitError =
             message.includes("UninitializedPropertyAccessException") ||
             message.includes("lateinit property requestPermission");
@@ -257,9 +256,7 @@ export const HealthManager = {
               `[HealthManager] requestPermission lateinit not ready` +
                 ` (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${RETRY_DELAY_MS} ms…`,
             );
-            await new Promise((resolve) =>
-              setTimeout(resolve, RETRY_DELAY_MS),
-            );
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
           } else {
             if (isLateInitError) {
               console.warn(

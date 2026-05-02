@@ -64,5 +64,15 @@
     "jest-expo": "~54.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "overrides": {
+    "@expo/fingerprint": "0.15.5"
+  },
+  "private": true,
+  "expo": {
+  "doctor": {
+    "reactNativeDirectoryCheck": {
+      "exclude": ["react-native-health"]
+    }
+  }
+}
 }
