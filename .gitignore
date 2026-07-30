@@ -45,3 +45,6 @@ app-example
 # Sensitive environment variables
 .env
 .env.local
+
+# MCP config (contains API tokens)
+.mcp.json

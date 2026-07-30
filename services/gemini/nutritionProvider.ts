@@ -1,4 +1,11 @@
-import { geminiRequest, type GeminiPart } from './client';
+import { recognizeFoodItems }             from '@/services/nutrition/foodRecognition';
+import { lookupNutrients }               from '@/services/nutrition/usdaLookup';
+import { lookupNutrientsViaLLM }         from './nutritionFallback';
+import { getCachedResult, setCachedResult } from '@/services/nutrition/nutritionCache';
+import { supabase }                      from '@/services/supabaseClient';
+import type { Macros }                   from '@/services/nutrition/usdaLookup';
+
+// ── Öffentliches Interface (bleibt identisch → FoodScanner.tsx unverändert) ──
 
 export interface FoodAnalysisResponse {
   name:       string;
@@ -9,72 +16,139 @@ export interface FoodAnalysisResponse {
   confidence: number;
 }
 
-function buildPrompt(notes?: string): string {
-  let p =
-    'Analyze the provided food image(s). ' +
-    'If a second image is provided, it shows a reference object (like a hand or cutlery) next to the plate — use it to estimate portion size more accurately. ';
-  if (notes?.trim()) p += `Additional context from the user: "${notes.trim()}". `;
-  p +=
-    'Return ONLY a valid JSON object with exactly these keys: ' +
-    '{"name": string, "calories": number, "protein": number, "carbs": number, "fat": number}. ' +
-    'No markdown, no explanation, no extra text — just the JSON object.';
-  return p;
+// ── Kosten-Logging ────────────────────────────────────────────────────────────
+
+type CallType = 'cache_hit' | 'usda' | 'usda_fallback' | 'llm_fallback';
+
+interface CostLogRow {
+  user_id:   string | null;
+  call_type: CallType;
+  item_name: string | null;
 }
 
-interface RawFoodAnalysis {
-  name?:     unknown;
-  calories?: unknown;
-  protein?:  unknown;
-  carbs?:    unknown;
-  fat?:      unknown;
+const pendingLogs: CostLogRow[] = [];
+
+async function getUserId(): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
-function validateResponse(raw: RawFoodAnalysis): asserts raw is {
-  name: string; calories: number; protein: number; carbs: number; fat: number;
-} {
-  if (typeof raw.name !== 'string' || !raw.name.trim()) {
-    throw new Error('FoodAnalysis: "name" fehlt');
-  }
-  for (const field of ['calories', 'protein', 'carbs', 'fat'] as const) {
-    if (typeof raw[field] !== 'number') {
-      throw new Error(`FoodAnalysis: "${field}" muss eine Zahl sein`);
-    }
+async function flushCostLogs(userId: string | null): Promise<void> {
+  if (pendingLogs.length === 0) return;
+  const rows = pendingLogs.splice(0).map(r => ({ ...r, user_id: userId }));
+  try {
+    const { error } = await supabase.from('nutrition_cost_logs').insert(rows);
+    if (error) console.warn('[CostTracker] Supabase-Fehler:', error.message);
+  } catch (err) {
+    console.warn('[CostTracker] Supabase nicht erreichbar:', err);
   }
 }
+
+function logCost(type: CallType, itemName: string | null): void {
+  console.log(`[CostTracker] ${type.padEnd(14)} | ${itemName ?? '–'}`);
+  pendingLogs.push({ user_id: null, call_type: type, item_name: itemName });
+}
+
+// ── Haupt-Funktion ────────────────────────────────────────────────────────────
 
 /**
- * Analysiert ein oder zwei Base64-kodierte JPEG-Bilder und optionale Notizen.
- * Das zweite Bild (Referenzobjekt) verbessert die Portionsschätzung.
+ * Analysiert ein Mahlzeitfoto in zwei Schritten:
+ *  1. Gemini Vision erkennt Lebensmittel + Portionsgrößen (englische Namen)
+ *  2. USDA FoodData Central liefert exakte Nährwerte je Item
+ *     → Fallback: zweite USDA-Suche ohne Zubereitungsart
+ *     → Letzter Ausweg: kleiner Gemini-Text-Call nur für dieses Item
+ *
+ * Ähnliche Fotos werden 7 Tage gecacht (Hash-Vergleich, kein erneuter API-Call).
+ * Alle Aufrufe werden in nutrition_cost_logs (Supabase) persistiert.
+ * Gleiche Signatur wie vorher → FoodScanner.tsx braucht keine Änderung.
  */
 export async function analyzeFoodImage(
   base64_1: string,
   base64_2?: string,
   notes?: string,
 ): Promise<FoodAnalysisResponse> {
-  const parts: GeminiPart[] = [
-    { text: buildPrompt(notes) },
-    { inline_data: { mime_type: 'image/jpeg', data: base64_1 } },
-  ];
 
-  if (base64_2) {
-    parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64_2 } });
+  // ── Schritt 0: Cache-Check ─────────────────────────────────────────────────
+  const cached = await getCachedResult(base64_1);
+  if (cached) {
+    logCost('cache_hit', null);
+    const userId = await getUserId();
+    void flushCostLogs(userId);
+    return cached;
   }
 
-  const text = await geminiRequest(parts);
+  // ── Schritt 1: Vision-Call → Item-Liste ───────────────────────────────────
+  const { items } = await recognizeFoodItems(base64_1, base64_2, notes);
 
-  if (!text) throw new Error('[Nutrition] Gemini: leere Antwort');
+  // ── Schritt 2: Nährwert-Lookup für jedes Item ─────────────────────────────
+  const totals: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  let usedLLMFallback  = false;
+  let resolvedCount    = 0;
 
-  console.log('[Nutrition] Gemini-Antwort (Vorschau):', text.slice(0, 120));
+  for (const item of items) {
+    let macros: Macros | null = null;
 
-  const parsed = JSON.parse(text) as RawFoodAnalysis;
-  validateResponse(parsed);
+    // USDA-Lookup (Netzwerkfehler → direkt zum LLM-Fallback)
+    try {
+      const result = await lookupNutrients(item.name, item.preparation, item.grams);
+      if (result) {
+        macros = result.macros;
+        logCost(result.source, `${item.grams}g ${item.name}`);
+      }
+    } catch (err) {
+      console.warn(`[Nutrition] USDA nicht erreichbar für "${item.name}":`, err);
+    }
 
-  return {
-    name:       parsed.name,
-    calories:   parsed.calories,
-    protein:    parsed.protein,
-    carbs:      parsed.carbs,
-    fat:        parsed.fat,
-    confidence: 1.0,
+    // LLM-Fallback wenn USDA keinen Treffer hatte oder nicht erreichbar war
+    if (!macros) {
+      console.warn(`[Nutrition] LLM-Fallback für "${item.name}"`);
+      try {
+        macros = await lookupNutrientsViaLLM(item.name, item.grams, item.preparation);
+        logCost('llm_fallback', `${item.grams}g ${item.name}`);
+        usedLLMFallback = true;
+      } catch (llmErr) {
+        console.error(`[Nutrition] LLM-Fallback fehlgeschlagen für "${item.name}":`, llmErr);
+        continue;
+      }
+    }
+
+    totals.calories += macros.calories;
+    totals.protein  += macros.protein;
+    totals.carbs    += macros.carbs;
+    totals.fat      += macros.fat;
+    resolvedCount++;
+  }
+
+  if (resolvedCount === 0) {
+    throw new Error(
+      'Nährwerte konnten für keines der erkannten Lebensmittel ermittelt werden. ' +
+      'Bitte überprüfe deine Internetverbindung und versuche es erneut.',
+    );
+  }
+
+  const result: FoodAnalysisResponse = {
+    name:       items.map(i => i.name).join(', '),
+    calories:   Math.round(totals.calories),
+    protein:    Math.round(totals.protein  * 10) / 10,
+    carbs:      Math.round(totals.carbs    * 10) / 10,
+    fat:        Math.round(totals.fat      * 10) / 10,
+    confidence: usedLLMFallback ? 0.8 : 1.0,
   };
+
+  console.log(
+    `[Nutrition] Gesamt: ${result.calories} kcal | ` +
+    `P ${result.protein}g C ${result.carbs}g F ${result.fat}g | ` +
+    `Items: ${resolvedCount}/${items.length} aufgelöst`,
+  );
+
+  // Cache + Logs asynchron schreiben — blockiert die Antwort nicht
+  const userId = await getUserId();
+  void setCachedResult(base64_1, result);
+  void flushCostLogs(userId);
+
+  return result;
 }
