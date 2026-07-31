@@ -54,8 +54,9 @@ export default function CalendarScreen() {
   const [noteFocused, setNoteFocused]     = useState(false);
   const [cycleTracking, setCycleTracking] = useState(true); // default true until profile loads
 
-  // New-tag modal
+  // Tag modal (add + edit)
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingTag, setEditingTag]     = useState<Tag | null>(null);
   const [newLabel, setNewLabel]         = useState('');
   const [newEmoji, setNewEmoji]         = useState('');
   const [newColor, setNewColor]         = useState(COLOR_PALETTE[0]);
@@ -219,14 +220,7 @@ export default function CalendarScreen() {
   };
 
   const onTagLongPress = (tag: Tag) => {
-    Alert.alert(
-      `"${tag.emoji} ${tag.label}" löschen?`,
-      'Der Tag wird aus deiner Liste entfernt.',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Löschen', style: 'destructive', onPress: () => deleteTag(tag.id) },
-      ]
-    );
+    openEditModal(tag);
   };
 
   const deleteTag = async (id: string) => {
@@ -239,23 +233,72 @@ export default function CalendarScreen() {
     setLog((prev) => ({ ...prev, tagIds: prev.tagIds.filter((t) => t !== id) }));
   };
 
-  const openModal = () => {
+  const openAddModal = () => {
+    setEditingTag(null);
     setNewLabel(''); setNewEmoji(''); setNewColor(COLOR_PALETTE[0]);
     setModalVisible(true);
   };
 
-  const saveNewTag = async () => {
+  const openEditModal = (tag: Tag) => {
+    setEditingTag(tag);
+    setNewLabel(tag.label);
+    setNewEmoji(tag.emoji);
+    setNewColor(tag.color);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setEditingTag(null);
+  };
+
+  const saveTag = async () => {
     const labelTrimmed = newLabel.trim();
     if (!labelTrimmed) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setAddingTag(true);
-    const newTag: Tag = { id: Date.now().toString(), label: labelTrimmed, emoji: newEmoji.trim() || '🏷️', color: newColor };
-    const updated = [...tags, newTag];
+
+    let updated: Tag[];
+    if (editingTag) {
+      updated = tags.map((t) =>
+        t.id === editingTag.id
+          ? { ...t, label: labelTrimmed, emoji: newEmoji.trim() || '🏷️', color: newColor }
+          : t
+      );
+    } else {
+      const newTag: Tag = { id: Date.now().toString(), label: labelTrimmed, emoji: newEmoji.trim() || '🏷️', color: newColor };
+      updated = [...tags, newTag];
+    }
+
     const { error } = await supabase.from('profiles').update({ custom_tags: updated }).eq('id', user.id);
     if (error) { Alert.alert('Fehler', error.message); } else { setTags(updated); }
     setAddingTag(false);
-    setModalVisible(false);
+    closeModal();
+  };
+
+  const deleteDay = () => {
+    if (log.tagIds.length === 0 && !log.note.trim()) return;
+    Alert.alert(
+      'Eintrag löschen?',
+      'Alle Tags und Notizen für diesen Tag werden gelöscht.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen', style: 'destructive',
+          onPress: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            await supabase.from('daily_logs')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('date', selectedDate);
+            setLog(EMPTY_LOG);
+            setAllLogs((prev) => prev.filter((r) => r.date !== selectedDate));
+          },
+        },
+      ]
+    );
   };
 
   const save = async () => {
@@ -312,11 +355,18 @@ export default function CalendarScreen() {
 
           {/* Input Area */}
           <View style={styles.card}>
-            <Text style={styles.selectedDateText}>{formatDisplayDate(selectedDate)}</Text>
+            <View style={styles.dateTitleRow}>
+              <Text style={styles.selectedDateText}>{formatDisplayDate(selectedDate)}</Text>
+              {(log.tagIds.length > 0 || log.note.trim().length > 0) && (
+                <TouchableOpacity onPress={deleteDay} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <Ionicons name="trash-outline" size={18} color="#FF5252" />
+                </TouchableOpacity>
+              )}
+            </View>
 
             <View style={styles.labelRow}>
               <Text style={styles.label}>TAGS</Text>
-              <TouchableOpacity style={styles.addTagButton} onPress={openModal} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.addTagButton} onPress={openAddModal} activeOpacity={0.8}>
                 <Ionicons name="add" size={14} color="#00E5FF" />
                 <Text style={styles.addTagText}>Neu</Text>
               </TouchableOpacity>
@@ -331,7 +381,7 @@ export default function CalendarScreen() {
                     tag={tag}
                     active={log.tagIds.includes(tag.id)}
                     onPress={() => toggleTag(tag.id)}
-                    onLongPress={() => onTagLongPress(tag)}
+                    onEdit={() => openEditModal(tag)}
                   />
                 ))}
             </View>
@@ -384,11 +434,11 @@ export default function CalendarScreen() {
       </KeyboardAvoidingView>
 
       {/* New-tag modal */}
-      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
 
-            <Text style={styles.modalTitle}>Neuen Tag erstellen</Text>
+            <Text style={styles.modalTitle}>{editingTag ? 'Tag bearbeiten' : 'Neuen Tag erstellen'}</Text>
 
             <View style={styles.modalRow}>
               <TextInput
@@ -432,18 +482,34 @@ export default function CalendarScreen() {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalVisible(false)}>
+              <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
                 <Text style={styles.modalCancelText}>Abbrechen</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalSave, { backgroundColor: newColor }, (!newLabel.trim() || addingTag) && { opacity: 0.5 }]}
-                onPress={saveNewTag}
+                onPress={saveTag}
                 disabled={!newLabel.trim() || addingTag}>
                 {addingTag
                   ? <ActivityIndicator color="#121212" size="small" />
-                  : <Text style={styles.modalSaveText}>Hinzufügen</Text>}
+                  : <Text style={styles.modalSaveText}>{editingTag ? 'Speichern' : 'Hinzufügen'}</Text>}
               </TouchableOpacity>
             </View>
+
+            {editingTag && (
+              <TouchableOpacity
+                style={styles.modalDelete}
+                onPress={() => Alert.alert(
+                  `"${editingTag.emoji} ${editingTag.label}" löschen?`,
+                  'Der Tag wird aus deiner Liste entfernt.',
+                  [
+                    { text: 'Abbrechen', style: 'cancel' },
+                    { text: 'Löschen', style: 'destructive', onPress: () => { closeModal(); deleteTag(editingTag.id); } },
+                  ]
+                )}>
+                <Ionicons name="trash-outline" size={15} color="#FF5252" />
+                <Text style={styles.modalDeleteText}>Tag löschen</Text>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -580,25 +646,26 @@ const dayStyles = StyleSheet.create({
 
 // ─── Tag Chip ─────────────────────────────────────────────────────────────────
 
-function TagChip({ tag, active, onPress, onLongPress }: {
-  tag: Tag; active: boolean; onPress: () => void; onLongPress: () => void;
+function TagChip({ tag, active, onPress, onEdit }: {
+  tag: Tag; active: boolean; onPress: () => void; onEdit: () => void;
 }) {
   return (
-    <TouchableOpacity
+    <View
       style={[
         styles.chip,
         active
           ? { backgroundColor: tag.color + '33', borderColor: tag.color }
           : { backgroundColor: '#1a1a1a', borderColor: '#333' },
-      ]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={500}
-      activeOpacity={0.75}>
-      <Text style={[styles.chipText, active && { color: tag.color, fontWeight: '700' }]}>
-        {tag.emoji} {tag.label}
-      </Text>
-    </TouchableOpacity>
+      ]}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.chipPressable}>
+        <Text style={[styles.chipText, active && { color: tag.color, fontWeight: '700' }]}>
+          {tag.emoji} {tag.label}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onEdit} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.6}>
+        <Ionicons name="pencil-outline" size={13} color={active ? tag.color : '#555'} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -656,6 +723,7 @@ const styles = StyleSheet.create({
   },
   calendar: { borderRadius: 12 },
 
+  dateTitleRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectedDateText: { fontSize: 16, fontWeight: '700', color: '#00E5FF', letterSpacing: 0.2 },
 
   labelRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -670,10 +738,12 @@ const styles = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    paddingVertical: 8, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 8, paddingLeft: 14, paddingRight: 10,
     borderRadius: 20, borderWidth: 1,
     borderColor: '#333', backgroundColor: '#1a1a1a',
   },
+  chipPressable: { flexDirection: 'row', alignItems: 'center' },
   chipText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
 
   noteInput: {
@@ -723,4 +793,6 @@ const styles = StyleSheet.create({
   modalCancelText: { color: '#aaa', fontWeight: '700', fontSize: 14 },
   modalSave: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
   modalSaveText: { color: '#121212', fontWeight: '800', fontSize: 14 },
+  modalDelete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+  modalDeleteText: { color: '#FF5252', fontSize: 13, fontWeight: '600' },
 });

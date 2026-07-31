@@ -39,7 +39,7 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
     });
@@ -47,8 +47,14 @@ export default function RegisterScreen() {
 
     if (error) {
       Alert.alert("Registrierung fehlgeschlagen", error.message);
+    } else if (data.session) {
+      // Session sofort aktiv (kein E-Mail-Bestätigung) → _layout.tsx übernimmt Routing
     } else {
-      router.replace("/(auth)/login");
+      Alert.alert(
+        "Bestätige deine E-Mail",
+        "Wir haben dir eine Bestätigungs-E-Mail geschickt. Bitte klicke auf den Link und melde dich dann an.",
+        [{ text: "OK", onPress: () => router.replace("/(auth)/login") }],
+      );
     }
   }
 
@@ -62,7 +68,7 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.logo}>AvSport</Text>
+          <Text style={styles.logo}>AvoraSport</Text>
           <Text style={styles.tagline}>Starte deine Fitness-Reise</Text>
         </View>
 

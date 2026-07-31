@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
+import { AnimatedLogo } from '@/components/AnimatedLogo';
 import {
   ActivityIndicator,
   Image,
@@ -374,7 +375,7 @@ export function FoodScanner({
         {/* ── Analyzing phase ── */}
         {phase === 'analyzing' && (
           <View style={[s.centeredBox, { justifyContent: 'center' }]}>
-            <ActivityIndicator size="large" color="#00E5FF" />
+            <AnimatedLogo size={90} />
             <Text style={s.analyzingText}>KI analysiert…</Text>
             {image2 && (
               <Text style={s.analyzingSubText}>Beide Bilder werden ausgewertet</Text>

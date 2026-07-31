@@ -5,6 +5,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef, useState } from 'react';
+import { AnimatedLogo } from '@/components/AnimatedLogo';
 import {
   ActivityIndicator,
   Animated,
@@ -385,7 +386,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── LADE-ANIMATION ── */}
           {step === 'loading' && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={C_ACCENT} />
+              <AnimatedLogo size={90} />
               <Animated.Text style={[styles.loadingText, { opacity: loadingOpacity }]}>
                 {LOADING_MESSAGES[loadingMsgIdx]}
               </Animated.Text>

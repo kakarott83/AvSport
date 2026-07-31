@@ -104,7 +104,7 @@ export default function LoginScreen() {
     >
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.logo}>AvSport</Text>
+          <Text style={styles.logo}>AvoraSport</Text>
           <Text style={styles.tagline}>Dein Fitness-Begleiter</Text>
         </View>
 

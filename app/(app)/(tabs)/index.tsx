@@ -780,7 +780,7 @@ export default function HomeScreen() {
                 ? `Hallo, ${profile.display_name}!`
                 : "Hallo!"}
             </Text>
-            <Text style={styles.appName}>AvSport</Text>
+            <Text style={styles.appName}>AvoraSport</Text>
             {lastSynced && (
               <Text style={styles.syncText}>
                 Zuletzt aktualisiert: Gerade eben

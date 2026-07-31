@@ -1,6 +1,42 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
+
+import { AnimatedLogo } from '@/components/AnimatedLogo';
+import { supabase } from '@/services/supabaseClient';
 
 export default function AppLayout() {
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setReady(true); return; }
+
+      supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!data?.display_name) {
+            router.replace('/onboarding');
+          } else {
+            setReady(true);
+          }
+        })
+        .catch(() => setReady(true));
+    });
+  }, []);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
+        <AnimatedLogo size={120} />
+      </View>
+    );
+  }
+
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

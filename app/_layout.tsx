@@ -2,7 +2,9 @@ import type { Session } from "@supabase/supabase-js";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { View } from "react-native";
 
+import { AnimatedLogo } from "@/components/AnimatedLogo";
 import { supabase } from "@/services/supabaseClient";
 
 export default function RootLayout() {
@@ -11,31 +13,12 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    // Initiale Session laden – try/catch schützt gegen Offline-Fehler beim Start.
-    // Supabase liest die Session normalerweise aus AsyncStorage (kein Netz nötig),
-    // aber ein abgelaufenes Refresh-Token kann einen Netzwerkaufruf auslösen.
     supabase.auth
       .getSession()
-      .then(({ data: { session } }) => {
-        console.log("Initial session:", session?.user?.email ?? "keine");
-        setSession(session);
-      })
-      .catch((error) => {
-        console.warn(
-          "[Auth] getSession fehlgeschlagen (offline?). Behandle als kein Login:",
-          error,
-        );
-        // null → Redirect-Effekt leitet zur Login-Seite weiter.
-        // Falls der User offline ist und ein gültiges Token hat, feuert
-        // onAuthStateChange sobald die Verbindung wiederhergestellt ist.
-        setSession(null);
-      });
+      .then(({ data: { session } }) => setSession(session))
+      .catch(() => setSession(null));
 
-    // Live-Updates bei Login / Logout / Token-Refresh
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Auth event:", event, session?.user?.email ?? "kein User");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
@@ -43,15 +26,9 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (session === undefined) return; // noch am Laden
+    if (session === undefined) return;
 
     const inAuthGroup = segments[0] === "(auth)";
-    console.log(
-      "Redirect check — inAuthGroup:",
-      inAuthGroup,
-      "| session:",
-      !!session,
-    );
 
     if (!session && !inAuthGroup) {
       router.replace("/(auth)/login");
@@ -60,15 +37,22 @@ export default function RootLayout() {
     }
   }, [session, segments]);
 
+  if (session === undefined) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
+        <AnimatedLogo size={120} />
+        <StatusBar style="light" />
+      </View>
+    );
+  }
+
   return (
     <>
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal", title: "Modal" }}
-        />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
       </Stack>
       <StatusBar style="light" />
     </>
