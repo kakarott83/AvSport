@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -30,10 +31,12 @@ import { FoodScanner } from "@/components/FoodScanner";
 import { useCalorieGoal } from "@/hooks/useCalorieGoal";
 import { useHealthData } from "@/hooks/useHealthData";
 import { useStepGoal } from "@/hooks/useStepGoal";
+import { useWaterIntake } from "@/hooks/useWaterIntake";
 import { isStale, loadCache, saveCache } from "@/lib/dashboardCache";
 import { clearCredentials } from "@/lib/credentialStore";
 import { HealthManager } from "@/lib/healthManager";
 import { syncHealthToSupabase } from "@/lib/healthSync";
+import { resolveDayIndexForDate } from "@/services/gemini/trainingProvider";
 import { supabase } from "@/services/supabaseClient";
 import type { FoodAnalysis } from "@/types/vision";
 
@@ -61,16 +64,19 @@ const CHART_H = 90; // LineChart height prop
 const YAXIS_W = 35; // gifted-charts default yAxisLabelWidth
 
 const RING_SIZE = 168;
-const R_OUT = 74;
-const W_OUT = 13;
-const R_MID = 58;
-const W_MID = 11;
-const R_IN = 43;
-const W_IN = 10;
+const R_OUT = 76;
+const W_OUT = 11;
+const R_MID = 62;
+const W_MID = 10;
+const R_IN = 48;
+const W_IN = 9;
+const R_H2O = 35;
+const W_H2O = 8;
 
 const CIRC_OUT = 2 * Math.PI * R_OUT;
 const CIRC_MID = 2 * Math.PI * R_MID;
 const CIRC_IN = 2 * Math.PI * R_IN;
+const CIRC_H2O = 2 * Math.PI * R_H2O;
 
 const SPRING_CFG = {
   damping: 14,
@@ -78,9 +84,12 @@ const SPRING_CFG = {
   overshootClamping: false,
 } as const;
 
-const COLOR_CALORIES = "#00E5FF";
+const COLOR_CALORIES = "#00E5FF"; // allgemeiner UI-Akzent (Buttons, Chart, Links)
 const COLOR_STEPS    = "#FF9100";
 const COLOR_PROTEIN  = "#FF5252";
+const COLOR_WATER    = "#29B6F6";
+/** Kalorien-Ring: kräftiges Grün, klar getrennt vom Wasser-Blau. */
+const COLOR_CAL_RING = "#22C55E";
 
 // Tag IDs as defined in calendar.tsx DEFAULT_TAGS
 const TAG_ID_PERIOD = "period";
@@ -246,20 +255,23 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 // TripleRing
 // ─────────────────────────────────────────
 
-function TripleRing({
+function GoalRings({
   calorieProgress,
   stepsProgress,
   proteinProgress,
+  waterProgress,
   remaining,
 }: {
   calorieProgress: number;
   stepsProgress: number;
   proteinProgress: number;
+  waterProgress: number;
   remaining: number;
 }) {
   const offOut = useSharedValue(CIRC_OUT);
   const offMid = useSharedValue(CIRC_MID);
   const offIn = useSharedValue(CIRC_IN);
+  const offH2o = useSharedValue(CIRC_H2O);
 
   useEffect(() => {
     offOut.value = withSpring(
@@ -274,11 +286,16 @@ function TripleRing({
       CIRC_IN * (1 - Math.min(proteinProgress, 1)),
       SPRING_CFG,
     );
-  }, [calorieProgress, stepsProgress, proteinProgress]);
+    offH2o.value = withSpring(
+      CIRC_H2O * (1 - Math.min(waterProgress, 1)),
+      SPRING_CFG,
+    );
+  }, [calorieProgress, stepsProgress, proteinProgress, waterProgress]);
 
   const propsOut = useAnimatedProps(() => ({ strokeDashoffset: offOut.value }));
   const propsMid = useAnimatedProps(() => ({ strokeDashoffset: offMid.value }));
   const propsIn  = useAnimatedProps(() => ({ strokeDashoffset: offIn.value  }));
+  const propsH2o = useAnimatedProps(() => ({ strokeDashoffset: offH2o.value }));
 
   const displayRemaining = remaining < 0 ? 0 : remaining;
 
@@ -293,10 +310,11 @@ function TripleRing({
         <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_OUT} stroke="#1a2a2a" strokeWidth={W_OUT} fill="none" />
         <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_MID} stroke="#2a1a08" strokeWidth={W_MID} fill="none" />
         <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_IN}  stroke="#2a0d0d" strokeWidth={W_IN}  fill="none" />
+        <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_H2O} stroke="#0a1f28" strokeWidth={W_H2O} fill="none" />
         {/* Animierte Fortschritts-Ringe */}
         <AnimatedCircle
           cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_OUT}
-          stroke={COLOR_CALORIES} strokeWidth={W_OUT} fill="none"
+          stroke={COLOR_CAL_RING} strokeWidth={W_OUT} fill="none"
           strokeDasharray={CIRC_OUT} strokeLinecap="round"
           animatedProps={propsOut}
         />
@@ -311,6 +329,12 @@ function TripleRing({
           stroke={COLOR_PROTEIN} strokeWidth={W_IN} fill="none"
           strokeDasharray={CIRC_IN} strokeLinecap="round"
           animatedProps={propsIn}
+        />
+        <AnimatedCircle
+          cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R_H2O}
+          stroke={COLOR_WATER} strokeWidth={W_H2O} fill="none"
+          strokeDasharray={CIRC_H2O} strokeLinecap="round"
+          animatedProps={propsH2o}
         />
       </Svg>
       {/* Ringmitte: "Noch X kcal" */}
@@ -344,7 +368,7 @@ const ringStyles = StyleSheet.create({
   pct: {
     fontSize: 22,
     fontWeight: "800",
-    color: COLOR_CALORIES,
+    color: COLOR_CAL_RING,
     lineHeight: 24,
   },
   sub: {
@@ -366,6 +390,7 @@ export default function HomeScreen() {
   const { healthBurnKcal, healthSteps, healthProtein, refreshHealth } = useHealthData();
   const { currentGoal, bonusActive } = useCalorieGoal(healthBurnKcal);
   const { stepGoal } = useStepGoal();
+  const water = useWaterIntake();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [proteinGoal, setProteinGoal] = useState(0);
@@ -410,9 +435,39 @@ export default function HomeScreen() {
   // KI-Trainingsplan-Generator
   const [aiModalOpen, setAiModalOpen] = useState(false);
 
+  // Wasser: frei eingegebene Menge
+  const [customWaterMl, setCustomWaterMl] = useState("");
+
+  function addCustomWater() {
+    const ml = parseInt(customWaterMl, 10);
+    if (!Number.isFinite(ml) || ml <= 0) return;
+    water.addIntake(Math.min(ml, 3000));
+    setCustomWaterMl("");
+  }
+
   function handleFoodDetected(data: FoodAnalysis) {
     setTodayKcal((prev) => prev + data.calories);
     setTodayProtein((prev) => prev + data.protein);
+  }
+
+  // Löst bei Split-Plänen (plan_days) den heutigen Trainingstag auf und startet ihn.
+  async function handleStartPlan(plan: Plan) {
+    const dayIndex = resolveDayIndexForDate(plan.scheduled_days, new Date());
+    const { data: day } = await supabase
+      .from("plan_days")
+      .select("id")
+      .eq("plan_id", plan.id)
+      .eq("day_index", dayIndex)
+      .maybeSingle();
+
+    router.push({
+      pathname: "/active-workout",
+      params: {
+        planId: plan.id,
+        planName: plan.title,
+        ...(day ? { dayId: day.id } : {}),
+      },
+    });
   }
 
   // Health-Ref aktuell halten, damit fetchDashboardData (leere deps) beim
@@ -837,15 +892,16 @@ export default function HomeScreen() {
                 <View style={styles.nutritionRow}>
                   {/* Ring + Legende als vertikale Einheit */}
                   <View style={styles.ringWithLegend}>
-                    <TripleRing
+                    <GoalRings
                       calorieProgress={calorieRatio}
                       stepsProgress={healthSteps / stepGoal}
                       proteinProgress={proteinRatio}
+                      waterProgress={water.goalMl > 0 ? water.consumedMl / water.goalMl : 0}
                       remaining={remaining}
                     />
                     <View style={styles.ringLegend}>
                       <View style={styles.ringLegendItem}>
-                        <View style={[styles.ringLegendDot, { backgroundColor: COLOR_CALORIES }]} />
+                        <View style={[styles.ringLegendDot, { backgroundColor: COLOR_CAL_RING }]} />
                         <Text style={styles.ringLegendText}>Kcal</Text>
                       </View>
                       <View style={styles.ringLegendItem}>
@@ -855,6 +911,10 @@ export default function HomeScreen() {
                       <View style={styles.ringLegendItem}>
                         <View style={[styles.ringLegendDot, { backgroundColor: COLOR_PROTEIN }]} />
                         <Text style={styles.ringLegendText}>Protein</Text>
+                      </View>
+                      <View style={styles.ringLegendItem}>
+                        <View style={[styles.ringLegendDot, { backgroundColor: COLOR_WATER }]} />
+                        <Text style={styles.ringLegendText}>Wasser</Text>
                       </View>
                     </View>
                   </View>
@@ -876,7 +936,7 @@ export default function HomeScreen() {
                               ? "#f44336"
                               : remaining < currentGoal * 0.15
                                 ? "#ff9800"
-                                : "#00E5FF",
+                                : COLOR_CAL_RING,
                         },
                       ]}
                     >
@@ -923,6 +983,19 @@ export default function HomeScreen() {
                           />
                           <Text style={styles.legendText}>
                             {Math.round(todayProtein)}/{proteinGoal}g P
+                          </Text>
+                        </View>
+                      )}
+                      {water.goalMl > 0 && (
+                        <View style={styles.legendChip}>
+                          <View
+                            style={[
+                              styles.legendDot,
+                              { backgroundColor: COLOR_WATER },
+                            ]}
+                          />
+                          <Text style={styles.legendText}>
+                            {(water.consumedMl / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })}/{(water.goalMl / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} l
                           </Text>
                         </View>
                       )}
@@ -1208,15 +1281,7 @@ export default function HomeScreen() {
                     </Text>
                     <TouchableOpacity
                       style={styles.planStartBtn}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/active-workout",
-                          params: {
-                            planId: displayPlan.id,
-                            planName: displayPlan.title,
-                          },
-                        })
-                      }
+                      onPress={() => handleStartPlan(displayPlan)}
                       activeOpacity={0.8}
                     >
                       <MaterialIcons name="play-arrow" size={17} color="#fff" />
@@ -1258,6 +1323,67 @@ export default function HomeScreen() {
                 <MaterialIcons name="auto-awesome" size={17} color="#121212" />
                 <Text style={styles.aiCoachBtnText}>KI-Coach: Plan erstellen</Text>
               </TouchableOpacity>
+            </Animated.View>
+
+            {/* ── Wasser ── */}
+            <Animated.View
+              entering={FadeInDown.delay(280).duration(600).springify()}
+            >
+              <Text style={styles.sectionTitle}>Wasser</Text>
+
+              <View style={styles.card}>
+                <View style={styles.waterHeaderRow}>
+                  {water.remainingMl > 0 ? (
+                    <Text style={styles.waterRemainingText}>
+                      {water.consumedMl} ml getrunken · noch {water.remainingMl} ml
+                    </Text>
+                  ) : (
+                    <View style={styles.row}>
+                      <MaterialIcons name="check-circle" size={15} color="#4caf50" />
+                      <Text style={styles.successText}>Tagesziel erreicht!</Text>
+                    </View>
+                  )}
+                  {water.hasIntakeToday && (
+                    <TouchableOpacity onPress={() => water.removeLastIntake()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={styles.waterUndoText}>Rückgängig</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <View style={styles.waterChipRow}>
+                  {[150, 250, 500].map((ml) => (
+                    <TouchableOpacity
+                      key={ml}
+                      style={styles.waterChip}
+                      onPress={() => water.addIntake(ml)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.waterChipText}>+{ml} ml</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.waterCustomRow}>
+                  <TextInput
+                    style={styles.waterCustomInput}
+                    value={customWaterMl}
+                    onChangeText={(v) => setCustomWaterMl(v.replace(/[^0-9]/g, "").slice(0, 4))}
+                    placeholder="Andere Menge (ml)"
+                    placeholderTextColor="#557"
+                    keyboardType="number-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={addCustomWater}
+                  />
+                  <TouchableOpacity
+                    style={[styles.waterCustomBtn, !customWaterMl && styles.waterCustomBtnDisabled]}
+                    onPress={addCustomWater}
+                    disabled={!customWaterMl}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.waterCustomBtnText}>Hinzufügen</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Animated.View>
           </>
         )}
@@ -1416,10 +1542,35 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 12,
+    marginBottom: 14,
+    marginTop: 28,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: "#262626",
   },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   successText: { color: "#4caf50", fontSize: 13, fontWeight: "600" },
+
+  waterHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  waterUndoText: { color: "#888", fontSize: 12, fontWeight: "600" },
+  waterRemainingText: { color: "#ccc", fontSize: 13, fontWeight: "600" },
+  waterChipRow: { flexDirection: "row", gap: 10 },
+  waterChip: {
+    flex: 1, backgroundColor: "#0d2733", borderRadius: 10, borderWidth: 1, borderColor: "#154a5f",
+    paddingVertical: 10, alignItems: "center",
+  },
+  waterChipText: { color: "#29B6F6", fontSize: 13, fontWeight: "700" },
+  waterCustomRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  waterCustomInput: {
+    flex: 1, backgroundColor: "#161616", borderRadius: 10, borderWidth: 1, borderColor: "#2a2a2a",
+    paddingHorizontal: 12, paddingVertical: 10, color: "#fff", fontSize: 13,
+  },
+  waterCustomBtn: {
+    backgroundColor: "#0d2733", borderRadius: 10, borderWidth: 1, borderColor: "#154a5f",
+    paddingHorizontal: 16, alignItems: "center", justifyContent: "center",
+  },
+  waterCustomBtnDisabled: { opacity: 0.4 },
+  waterCustomBtnText: { color: "#29B6F6", fontSize: 13, fontWeight: "700" },
 
   planRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   planIcon: {
@@ -1531,8 +1682,12 @@ const styles = StyleSheet.create({
   },
   ringLegend: {
     flexDirection: "row",
-    gap: 10,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    columnGap: 10,
+    rowGap: 5,
     marginTop: 10,
+    maxWidth: RING_SIZE,
   },
   ringLegendItem: {
     flexDirection: "row",

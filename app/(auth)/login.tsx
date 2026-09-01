@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { Toast } from "@/components/Toast";
+import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
   clearCredentials,
   loadCredentials,
@@ -21,10 +23,11 @@ import { supabase } from "@/services/supabaseClient";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail]           = useState("");
-  const [password, setPassword]     = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [savePassword, setSavePassword] = useState(false);
-  const [loading, setLoading]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [socialBusy, setSocialBusy] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Pre-fill fields from SecureStore on first render
@@ -57,30 +60,39 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    if (error) {
-      console.error("Login Fehler:", error);
-      const isNoAccount =
-        error.message.toLowerCase().includes("invalid login credentials") ||
-        error.message.toLowerCase().includes("user not found");
+      if (error) {
+        console.error("Login Fehler:", error);
+        const isNoAccount =
+          error.message.toLowerCase().includes("invalid login credentials") ||
+          error.message.toLowerCase().includes("user not found");
 
-      showToast(
-        isNoAccount
-          ? "Kein Konto gefunden. Bitte zuerst registrieren."
-          : `Fehler: ${error.message}`,
-      );
-    } else {
-      if (savePassword) {
-        await saveCredentials(email.trim(), password);
+        showToast(
+          isNoAccount
+            ? "Kein Konto gefunden. Bitte zuerst registrieren."
+            : getAuthErrorMessage(error.message),
+        );
       } else {
-        await clearCredentials();
+        if (savePassword) {
+          await saveCredentials(email.trim(), password);
+        } else {
+          await clearCredentials();
+        }
+        console.log("Login erfolgreich, Session:", data.session?.user?.email);
       }
-      console.log("Login erfolgreich, Session:", data.session?.user?.email);
+    } catch (error) {
+      showToast(
+        getAuthErrorMessage(
+          error instanceof Error ? error.message : "Network request failed",
+        ),
+      );
+    } finally {
+      setLoading(false);
     }
     // Bei Erfolg: _layout.tsx leitet automatisch zu /(app)/(tabs) weiter
   }
@@ -110,6 +122,8 @@ export default function LoginScreen() {
 
         <View style={styles.card}>
           <Text style={styles.title}>Willkommen zurück</Text>
+
+          <SocialAuthButtons onBusyChange={setSocialBusy} />
 
           <Text style={styles.label}>E-Mail</Text>
           <TextInput
@@ -141,16 +155,18 @@ export default function LoginScreen() {
             onPress={() => handleToggleSave(!savePassword)}
             activeOpacity={0.7}
           >
-            <View style={[styles.checkbox, savePassword && styles.checkboxActive]}>
+            <View
+              style={[styles.checkbox, savePassword && styles.checkboxActive]}
+            >
               {savePassword && <Text style={styles.checkmark}>✓</Text>}
             </View>
             <Text style={styles.checkboxLabel}>Passwort speichern</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.button, (loading || socialBusy) && styles.buttonDisabled]}
             onPress={handleLogin}
-            disabled={loading}
+            disabled={loading || socialBusy}
             activeOpacity={0.8}
           >
             {loading ? (

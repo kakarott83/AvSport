@@ -39,6 +39,16 @@ describe('STEPPER_BOUNDS', () => {
     expect(STEPPER_BOUNDS.cycle_calorie_bonus.max).toBe(500);
     expect(STEPPER_BOUNDS.cycle_calorie_bonus.step).toBe(25);
   });
+
+  it('water_goal_ml hat die korrekten Grenzen [0, 6000] mit Schritt 100', () => {
+    expect(STEPPER_BOUNDS.water_goal_ml).toEqual({ min: 0, max: 6_000, step: 100 });
+  });
+
+  it('die Wasser-Erinnerungs-Stunden liegen im gültigen Tagesbereich', () => {
+    expect(STEPPER_BOUNDS.water_reminder_start_hour.min).toBeGreaterThanOrEqual(0);
+    expect(STEPPER_BOUNDS.water_reminder_end_hour.max).toBeLessThanOrEqual(23);
+    expect(STEPPER_BOUNDS.water_reminder_interval_hours).toEqual({ min: 1, max: 6, step: 1 });
+  });
 });
 
 // ── clampStepper ──────────────────────────────────────────────────────────────

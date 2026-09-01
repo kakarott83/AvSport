@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { Toast } from '@/components/Toast';
 import { supabase } from '@/services/supabaseClient';
 
@@ -28,6 +29,19 @@ type ExerciseRow = {
   targetReps: string;
   targetDuration: string;
   targetWeight: string;
+  // ── Nur lesend übernommene KI-Felder (kein UI zum Bearbeiten) ──
+  // Werden beim Speichern unverändert zurückgeschrieben, damit sie beim
+  // Bearbeiten eines KI-Plans nicht verloren gehen.
+  description:      string | null;
+  muscle_group:     string | null;
+  equipment_type:   string | null;
+  short:            string | null;
+  detail_markdown:  string | null;
+  instructions:     string[] | null;
+  modifications:    { beginner: string; advanced: string } | null;
+  safety:           string | null;
+  tips:             string[] | null;
+  video_url:        string | null;
 };
 
 type MasterExercise = {
@@ -43,6 +57,16 @@ function newRow(): ExerciseRow {
     targetReps: '10',
     targetDuration: '',
     targetWeight: '',
+    description: null,
+    muscle_group: null,
+    equipment_type: null,
+    short: null,
+    detail_markdown: null,
+    instructions: null,
+    modifications: null,
+    safety: null,
+    tips: null,
+    video_url: null,
   };
 }
 
@@ -148,6 +172,7 @@ export default function CreatePlanScreen() {
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [detailRow, setDetailRow] = useState<ExerciseRow | null>(null);
 
   // ── Wochentage ──
   const [scheduledDays, setScheduledDays] = useState<number[]>([]);
@@ -188,7 +213,10 @@ export default function CreatePlanScreen() {
 
         const { data: exs } = await supabase
           .from('plan_exercises')
-          .select('id, exercise_name, sets, reps, target_duration, target_weight_kg')
+          .select(
+            'id, exercise_name, sets, reps, target_duration, target_weight_kg, ' +
+            'description, muscle_group, equipment_type, short, detail_markdown, instructions, modifications, safety, tips, video_url',
+          )
           .eq('plan_id', planId);
 
         if (plan) {
@@ -208,6 +236,16 @@ export default function CreatePlanScreen() {
               targetReps: String(e.reps ?? 10),
               targetDuration: e.target_duration ? String(e.target_duration) : '',
               targetWeight: e.target_weight_kg != null ? String(e.target_weight_kg) : '',
+              description: e.description ?? null,
+              muscle_group: e.muscle_group ?? null,
+              equipment_type: e.equipment_type ?? null,
+              short: e.short ?? null,
+              detail_markdown: e.detail_markdown ?? null,
+              instructions: e.instructions ?? null,
+              modifications: e.modifications ?? null,
+              safety: e.safety ?? null,
+              tips: e.tips ?? null,
+              video_url: e.video_url ?? null,
             })),
           );
         }
@@ -292,6 +330,18 @@ export default function CreatePlanScreen() {
       reps: parseInt(e.targetReps, 10) || 0,
       target_duration: e.targetDuration.trim() ? parseInt(e.targetDuration, 10) : null,
       target_weight_kg: e.targetWeight.trim() ? parseFloat(e.targetWeight) : null,
+      // Beschreibung: manuell erfasst oder von der KI übernommen (editierbar).
+      description: e.description?.trim() ? e.description.trim() : null,
+      // Übrige KI-Felder unverändert zurückschreiben, damit sie beim Bearbeiten nicht verloren gehen
+      muscle_group: e.muscle_group,
+      equipment_type: e.equipment_type,
+      short: e.short,
+      detail_markdown: e.detail_markdown,
+      instructions: e.instructions,
+      modifications: e.modifications,
+      safety: e.safety,
+      tips: e.tips,
+      video_url: e.video_url,
     }));
 
     const { error: exError } = await supabase
@@ -430,15 +480,25 @@ export default function CreatePlanScreen() {
           <View key={ex.localId} style={styles.exerciseCard}>
             <View style={styles.exerciseHeader}>
               <Text style={styles.exerciseIndex}>{index + 1}. Übung</Text>
-              <TouchableOpacity
-                onPress={() => removeRow(ex.localId)}
-                disabled={exercises.length <= 1}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={[styles.removeText, exercises.length <= 1 && styles.removeDisabled]}>
-                  ✕
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.exerciseHeaderActions}>
+                {!!ex.detail_markdown && (
+                  <TouchableOpacity
+                    onPress={() => setDetailRow(ex)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.infoText}>ⓘ</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={() => removeRow(ex.localId)}
+                  disabled={exercises.length <= 1}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.removeText, exercises.length <= 1 && styles.removeDisabled]}>
+                    ✕
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ExerciseNamePicker
@@ -504,6 +564,20 @@ export default function CreatePlanScreen() {
                 </View>
               ) : <View style={{ flex: 2 }} />}
             </View>
+
+            {/* ── Beschreibung ── */}
+            <Text style={styles.sublabel}>
+              Beschreibung{(ex.short || ex.detail_markdown) ? ' · von der KI, anpassbar' : ' (optional)'}
+            </Text>
+            <TextInput
+              style={[styles.input, styles.descriptionInput]}
+              value={ex.description ?? ''}
+              onChangeText={(v) => updateRow(ex.localId, 'description', v)}
+              placeholder="Wie wird die Übung ausgeführt? Kurz in eigenen Worten…"
+              placeholderTextColor="#555"
+              multiline
+              textAlignVertical="top"
+            />
           </View>
         ))}
 
@@ -540,6 +614,20 @@ export default function CreatePlanScreen() {
           onDismiss={() => setToastMsg(null)}
         />
       )}
+
+      <ExerciseDetailModal
+        visible={!!detailRow}
+        exercise={detailRow ? {
+          exercise_name:   detailRow.name,
+          short:           detailRow.short,
+          detail_markdown: detailRow.detail_markdown,
+          instructions:    detailRow.instructions,
+          modifications:   detailRow.modifications,
+          safety:          detailRow.safety,
+          tips:            detailRow.tips,
+        } : null}
+        onClose={() => setDetailRow(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -570,6 +658,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#333', marginBottom: 10,
   },
   inputHighlight: { borderColor: '#0a7ea4' },
+  descriptionInput: { minHeight: 64, paddingTop: 10 },
 
   // Circuit toggle
   circuitToggleCard: {
@@ -599,7 +688,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 10,
   },
+  exerciseHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   exerciseIndex:  { color: '#0a7ea4', fontWeight: '700', fontSize: 14 },
+  infoText:       { color: '#0a7ea4', fontSize: 19, fontWeight: '700' },
   removeText:     { color: '#555', fontSize: 16 },
   removeDisabled: { opacity: 0.2 },
 

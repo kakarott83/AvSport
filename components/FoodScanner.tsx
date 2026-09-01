@@ -201,18 +201,29 @@ export function FoodScanner({
 
   async function handleSave() {
     if (!result) return;
+    setError(null);
     setPhase('saving');
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from('food_logs').insert({
-        user_id:   user.id,
-        meal_name: result.name,
-        calories:  result.calories,
-        protein:   result.protein,
-        carbs:     result.carbs,
-        fat:       result.fat,
-      });
+    if (!user) {
+      setError('Nicht eingeloggt — Mahlzeit konnte nicht gespeichert werden.');
+      setPhase('result');
+      return;
+    }
+
+    const { error: dbErr } = await supabase.from('food_logs').insert({
+      user_id:   user.id,
+      meal_name: result.name,
+      calories:  result.calories,
+      protein:   result.protein,
+      carbs:     result.carbs,
+      fat:       result.fat,
+    });
+
+    if (dbErr) {
+      setError(`Speichern fehlgeschlagen: ${dbErr.message}`);
+      setPhase('result');
+      return;
     }
 
     const saved = result;
@@ -374,7 +385,7 @@ export function FoodScanner({
 
         {/* ── Analyzing phase ── */}
         {phase === 'analyzing' && (
-          <View style={[s.centeredBox, { justifyContent: 'center' }]}>
+          <View style={[s.centeredBox, { justifyContent: 'center', alignItems: 'center' }]}>
             <AnimatedLogo size={90} />
             <Text style={s.analyzingText}>KI analysiert…</Text>
             {image2 && (
@@ -432,6 +443,8 @@ export function FoodScanner({
                 )}
               </TouchableOpacity>
             </View>
+
+            {error && <Text style={s.errorText}>{error}</Text>}
 
             <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
               <Text style={s.retryText}>Nochmal aufnehmen</Text>
@@ -632,8 +645,8 @@ const s = StyleSheet.create({
   },
   analyzeBtnText: { color: '#121212', fontSize: 16, fontWeight: '800' },
 
-  analyzingText:    { color: '#fff', fontSize: 16, fontWeight: '600', marginTop: 16 },
-  analyzingSubText: { color: '#555', fontSize: 12, marginTop: 4 },
+  analyzingText:    { color: '#fff', fontSize: 16, fontWeight: '600', marginTop: 16, textAlign: 'center' },
+  analyzingSubText: { color: '#555', fontSize: 12, marginTop: 4, textAlign: 'center' },
 
   // Result card
   previewCard: {

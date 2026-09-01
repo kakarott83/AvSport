@@ -10,12 +10,15 @@ import {
   View,
 } from 'react-native';
 
+import { resolveDayIndexForDate } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
 
 type WorkoutPlan = {
   id: string;
   title: string;
   exercise_count: number;
+  day_count: number;
+  scheduled_days: number[] | null;
 };
 
 export default function PlansScreen() {
@@ -34,7 +37,7 @@ export default function PlansScreen() {
 
     const { data, error } = await supabase
       .from('workout_plans')
-      .select('id, title, plan_exercises(count)')
+      .select('id, title, scheduled_days, plan_exercises(count), plan_days(count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -45,7 +48,9 @@ export default function PlansScreen() {
       data.map((p: any) => ({
         id: p.id,
         title: p.title,
+        scheduled_days: p.scheduled_days ?? null,
         exercise_count: p.plan_exercises?.[0]?.count ?? 0,
+        day_count: p.plan_days?.[0]?.count ?? 0,
       })),
     );
   }
@@ -67,15 +72,36 @@ export default function PlansScreen() {
     ]);
   }
 
-  function handlePlanPress(plan: WorkoutPlan) {
-    if (isSelectMode) {
+  async function handlePlanPress(plan: WorkoutPlan) {
+    if (!isSelectMode) {
+      router.push({ pathname: '/create-plan', params: { planId: plan.id } });
+      return;
+    }
+
+    if (plan.day_count === 0) {
       router.push({
         pathname: '/active-workout',
         params: { planId: plan.id, planName: plan.title },
       });
-    } else {
-      router.push({ pathname: '/create-plan', params: { planId: plan.id } });
+      return;
     }
+
+    const dayIndex = resolveDayIndexForDate(plan.scheduled_days, new Date());
+    const { data: day } = await supabase
+      .from('plan_days')
+      .select('id')
+      .eq('plan_id', plan.id)
+      .eq('day_index', dayIndex)
+      .maybeSingle();
+
+    router.push({
+      pathname: '/active-workout',
+      params: {
+        planId: plan.id,
+        planName: plan.title,
+        ...(day ? { dayId: day.id } : {}),
+      },
+    });
   }
 
   return (
@@ -122,7 +148,9 @@ export default function PlansScreen() {
               <View style={styles.planInfo}>
                 <Text style={styles.planName}>{item.title}</Text>
                 <Text style={styles.planMeta}>
-                  {item.exercise_count} Übung{item.exercise_count !== 1 ? 'en' : ''}
+                  {item.day_count > 1
+                    ? `${item.day_count} Tage · ${item.exercise_count} Übungen gesamt`
+                    : `${item.exercise_count} Übung${item.exercise_count !== 1 ? 'en' : ''}`}
                 </Text>
               </View>
               {isSelectMode ? (

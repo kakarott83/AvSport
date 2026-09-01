@@ -1,6 +1,7 @@
 import { recognizeFoodItems }             from '@/services/nutrition/foodRecognition';
 import { lookupNutrients }               from '@/services/nutrition/usdaLookup';
 import { lookupNutrientsViaLLM }         from './nutritionFallback';
+import { GeminiDailyLimitError }         from './client';
 import { getCachedResult, setCachedResult } from '@/services/nutrition/nutritionCache';
 import { supabase }                      from '@/services/supabaseClient';
 import type { Macros }                   from '@/services/nutrition/usdaLookup';
@@ -111,6 +112,7 @@ export async function analyzeFoodImage(
         logCost('llm_fallback', `${item.grams}g ${item.name}`);
         usedLLMFallback = true;
       } catch (llmErr) {
+        if (llmErr instanceof GeminiDailyLimitError) throw llmErr;
         console.error(`[Nutrition] LLM-Fallback fehlgeschlagen für "${item.name}":`, llmErr);
         continue;
       }
@@ -131,7 +133,7 @@ export async function analyzeFoodImage(
   }
 
   const result: FoodAnalysisResponse = {
-    name:       items.map(i => i.name).join(', '),
+    name:       items.map(i => i.name_de).join(', '),
     calories:   Math.round(totals.calories),
     protein:    Math.round(totals.protein  * 10) / 10,
     carbs:      Math.round(totals.carbs    * 10) / 10,

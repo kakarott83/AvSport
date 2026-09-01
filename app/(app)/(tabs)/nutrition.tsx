@@ -20,7 +20,10 @@ import { Toast } from '@/components/Toast';
 import { FoodScanner } from '@/components/FoodScanner';
 import { useCalorieGoal } from '@/hooks/useCalorieGoal';
 import { buildWeekDays, computeDayTotals, type FoodLog, type WeekDay } from '@/lib/nutrition';
+import { calculateWaterGoal } from '@/lib/waterGoal';
 import { supabase } from '@/services/supabaseClient';
+
+const COLOR_WATER = '#29B6F6';
 
 // ─────────────────────────────────────────
 // Helpers
@@ -90,12 +93,30 @@ function MacroBar({ label, value, color }: { label: string; value: number; color
   );
 }
 
+/** Wie MacroBar, aber in ml/l und relativ zum Tages-Wasserziel. */
+function WaterBar({ consumedMl, goalMl }: { consumedMl: number; goalMl: number }) {
+  const pct = goalMl > 0 ? Math.min((consumedMl / goalMl) * 100, 100) : 0;
+  const toL = (ml: number) => (ml / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  return (
+    <View style={macroStyles.row}>
+      <Text style={macroStyles.label}>Wasser</Text>
+      <View style={macroStyles.barBg}>
+        <View style={[macroStyles.barFill, { backgroundColor: COLOR_WATER, width: `${pct}%` }]} />
+      </View>
+      <Text style={[macroStyles.value, macroStyles.waterValue, { color: COLOR_WATER }]}>
+        {toL(consumedMl)}/{toL(goalMl)} l
+      </Text>
+    </View>
+  );
+}
+
 const macroStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   label: { color: '#BBBBBB', fontSize: 12, width: 52 },
   barBg: { flex: 1, height: 6, backgroundColor: '#2a2a2a', borderRadius: 3, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
   value: { fontSize: 12, fontWeight: '700', width: 44, textAlign: 'right' },
+  waterValue: { width: 74 },
 });
 
 // ─────────────────────────────────────────
@@ -171,10 +192,11 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
+  const [waterMl, setWaterMl] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  function reset() { setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); setError(''); }
+  function reset() { setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); setWaterMl(0); setError(''); }
 
   async function handleSave() {
     setError('');
@@ -195,8 +217,18 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
       fat: fat ? parseFloat(fat) : null,
     });
 
+    if (dbErr) { setSaving(false); setError(`Fehler: ${dbErr.message}`); return; }
+
+    // Optional zur Mahlzeit getrunkenes Wasser mitloggen (best-effort — ein
+    // Fehler hier darf die gespeicherte Mahlzeit nicht zunichtemachen).
+    if (waterMl > 0) {
+      const { error: waterErr } = await supabase
+        .from('water_intakes')
+        .insert({ user_id: user.id, ml: waterMl });
+      if (waterErr) console.warn('[MealModal] water intake failed:', waterErr.message);
+    }
+
     setSaving(false);
-    if (dbErr) { setError(`Fehler: ${dbErr.message}`); return; }
     reset();
     onSaved();
   }
@@ -232,6 +264,38 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
             )}
           </View>
 
+          <View style={modalStyles.waterHeader}>
+            <Text style={modalStyles.label}>Wasser dazu</Text>
+            {waterMl > 0 && (
+              <TouchableOpacity onPress={() => setWaterMl(0)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={modalStyles.waterClear}>zurücksetzen</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={modalStyles.waterInputWrap}>
+            <TextInput
+              style={modalStyles.waterInput}
+              value={waterMl > 0 ? String(waterMl) : ''}
+              onChangeText={(v) => setWaterMl(parseInt(v.replace(/[^0-9]/g, '').slice(0, 4), 10) || 0)}
+              placeholder="0"
+              placeholderTextColor="#555"
+              keyboardType="number-pad"
+            />
+            <Text style={modalStyles.waterUnit}>ml</Text>
+          </View>
+          <View style={modalStyles.waterRow}>
+            {[150, 250, 500].map((ml) => (
+              <TouchableOpacity
+                key={ml}
+                style={modalStyles.waterChip}
+                onPress={() => setWaterMl((prev) => prev + ml)}
+                activeOpacity={0.75}
+              >
+                <Text style={modalStyles.waterChipText}>+{ml} ml</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {error ? <Text style={modalStyles.error}>{error}</Text> : null}
 
           <TouchableOpacity
@@ -261,6 +325,20 @@ const modalStyles = StyleSheet.create({
   },
   macroRow: { flexDirection: 'row', gap: 8 },
   macroField: { flex: 1 },
+  waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  waterClear: { color: '#29B6F6', fontSize: 11, fontWeight: '600' },
+  waterInputWrap: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#2a2a2a',
+    borderRadius: 10, borderWidth: 1, borderColor: '#333', paddingHorizontal: 13, marginBottom: 8,
+  },
+  waterInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#fff' },
+  waterUnit: { color: '#777', fontSize: 13, fontWeight: '600' },
+  waterRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  waterChip: {
+    flex: 1, backgroundColor: '#0d2733', borderRadius: 10, borderWidth: 1, borderColor: '#154a5f',
+    paddingVertical: 10, alignItems: 'center',
+  },
+  waterChipText: { color: '#29B6F6', fontSize: 13, fontWeight: '700' },
   error: { color: '#c0392b', fontSize: 13, marginBottom: 10, textAlign: 'center' },
   saveBtn: { backgroundColor: '#0a7ea4', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 4 },
   saveBtnDisabled: { opacity: 0.5 },
@@ -279,6 +357,8 @@ export default function NutritionScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [waterGoalMl, setWaterGoalMl] = useState(0);
+  const [waterConsumedMl, setWaterConsumedMl] = useState(0);
 
   // Tages-Anpassung (lokal, kein DB-Speicher)
   const [dailyAdjustment, setDailyAdjustment] = useState(0);
@@ -298,9 +378,9 @@ export default function NutritionScreen() {
     const today    = todayISO();
     const tomorrow = offsetISO(1);
 
-    const [profileRes, foodRes, weekRes] = await Promise.all([
+    const [profileRes, foodRes, weekRes, waterRes] = await Promise.all([
       supabase.from('profiles')
-        .select('display_name')
+        .select('display_name, weight_kg, water_goal_ml, activity_level')
         .eq('id', user.id).single(),
       supabase.from('food_logs')
         .select('id, meal_name, calories, protein, carbs, fat, created_at')
@@ -311,11 +391,22 @@ export default function NutritionScreen() {
         .select('created_at, calories')
         .eq('user_id', user.id)
         .gte('created_at', offsetISO(-6)).lt('created_at', tomorrow),
+      supabase.from('water_intakes')
+        .select('ml')
+        .eq('user_id', user.id)
+        .gte('created_at', today).lt('created_at', tomorrow),
     ]);
 
     if (profileRes.data) {
       setDisplayName(profileRes.data.display_name ?? null);
+      setWaterGoalMl(calculateWaterGoal(
+        profileRes.data.weight_kg,
+        profileRes.data.water_goal_ml,
+        profileRes.data.activity_level,
+      ).goalMl);
     }
+
+    setWaterConsumedMl((waterRes.data ?? []).reduce((sum, r) => sum + (r.ml ?? 0), 0));
 
     if (foodRes.data) setLogs(foodRes.data as FoodLog[]);
 
@@ -431,6 +522,7 @@ export default function NutritionScreen() {
             <MacroBar label="Protein" value={totalProtein} color={macroColor('protein')} />
             <MacroBar label="Carbs" value={totalCarbs} color={macroColor('carbs')} />
             <MacroBar label="Fett" value={totalFat} color={macroColor('fat')} />
+            <WaterBar consumedMl={waterConsumedMl} goalMl={waterGoalMl} />
           </View>
         </View>
 

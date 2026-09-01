@@ -30,6 +30,9 @@ import {
   calculateDailyStepGoal,
   DEFAULT_ACTIVITY_LEVEL,
 } from '@/lib/stepGoal';
+import { calculateWaterGoal } from '@/lib/waterGoal';
+import { describeReminderSchedule, sanitizeWaterReminderSettings } from '@/lib/waterReminders';
+import { syncWaterReminders } from '@/services/notifications/waterReminderService';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────
@@ -49,9 +52,16 @@ type ProfileForm = {
   cycle_length_days: number;
   period_duration_days: number;
   cycle_calorie_bonus: number;
+  cycle_period_reminder: boolean;
+  cycle_fertile_reminder: boolean;
   activity_level: ActivityLevel;
   manual_step_goal: number;
   sync_health: boolean;
+  water_goal_ml: number;
+  water_reminder_enabled: boolean;
+  water_reminder_start_hour: number;
+  water_reminder_end_hour: number;
+  water_reminder_interval_hours: number;
 };
 
 const EMPTY: ProfileForm = {
@@ -67,9 +77,16 @@ const EMPTY: ProfileForm = {
   cycle_length_days: 28,
   period_duration_days: 5,
   cycle_calorie_bonus: 0,
+  cycle_period_reminder: false,
+  cycle_fertile_reminder: false,
   activity_level: DEFAULT_ACTIVITY_LEVEL,
   manual_step_goal: 0,
   sync_health: false,
+  water_goal_ml: 0,
+  water_reminder_enabled: false,
+  water_reminder_start_hour: 8,
+  water_reminder_end_hour: 20,
+  water_reminder_interval_hours: 2,
 };
 
 // ─────────────────────────────────────────
@@ -104,7 +121,10 @@ export default function ProfileScreen() {
         .select(`display_name, gender, date_of_birth, height_cm, weight_kg,
                  manual_calorie_offset, protein_per_kg, auto_adjust_calories,
                  cycle_tracking_enabled, cycle_length_days, period_duration_days,
-                 cycle_calorie_bonus, activity_level, manual_step_goal, sync_health`)
+                 cycle_calorie_bonus, cycle_period_reminder, cycle_fertile_reminder,
+                 activity_level, manual_step_goal, sync_health,
+                 water_goal_ml, water_reminder_enabled, water_reminder_start_hour,
+                 water_reminder_end_hour, water_reminder_interval_hours`)
         .eq('id', user.id)
         .single();
 
@@ -122,25 +142,32 @@ export default function ProfileScreen() {
           cycle_length_days:       data.cycle_length_days ?? 28,
           period_duration_days:    data.period_duration_days ?? 5,
           cycle_calorie_bonus:     data.cycle_calorie_bonus ?? 0,
+          cycle_period_reminder:   data.cycle_period_reminder ?? false,
+          cycle_fertile_reminder:  data.cycle_fertile_reminder ?? false,
           activity_level:          (data.activity_level as ActivityLevel) ?? DEFAULT_ACTIVITY_LEVEL,
           manual_step_goal:        data.manual_step_goal ?? 0,
           sync_health:             data.sync_health ?? false,
+          water_goal_ml:                 data.water_goal_ml ?? 0,
+          water_reminder_enabled:        data.water_reminder_enabled ?? false,
+          water_reminder_start_hour:     data.water_reminder_start_hour ?? 8,
+          water_reminder_end_hour:       data.water_reminder_end_hour ?? 20,
+          water_reminder_interval_hours: data.water_reminder_interval_hours ?? 2,
         });
       }
       setLoading(false);
     })();
   }, []);
 
-  async function syncCycleField(
-    patch: Partial<Pick<ProfileForm, 'cycle_tracking_enabled' | 'cycle_length_days' | 'period_duration_days' | 'cycle_calorie_bonus'>>
-  ) {
+  // Schreibt einzelne Felder sofort (debounced von den Steppern aufgerufen),
+  // ohne dass der Nutzer "Speichern" drücken muss.
+  async function syncCycleField(patch: Partial<ProfileForm>) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { error } = await supabase
       .from('profiles')
       .update(patch)
       .eq('id', user.id);
-    if (error) console.log('[profile] cycle sync error:', error.message);
+    if (error) console.log('[profile] field sync error:', error.message);
   }
 
   async function handleToggleHealth(enabled: boolean) {
@@ -239,8 +266,42 @@ export default function ProfileScreen() {
     syncCycleField({ cycle_tracking_enabled: enabled });
   }
 
+  // Plant die täglichen Trink-Erinnerungen anhand des aktuellen Formularstands
+  // neu. Best-effort — Fehler werden im Service geloggt, nicht hier.
+  function resyncWaterReminders(f: ProfileForm) {
+    const { goalMl } = calculateWaterGoal(
+      f.weight_kg ? parseProfileFloat(f.weight_kg, 0) : null,
+      f.water_goal_ml > 0 ? f.water_goal_ml : null,
+      f.activity_level,
+    );
+    void syncWaterReminders({
+      goalMl,
+      settings: sanitizeWaterReminderSettings({
+        enabled:       f.water_reminder_enabled,
+        startHour:     f.water_reminder_start_hour,
+        endHour:       f.water_reminder_end_hour,
+        intervalHours: f.water_reminder_interval_hours,
+      }),
+    });
+  }
+
+  function onWaterReminderToggle(enabled: boolean) {
+    const updated = { ...form, water_reminder_enabled: enabled };
+    setForm(updated);
+    syncCycleField({ water_reminder_enabled: enabled });
+    resyncWaterReminders(updated);
+  }
+
   function stepperChange(
-    field: 'cycle_length_days' | 'period_duration_days' | 'cycle_calorie_bonus' | 'manual_step_goal',
+    field:
+      | 'cycle_length_days'
+      | 'period_duration_days'
+      | 'cycle_calorie_bonus'
+      | 'manual_step_goal'
+      | 'water_goal_ml'
+      | 'water_reminder_start_hour'
+      | 'water_reminder_end_hour'
+      | 'water_reminder_interval_hours',
     delta: number,
     min: number,
     max: number
@@ -249,7 +310,10 @@ export default function ProfileScreen() {
       const next = clampStepper(prev[field] as number, delta, min, max);
       const updated = { ...prev, [field]: next };
       if (cycleDebounce.current) clearTimeout(cycleDebounce.current);
-      cycleDebounce.current = setTimeout(() => syncCycleField({ [field]: next }), 800);
+      cycleDebounce.current = setTimeout(() => {
+        syncCycleField({ [field]: next });
+        if (field.startsWith('water_')) resyncWaterReminders(updated);
+      }, 800);
       return updated;
     });
   }
@@ -281,15 +345,23 @@ export default function ProfileScreen() {
         cycle_length_days:        form.cycle_length_days,
         period_duration_days:     form.period_duration_days,
         cycle_calorie_bonus:      form.cycle_calorie_bonus,
+        cycle_period_reminder:    form.cycle_period_reminder,
+        cycle_fertile_reminder:   form.cycle_fertile_reminder,
         activity_level:           form.activity_level,
         manual_step_goal:         form.manual_step_goal > 0 ? form.manual_step_goal : null,
         sync_health:              form.sync_health,
+        water_goal_ml:                 form.water_goal_ml > 0 ? form.water_goal_ml : null,
+        water_reminder_enabled:        form.water_reminder_enabled,
+        water_reminder_start_hour:     form.water_reminder_start_hour,
+        water_reminder_end_hour:       form.water_reminder_end_hour,
+        water_reminder_interval_hours: form.water_reminder_interval_hours,
       },
       { onConflict: 'id' }
     );
 
     setSaving(false);
     if (dbErr) { setError(dbErr.message); return; }
+    resyncWaterReminders(form);
     setToast('Profil gespeichert!');
   }
 
@@ -305,6 +377,12 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  const waterGoal = calculateWaterGoal(
+    form.weight_kg ? parseProfileFloat(form.weight_kg, 0) : null,
+    form.water_goal_ml > 0 ? form.water_goal_ml : null,
+    form.activity_level,
+  );
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -469,11 +547,104 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* ── Zyklus-Tracking ── */}
+        {/* ── Wasser ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Wasser</Text>
+          <Text style={styles.hint}>
+            Dein Tagesbedarf wird aus Gewicht und Aktivitätslevel geschätzt. Er liegt aktuell bei{' '}
+            <Text style={{ color: '#29B6F6', fontWeight: '700' }}>
+              {waterGoal.goalMl.toLocaleString('de-DE')} ml
+            </Text>{' '}
+            {waterGoal.source === 'user' ? '(manuell festgelegt).' : '(automatisch berechnet).'}
+          </Text>
+
+          <Text style={styles.label}>Manuelles Ziel (0 = automatisch)</Text>
+          <Text style={styles.hint}>
+            Überschreibe die Schätzung mit einem festen Wert. 0 = Automatik bleibt aktiv.
+          </Text>
+          <Stepper
+            value={form.water_goal_ml}
+            unit="ml"
+            step={STEPPER_BOUNDS.water_goal_ml.step}
+            min={STEPPER_BOUNDS.water_goal_ml.min}
+            max={STEPPER_BOUNDS.water_goal_ml.max}
+            onDecrement={() => stepperChange('water_goal_ml', -STEPPER_BOUNDS.water_goal_ml.step, STEPPER_BOUNDS.water_goal_ml.min, STEPPER_BOUNDS.water_goal_ml.max)}
+            onIncrement={() => stepperChange('water_goal_ml', +STEPPER_BOUNDS.water_goal_ml.step, STEPPER_BOUNDS.water_goal_ml.min, STEPPER_BOUNDS.water_goal_ml.max)}
+            accentColor="#29B6F6"
+          />
+
+          <View style={styles.separator} />
+
+          <View style={[styles.toggleRow, { marginBottom: form.water_reminder_enabled ? 20 : 0 }]}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.toggleLabel}>💧 Trink-Erinnerungen</Text>
+              <Text style={styles.toggleSub}>
+                {form.water_reminder_enabled ? describeReminderSchedule({
+                  enabled: true,
+                  startHour: form.water_reminder_start_hour,
+                  endHour: form.water_reminder_end_hour,
+                  intervalHours: form.water_reminder_interval_hours,
+                }) : 'Inaktiv'}
+              </Text>
+            </View>
+            <Switch
+              value={form.water_reminder_enabled}
+              onValueChange={onWaterReminderToggle}
+              trackColor={{ false: '#2a2a2a', true: '#0a2a3a' }}
+              thumbColor={form.water_reminder_enabled ? '#29B6F6' : '#555'}
+            />
+          </View>
+
+          {form.water_reminder_enabled && (
+            <>
+              <Text style={styles.label}>Erste Erinnerung (Uhrzeit)</Text>
+              <Stepper
+                value={form.water_reminder_start_hour}
+                unit="Uhr"
+                min={STEPPER_BOUNDS.water_reminder_start_hour.min}
+                max={STEPPER_BOUNDS.water_reminder_start_hour.max}
+                onDecrement={() => stepperChange('water_reminder_start_hour', -1, STEPPER_BOUNDS.water_reminder_start_hour.min, STEPPER_BOUNDS.water_reminder_start_hour.max)}
+                onIncrement={() => stepperChange('water_reminder_start_hour', +1, STEPPER_BOUNDS.water_reminder_start_hour.min, STEPPER_BOUNDS.water_reminder_start_hour.max)}
+                accentColor="#29B6F6"
+              />
+
+              <View style={styles.separator} />
+
+              <Text style={styles.label}>Letzte Erinnerung (Uhrzeit)</Text>
+              <Stepper
+                value={form.water_reminder_end_hour}
+                unit="Uhr"
+                min={STEPPER_BOUNDS.water_reminder_end_hour.min}
+                max={STEPPER_BOUNDS.water_reminder_end_hour.max}
+                onDecrement={() => stepperChange('water_reminder_end_hour', -1, STEPPER_BOUNDS.water_reminder_end_hour.min, STEPPER_BOUNDS.water_reminder_end_hour.max)}
+                onIncrement={() => stepperChange('water_reminder_end_hour', +1, STEPPER_BOUNDS.water_reminder_end_hour.min, STEPPER_BOUNDS.water_reminder_end_hour.max)}
+                accentColor="#29B6F6"
+              />
+
+              <View style={styles.separator} />
+
+              <Text style={styles.label}>Intervall</Text>
+              <Text style={styles.hint}>Wie oft möchtest du im Zeitfenster erinnert werden?</Text>
+              <Stepper
+                value={form.water_reminder_interval_hours}
+                unit="Std."
+                min={STEPPER_BOUNDS.water_reminder_interval_hours.min}
+                max={STEPPER_BOUNDS.water_reminder_interval_hours.max}
+                onDecrement={() => stepperChange('water_reminder_interval_hours', -1, STEPPER_BOUNDS.water_reminder_interval_hours.min, STEPPER_BOUNDS.water_reminder_interval_hours.max)}
+                onIncrement={() => stepperChange('water_reminder_interval_hours', +1, STEPPER_BOUNDS.water_reminder_interval_hours.min, STEPPER_BOUNDS.water_reminder_interval_hours.max)}
+                accentColor="#29B6F6"
+              />
+            </>
+          )}
+        </View>
+
+        {/* ── Zyklus-Tracking (nur bei Geschlecht "weiblich") ── */}
+        {form.gender === 'female' && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Zyklus-Tracking</Text>
           <Text style={styles.hint}>
             Aktiviere die Zyklusverfolgung, um Gewichtsschwankungen im Dashboard mit deiner Periode zu korrelieren.
+            Blutungstage erfasst und Phasen zeigt der Tab {'„'}Periode{'“'}.
           </Text>
 
           <View style={[styles.toggleRow, { marginBottom: form.cycle_tracking_enabled ? 20 : 0 }]}>
@@ -531,9 +702,43 @@ export default function ProfileScreen() {
                 onIncrement={() => stepperChange('cycle_calorie_bonus', +STEPPER_BOUNDS.cycle_calorie_bonus.step, STEPPER_BOUNDS.cycle_calorie_bonus.min, STEPPER_BOUNDS.cycle_calorie_bonus.max)}
                 accentColor="#FF9100"
               />
+
+              <View style={styles.separator} />
+
+              <Text style={styles.label}>Erinnerungen</Text>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleLabelGroup}>
+                  <Text style={styles.toggleLabel}>🩸 Perioden-Start</Text>
+                  <Text style={styles.toggleSub}>1 Tag vor der erwarteten Periode</Text>
+                </View>
+                <Switch
+                  value={form.cycle_period_reminder}
+                  onValueChange={(v) => { patch('cycle_period_reminder', v); syncCycleField({ cycle_period_reminder: v }); }}
+                  trackColor={{ false: '#2a2a2a', true: '#3a0d0d' }}
+                  thumbColor={form.cycle_period_reminder ? '#FF5252' : '#555'}
+                />
+              </View>
+              <View style={[styles.toggleRow, { marginTop: 10 }]}>
+                <View style={styles.toggleLabelGroup}>
+                  <Text style={styles.toggleLabel}>🌱 Fruchtbares Fenster</Text>
+                  <Text style={styles.toggleSub}>1 Tag vor Beginn des fruchtbaren Fensters</Text>
+                </View>
+                <Switch
+                  value={form.cycle_fertile_reminder}
+                  onValueChange={(v) => { patch('cycle_fertile_reminder', v); syncCycleField({ cycle_fertile_reminder: v }); }}
+                  trackColor={{ false: '#2a2a2a', true: '#0d3a1a' }}
+                  thumbColor={form.cycle_fertile_reminder ? '#4CAF50' : '#555'}
+                />
+              </View>
+
+              <TouchableOpacity style={styles.cycleLinkRow} onPress={() => router.push('/(app)/(tabs)/cycle')} activeOpacity={0.7}>
+                <Text style={styles.cycleLinkText}>Zum Periode-Tab</Text>
+                <MaterialIcons name="chevron-right" size={20} color="#00E5FF" />
+              </TouchableOpacity>
             </>
           )}
         </View>
+        )}
 
         {/* ── Geräte & Synchronisation ── */}
         {Platform.OS !== 'web' && (
@@ -583,11 +788,27 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.menuRow}
+          onPress={() => router.push('/feedback')}
+          activeOpacity={0.7}>
+          <MaterialIcons name="chat-bubble-outline" size={18} color="#00E5FF" />
+          <Text style={styles.menuRowText}>Feedback geben</Text>
+          <MaterialIcons name="chevron-right" size={20} color="#555" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.logoutBtn}
           onPress={handleLogout}
           activeOpacity={0.7}>
           <MaterialIcons name="logout" size={16} color="#666" />
           <Text style={styles.logoutBtnText}>Abmelden</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.legalLink}
+          onPress={() => router.push('/legal')}
+          activeOpacity={0.7}>
+          <Text style={styles.legalLinkText}>Rechtliches &amp; Impressum</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -695,6 +916,9 @@ const styles = StyleSheet.create({
   toggleLabel:      { color: '#aaa', fontSize: 14, fontWeight: '600' },
   toggleSub:        { color: '#555', fontSize: 11 },
 
+  cycleLinkRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingVertical: 4 },
+  cycleLinkText: { color: '#00E5FF', fontSize: 14, fontWeight: '700' },
+
   separator: { height: 1, backgroundColor: '#2a2a2a', marginVertical: 16 },
 
   error:          { color: '#c0392b', fontSize: 13, textAlign: 'center', marginBottom: 16 },
@@ -704,4 +928,12 @@ const styles = StyleSheet.create({
 
   logoutBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20, padding: 12 },
   logoutBtnText: { color: '#666', fontSize: 13 },
+  legalLink:     { alignItems: 'center', paddingVertical: 8 },
+  legalLinkText: { color: '#555', fontSize: 12, textDecorationLine: 'underline' },
+  menuRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#1e1e1e', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a2a',
+    paddingHorizontal: 16, paddingVertical: 14, marginTop: 20,
+  },
+  menuRowText: { flex: 1, color: '#eee', fontSize: 14, fontWeight: '600' },
 });

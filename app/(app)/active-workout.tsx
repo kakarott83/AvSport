@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { playBeep } from '@/services/audioService';
 import { supabase } from '@/services/supabaseClient';
 
@@ -22,10 +23,20 @@ import { supabase } from '@/services/supabaseClient';
 type PlanExercise = {
   id: string;
   exercise_name: string;
+  description: string | null;
+  muscle_group: string | null;
+  equipment_type: string | null;
   sets: number;
   reps: number;
   target_duration: number | null;
   target_weight_kg: number | null;
+  rest_seconds: number | null;
+  short: string | null;
+  detail_markdown: string | null;
+  instructions: string[] | null;
+  modifications: { beginner: string; advanced: string } | null;
+  safety: string | null;
+  tips: string[] | null;
 };
 
 type PlanMeta = {
@@ -33,6 +44,13 @@ type PlanMeta = {
   circuit_rounds: number;
   rest_between_exercises_seconds: number;
   rest_between_rounds_seconds: number;
+};
+
+type PlanDayInfo = {
+  id: string;
+  label: string;
+  warmup: string | null;
+  cooldown: string | null;
 };
 
 type LoggedSet = {
@@ -143,14 +161,16 @@ function CountdownRing({
 // ─────────────────────────────────────────
 
 export default function ActiveWorkoutScreen() {
-  const { planId, planName } = useLocalSearchParams<{ planId?: string; planName?: string }>();
+  const { planId, planName, dayId } = useLocalSearchParams<{ planId?: string; planName?: string; dayId?: string }>();
   const hasPlan = !!planId;
 
   // ── Plan-Daten ──
   const [planExercises, setPlanExercises] = useState<PlanExercise[]>([]);
   const [planMeta, setPlanMeta]           = useState<PlanMeta | null>(null);
+  const [dayInfo, setDayInfo]             = useState<PlanDayInfo | null>(null);
   const [planIndex, setPlanIndex]         = useState(0);
   const [countdownFrom, setCountdownFrom] = useState(0);
+  const [detailVisible, setDetailVisible] = useState(false);
 
   // ── Zirkel-Zustand ──
   const [currentRound, setCurrentRound] = useState(1);
@@ -193,12 +213,31 @@ export default function ActiveWorkoutScreen() {
         .single();
       if (meta) setPlanMeta(meta as PlanMeta);
 
-      // Übungen laden
-      const { data, error } = await supabase
+      // Split-Tage laden (falls vorhanden — alte/manuelle Pläne haben keine)
+      const { data: days } = await supabase
+        .from('plan_days')
+        .select('id, day_index, label, warmup, cooldown')
+        .eq('plan_id', planId)
+        .order('day_index');
+
+      let resolvedDayId: string | null = null;
+      if (days && days.length > 0) {
+        const chosen = (dayId ? days.find((d) => d.id === dayId) : undefined) ?? days[0];
+        resolvedDayId = chosen.id;
+        setDayInfo({ id: chosen.id, label: chosen.label, warmup: chosen.warmup, cooldown: chosen.cooldown });
+      } else {
+        setDayInfo(null);
+      }
+
+      // Übungen laden — bei Split-Plänen nur die des gewählten Tages
+      let query = supabase
         .from('plan_exercises')
-        .select('id, exercise_name, sets, reps, target_duration, target_weight_kg')
+        .select('id, exercise_name, description, muscle_group, equipment_type, sets, reps, target_duration, target_weight_kg, rest_seconds, short, detail_markdown, instructions, modifications, safety, tips')
         .eq('plan_id', planId)
         .order('order_index');
+      if (resolvedDayId) query = query.eq('day_id', resolvedDayId);
+
+      const { data, error } = await query;
       if (error) { console.error('Plan-Übungen laden:', error.message); return; }
       if (!data || data.length === 0) return;
       setPlanExercises(data);
@@ -209,7 +248,7 @@ export default function ActiveWorkoutScreen() {
       setWeight(lastWeight || (data[0].target_weight_kg != null ? String(data[0].target_weight_kg) : ''));
     }
     loadPlan();
-  }, [planId]);
+  }, [planId, dayId]);
 
   // ── Gesamt-Timer (läuft immer, auch in Pausen) ──
   useEffect(() => {
@@ -406,7 +445,9 @@ export default function ActiveWorkoutScreen() {
         {hasPlan && planExercises.length > 0 && (
           <View style={[styles.planBanner, isCircuit && styles.planBannerCircuit]}>
             <View style={styles.planBannerLeft}>
-              <Text style={styles.planBannerTitle}>{planName}</Text>
+              <Text style={styles.planBannerTitle}>
+                {planName}{dayInfo ? ` · ${dayInfo.label}` : ''}
+              </Text>
               {restPhase ? (
                 <Text style={styles.planBannerSub}>
                   {restPhase === 'round'
@@ -443,6 +484,14 @@ export default function ActiveWorkoutScreen() {
                 <Text style={styles.skipRestText}>Überspringen</Text>
               </TouchableOpacity>
             )}
+          </View>
+        )}
+
+        {/* ── Warm-up (nur vor dem ersten Satz) ── */}
+        {dayInfo?.warmup && planIndex === 0 && sets.length === 0 && !restPhase && !isFinished && (
+          <View style={styles.noteCard}>
+            <Text style={styles.noteCardLabel}>🔥 Warm-up</Text>
+            <Text style={styles.noteCardText}>{dayInfo.warmup}</Text>
           </View>
         )}
 
@@ -494,6 +543,30 @@ export default function ActiveWorkoutScreen() {
             <Text style={styles.cardTitle}>
               {isCircuit ? `Runde ${currentRound} · Übung ${planIndex + 1}` : `Satz ${sets.length + 1}`}
             </Text>
+
+            {currentPlanEx && (currentPlanEx.description || currentPlanEx.muscle_group || currentPlanEx.equipment_type) && (
+              <View style={styles.exerciseIdentity}>
+                {!!(currentPlanEx.muscle_group || currentPlanEx.equipment_type) && (
+                  <View style={styles.exercisePictoBox}>
+                    <Text style={styles.exercisePictoText} numberOfLines={2}>
+                      {[currentPlanEx.muscle_group, currentPlanEx.equipment_type].filter(Boolean).join(' / ')}
+                    </Text>
+                  </View>
+                )}
+                {!!currentPlanEx.description && (
+                  <Text style={styles.exerciseDescription} numberOfLines={2}>{currentPlanEx.description}</Text>
+                )}
+                {!!currentPlanEx.detail_markdown && (
+                  <TouchableOpacity
+                    style={styles.infoButton}
+                    onPress={() => setDetailVisible(true)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.infoButtonText}>ⓘ</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
             <Text style={styles.label}>Übungsname</Text>
             <TextInput
@@ -586,6 +659,14 @@ export default function ActiveWorkoutScreen() {
           </View>
         )}
 
+        {/* ── Cool-down ── */}
+        {isFinished && dayInfo?.cooldown && (
+          <View style={styles.noteCard}>
+            <Text style={styles.noteCardLabel}>🧊 Cool-down</Text>
+            <Text style={styles.noteCardText}>{dayInfo.cooldown}</Text>
+          </View>
+        )}
+
         {/* ── Protokoll ── */}
         {sets.length > 0 && (
           <View style={styles.logSection}>
@@ -617,6 +698,12 @@ export default function ActiveWorkoutScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <ExerciseDetailModal
+        visible={detailVisible}
+        exercise={currentPlanEx ?? null}
+        onClose={() => setDetailVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -677,11 +764,24 @@ const styles = StyleSheet.create({
   },
   skipRestText: { color: '#aaa', fontSize: 12, fontWeight: '600' },
 
+  noteCard: {
+    backgroundColor: '#1e1e1e', borderRadius: 14,
+    padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a',
+  },
+  noteCardLabel: { color: '#0a7ea4', fontSize: 13, fontWeight: '700', marginBottom: 6 },
+  noteCardText:  { color: '#aaa', fontSize: 13, lineHeight: 19 },
+
   card: {
     backgroundColor: '#1e1e1e', borderRadius: 16,
     padding: 20, marginBottom: 20,
   },
   cardTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  exerciseIdentity:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  exercisePictoBox:     { width: 76, minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: '#0a7ea4', backgroundColor: '#1a2a30', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 4 },
+  exercisePictoText:    { color: '#0a7ea4', fontSize: 11, fontWeight: '700', textAlign: 'center', lineHeight: 14 },
+  exerciseDescription:  { color: '#aaa', fontSize: 13, flex: 1 },
+  infoButton:           { paddingHorizontal: 6, paddingVertical: 2 },
+  infoButtonText:       { color: '#0a7ea4', fontSize: 20, fontWeight: '700' },
   label: {
     fontSize: 12, fontWeight: '600', color: '#aaa',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6,

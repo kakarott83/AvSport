@@ -9,7 +9,11 @@ export type StepperField =
   | 'cycle_length_days'
   | 'period_duration_days'
   | 'cycle_calorie_bonus'
-  | 'manual_step_goal';
+  | 'manual_step_goal'
+  | 'water_goal_ml'
+  | 'water_reminder_start_hour'
+  | 'water_reminder_end_hour'
+  | 'water_reminder_interval_hours';
 
 export type StepperBounds = { min: number; max: number; step: number };
 
@@ -26,6 +30,14 @@ export const STEPPER_BOUNDS: Record<StepperField, StepperBounds> = {
    * > 0 = user's manual override; stored in profiles.manual_step_goal.
    */
   manual_step_goal:     { min: 0,     max: 30_000, step: 500  },
+  /**
+   * 0 = automatic (derived from body weight + activity level in lib/waterGoal.ts).
+   * > 0 = user's manual override; stored in profiles.water_goal_ml.
+   */
+  water_goal_ml:                 { min: 0,  max: 6_000, step: 100 },
+  water_reminder_start_hour:     { min: 4,  max: 12,    step: 1   },
+  water_reminder_end_hour:       { min: 14, max: 23,    step: 1   },
+  water_reminder_interval_hours: { min: 1,  max: 6,     step: 1   },
 };
 
 /**

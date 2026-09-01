@@ -1,10 +1,39 @@
+diff --git a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
+index 38c9dfd..7ef23a2 100644
+--- a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
++++ b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
+@@ -20,13 +20,23 @@ import dev.matinzd.healthconnect.utils.convertChangesTokenRequestOptionsFromJS
+ import dev.matinzd.healthconnect.utils.getTimeRangeFilter
+ import dev.matinzd.healthconnect.utils.reactRecordTypeToClassMap
+ import dev.matinzd.healthconnect.utils.rejectWithException
++import android.util.Log
++import kotlinx.coroutines.CoroutineExceptionHandler
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.launch
+ 
+ class HealthConnectManager(private val applicationContext: ReactApplicationContext) {
+   private lateinit var healthConnectClient: HealthConnectClient
+-  private val coroutineScope = CoroutineScope(Dispatchers.IO)
++  // A bare CoroutineScope(Dispatchers.IO) rethrows any uncaught exception on
++  // its thread, which crashes the whole app (e.g. when the permission delegate
++  // was never registered and `requestPermission` lateinit is accessed). The
++  // handler downgrades that to a log so the JS side can recover.
++  private val coroutineScope = CoroutineScope(
++    Dispatchers.IO + CoroutineExceptionHandler { _, throwable ->
++      Log.e("HealthConnectManager", "Unhandled coroutine exception", throwable)
++    }
++  )
+ 
+   private val isInitialized get() = this::healthConnectClient.isInitialized
+ 
 diff --git a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
-index 5ec3641..1a2b3c4 100644
+index 5ec3641..aa45c11 100644
 --- a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
 +++ b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
 @@ -1,18 +1,26 @@
  package dev.matinzd.healthconnect.permissions
-
+ 
 +import android.os.Build
  import androidx.activity.ComponentActivity
  import androidx.activity.result.ActivityResultLauncher
@@ -19,7 +48,7 @@ index 5ec3641..1a2b3c4 100644
  import kotlinx.coroutines.channels.Channel
  import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withContext
-
+ 
  object HealthConnectPermissionDelegate {
 -  private val coroutineScope = CoroutineScope(Dispatchers.IO)
 +  private val coroutineScope = CoroutineScope(
@@ -29,8 +58,8 @@ index 5ec3641..1a2b3c4 100644
 +  )
    private val permissionsChannel = Channel<Set<String>>()
    private val exerciseRouteChannel = Channel<ExerciseRoute?>()
-
-@@ -23,7 +31,14 @@
+ 
+@@ -23,7 +31,14 @@ object HealthConnectPermissionDelegate {
      activity: ComponentActivity,
      providerPackageName: String = "com.google.android.apps.healthdata"
    ) {
@@ -44,11 +73,11 @@ index 5ec3641..1a2b3c4 100644
 +      PermissionController.createRequestPermissionResultContract(providerPackageName)
 +    }
      val exerciseRouteRequestContract = ExerciseRouteRequestContract()
-
+ 
      requestPermission = activity.registerForActivityResult(contract) {
-@@ -42,12 +57,18 @@
+@@ -42,12 +57,18 @@ object HealthConnectPermissionDelegate {
    }
-
+ 
    suspend fun launchPermissionsDialog(permissions: Set<String>): Set<String> {
 -    requestPermission.launch(permissions)
 +    // ActivityResultLauncher.launch() must be called on the main thread.
@@ -58,7 +87,7 @@ index 5ec3641..1a2b3c4 100644
 +    }
      return permissionsChannel.receive()
    }
-
+ 
    suspend fun launchExerciseRouteAccessRequestDialog(recordId: String): ExerciseRoute? {
 -    requestRoutePermission.launch(recordId)
 +    withContext(Dispatchers.Main) {

@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
+import { getAuthErrorMessage } from "@/lib/authErrors";
 import { supabase } from "@/services/supabaseClient";
 
 export default function RegisterScreen() {
@@ -20,6 +22,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [socialBusy, setSocialBusy] = useState(false);
 
   async function handleRegister() {
     if (!email.trim() || !password) {
@@ -39,22 +42,39 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
 
-    if (error) {
-      Alert.alert("Registrierung fehlgeschlagen", error.message);
-    } else if (data.session) {
-      // Session sofort aktiv (kein E-Mail-Bestätigung) → _layout.tsx übernimmt Routing
-    } else {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        Alert.alert(
+          "Registrierung fehlgeschlagen",
+          getAuthErrorMessage(error.message),
+        );
+        return;
+      }
+
+      if (data.session) {
+        // Session sofort aktiv (kein E-Mail-Bestätigung) → _layout.tsx übernimmt Routing
+      } else {
+        Alert.alert(
+          "Bestätige deine E-Mail",
+          "Wir haben dir eine Bestätigungs-E-Mail geschickt. Bitte klicke auf den Link und melde dich dann an.",
+          [{ text: "OK", onPress: () => router.replace("/(auth)/login") }],
+        );
+      }
+    } catch (error) {
       Alert.alert(
-        "Bestätige deine E-Mail",
-        "Wir haben dir eine Bestätigungs-E-Mail geschickt. Bitte klicke auf den Link und melde dich dann an.",
-        [{ text: "OK", onPress: () => router.replace("/(auth)/login") }],
+        "Registrierung fehlgeschlagen",
+        getAuthErrorMessage(
+          error instanceof Error ? error.message : "Network request failed",
+        ),
       );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -74,6 +94,8 @@ export default function RegisterScreen() {
 
         <View style={styles.card}>
           <Text style={styles.title}>Konto erstellen</Text>
+
+          <SocialAuthButtons onBusyChange={setSocialBusy} />
 
           <Text style={styles.label}>E-Mail</Text>
           <TextInput
@@ -114,9 +136,9 @@ export default function RegisterScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.button, (loading || socialBusy) && styles.buttonDisabled]}
             onPress={handleRegister}
-            disabled={loading}
+            disabled={loading || socialBusy}
             activeOpacity={0.8}
           >
             {loading ? (

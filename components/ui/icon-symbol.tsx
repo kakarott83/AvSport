@@ -22,6 +22,7 @@ const MAPPING = {
   'fork.knife': 'restaurant',
   'calendar': 'event',
   'person.fill': 'person',
+  'drop.fill': 'bloodtype',
 } as IconMapping;
 
 /**

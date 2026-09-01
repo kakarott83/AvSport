@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.avorasport.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSHealthShareUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
         "NSHealthUpdateUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
@@ -24,7 +25,8 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
@@ -35,6 +37,7 @@
       "expo-router",
       "expo-dev-client",
       "expo-secure-store",
+      "expo-notifications",
       [
         "expo-camera",
         {
@@ -51,16 +54,32 @@
             "targetSdkVersion": 35,
             "kotlinVersion": "2.0.21",
             "packagingOptions": {
-              "pickFirst": ["**/libc++_shared.so", "**/libfbjni.so"]
+              "pickFirst": [
+                "**/libc++_shared.so",
+                "**/libfbjni.so"
+              ]
             },
-            "extraMavenRepos": ["https://www.jitpack.io"]
+            "extraMavenRepos": [
+              "https://www.jitpack.io"
+            ]
           }
         }
       ],
       [
         "react-native-health-connect",
         {
-          "permissions": ["Steps", "ActiveCaloriesBurned"]
+          "permissions": [
+            "Steps",
+            "ActiveCaloriesBurned"
+          ]
+        }
+      ],
+      "./plugins/withHealthConnectPermissionDelegate",
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID"
         }
       ]
     ],

@@ -76,6 +76,24 @@ export default function AppLayout() {
           headerShadowVisible: false,
         }}
       />
+      <Stack.Screen
+        name="legal"
+        options={{
+          title: 'Rechtliches',
+          headerStyle: { backgroundColor: '#121212' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="feedback"
+        options={{
+          title: 'Feedback',
+          headerStyle: { backgroundColor: '#121212' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }}
+      />
     </Stack>
   );
 }

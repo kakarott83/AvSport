@@ -2,6 +2,7 @@ import { geminiRequest, type GeminiPart } from '@/services/gemini/client';
 
 export interface RecognizedItem {
   name:        string; // English name for USDA lookup
+  name_de:     string; // Deutscher Anzeigename (UI, food_logs)
   grams:       number;
   preparation: string; // e.g. "grilled", "boiled", "raw"
 }
@@ -19,9 +20,11 @@ function buildPrompt(notes?: string): string {
   if (notes?.trim()) p += `Additional user context: "${notes.trim()}". `;
   p +=
     'Return ONLY valid JSON — no markdown, no explanation, no extra text. ' +
-    'Format: {"items":[{"name":string,"grams":number,"preparation":string}]}. ' +
-    'Use common English food names suitable for database lookup ' +
+    'Format: {"items":[{"name":string,"name_de":string,"grams":number,"preparation":string}]}. ' +
+    '"name" must be a common English food name suitable for database lookup ' +
     '(e.g. "chicken breast", "white rice", "broccoli", "olive oil"). ' +
+    '"name_de" is the same food item as a natural German name for display to the user ' +
+    '(e.g. "Hähnchenbrust", "weißer Reis", "Brokkoli", "Olivenöl"). ' +
     'For preparation use exactly one English word: ' +
     '"grilled", "boiled", "fried", "steamed", "raw", "baked", "roasted", or "mixed".';
   return p;
@@ -55,8 +58,10 @@ export async function recognizeFoodItems(
       if (!grams || grams <= 0) {
         throw new Error(`[FoodRecognition] Item ${i} "${item.name}": ungültige Grammangabe`);
       }
+      const nameDe = typeof item.name_de === 'string' ? item.name_de.trim() : '';
       return {
         name:        item.name.trim(),
+        name_de:     nameDe || item.name.trim(),
         grams,
         preparation: typeof item.preparation === 'string' ? item.preparation.trim() : '',
       };
@@ -65,7 +70,7 @@ export async function recognizeFoodItems(
 
   console.log(
     '[FoodRecognition] Erkannt:',
-    items.map(i => `${i.grams}g ${i.name} (${i.preparation})`).join(', '),
+    items.map(i => `${i.grams}g ${i.name_de} (${i.preparation})`).join(', '),
   );
   return { items };
 }

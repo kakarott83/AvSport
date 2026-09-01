@@ -3,5 +3,12 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  // Deaktiviert die Config-Plugin-Prüfung der Expo-VS-Code-Erweiterung.
+  // Grund: @react-native-google-signin/google-signin@16 hat einen ESM-Build
+  // mit fehlenden .js-Import-Endungen; die Erweiterung lädt ihn mit Nodes
+  // striktem ESM-Resolver und meldet fälschlich ERR_MODULE_NOT_FOUND in app.json.
+  // `expo config`, `expo prebuild`, Metro, tsc und der native Build sind davon
+  // nicht betroffen. Plugin-Fehler tauchen ohnehin beim Build auf.
+  "expo.appManifest.pluginValidation": false
 }
