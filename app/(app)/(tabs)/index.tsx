@@ -26,8 +26,8 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 
-import { AiPlanGeneratorModal } from "@/components/AiPlanGeneratorModal";
 import { FoodScanner } from "@/components/FoodScanner";
+import { Toast } from "@/components/Toast";
 import { useCalorieGoal } from "@/hooks/useCalorieGoal";
 import { useHealthData } from "@/hooks/useHealthData";
 import { useStepGoal } from "@/hooks/useStepGoal";
@@ -432,16 +432,21 @@ export default function HomeScreen() {
   // Food scanner
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  // KI-Trainingsplan-Generator
-  const [aiModalOpen, setAiModalOpen] = useState(false);
-
   // Wasser: frei eingegebene Menge
   const [customWaterMl, setCustomWaterMl] = useState("");
+  const [waterToast, setWaterToast] = useState<string | null>(null);
+
+  async function handleAddWater(ml: number) {
+    const ok = await water.addIntake(ml);
+    setWaterToast(
+      ok ? `+${ml} ml Wasser hinzugefügt` : "Wasser konnte nicht gespeichert werden",
+    );
+  }
 
   function addCustomWater() {
     const ml = parseInt(customWaterMl, 10);
     if (!Number.isFinite(ml) || ml <= 0) return;
-    water.addIntake(Math.min(ml, 3000));
+    void handleAddWater(Math.min(ml, 3000));
     setCustomWaterMl("");
   }
 
@@ -809,12 +814,6 @@ export default function HomeScreen() {
         dailyKcalGoal={currentGoal > 0 ? currentGoal : undefined}
         proteinGoal={proteinGoal > 0 ? proteinGoal : undefined}
       />
-      <AiPlanGeneratorModal
-        visible={aiModalOpen}
-        onClose={() => setAiModalOpen(false)}
-        onSaved={(_id, _title) => setAiModalOpen(false)}
-      />
-
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -1315,14 +1314,6 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.aiCoachBtn}
-                onPress={() => setAiModalOpen(true)}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons name="auto-awesome" size={17} color="#121212" />
-                <Text style={styles.aiCoachBtnText}>KI-Coach: Plan erstellen</Text>
-              </TouchableOpacity>
             </Animated.View>
 
             {/* ── Wasser ── */}
@@ -1355,7 +1346,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={ml}
                       style={styles.waterChip}
-                      onPress={() => water.addIntake(ml)}
+                      onPress={() => handleAddWater(ml)}
                       activeOpacity={0.75}
                     >
                       <Text style={styles.waterChipText}>+{ml} ml</Text>
@@ -1397,6 +1388,15 @@ export default function HomeScreen() {
       >
         <MaterialIcons name="camera-alt" size={24} color="#121212" />
       </TouchableOpacity>
+
+      {waterToast && (
+        <Toast
+          message={waterToast}
+          type={waterToast.startsWith("+") ? "success" : "error"}
+          duration={1800}
+          onDismiss={() => setWaterToast(null)}
+        />
+      )}
     </View>
   );
 }
@@ -1643,19 +1643,6 @@ const styles = StyleSheet.create({
     borderColor: COLOR_CALORIES,
   },
   actionText: { color: "#121212", fontSize: 14, fontWeight: "700" },
-
-  aiCoachBtn: {
-    flexDirection:   "row",
-    alignItems:      "center",
-    justifyContent:  "center",
-    gap: 8,
-    backgroundColor: COLOR_CALORIES,
-    borderRadius:    16,
-    paddingVertical: 13,
-    marginTop:       10,
-    opacity: 0.92,
-  },
-  aiCoachBtnText: { color: "#121212", fontSize: 14, fontWeight: "700" },
 
   // ── Offline-Indikator ────────────────────────────────────────────────────────
   offlineBanner: {

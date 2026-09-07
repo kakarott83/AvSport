@@ -27,6 +27,23 @@ function mockAiLogsTable(count: number | null, error: unknown = null) {
   return { select, insert };
 }
 
+/** profiles.select('is_premium').eq('id', …).maybeSingle() */
+function mockProfilesTable(isPremium: boolean) {
+  const maybeSingle = jest.fn().mockResolvedValue({ data: { is_premium: isPremium }, error: null });
+  const eq = jest.fn().mockReturnValue({ maybeSingle });
+  const select = jest.fn().mockReturnValue({ eq });
+  return { select };
+}
+
+/** Router für supabase.from(): ai_logs + profiles + Fallback fürs Logging. */
+function mockFrom(opts: { aiLogsCount?: number | null; aiLogsError?: unknown; isPremium?: boolean }) {
+  return (table: string) => {
+    if (table === "ai_logs") return mockAiLogsTable(opts.aiLogsCount ?? 0, opts.aiLogsError ?? null);
+    if (table === "profiles") return mockProfilesTable(opts.isPremium ?? false);
+    return { insert: jest.fn().mockResolvedValue({ error: null }) };
+  };
+}
+
 beforeEach(() => {
   jest.resetAllMocks();
   jest.spyOn(console, "log").mockImplementation(() => {});
@@ -97,6 +114,24 @@ describe("Tageslimit", () => {
     const result = await geminiRequest([{ text: "hi" }]);
     expect(result).toBe("ok");
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("überspringt das Tageslimit für Premium-Abonnenten", async () => {
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+      data: { user: { id: "user-premium", email: "premium@example.com" } },
+    });
+    (supabase.from as jest.Mock).mockImplementation(mockFrom({ aiLogsCount: 9999, isPremium: true }));
+
+    const result = await geminiRequest([{ text: "hi" }]);
+    expect(result).toBe("ok");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("wendet das Limit auf Nicht-Premium-User an (profiles.is_premium = false)", async () => {
+    (supabase.from as jest.Mock).mockImplementation(mockFrom({ aiLogsCount: 10, isPremium: false }));
+
+    await expect(geminiRequest([{ text: "hi" }])).rejects.toThrow(GeminiDailyLimitError);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("lässt die Anfrage durch wenn die Limit-Abfrage selbst fehlschlägt (fail open)", async () => {

@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+import { usePremium } from '@/hooks/usePremium';
+import { restorePurchases } from '@/lib/purchases';
 
 import { DatePickerInput } from '@/components/DatePickerInput';
 import { Toast } from '@/components/Toast';
@@ -100,6 +104,8 @@ export default function ProfileScreen() {
   const [error, setError]     = useState('');
   const [toast, setToast]     = useState<string | null>(null);
   const [isNativeReady, setIsNativeReady] = useState(HealthManager.isNativeReady());
+  const { isPremium, refresh: refreshPremium } = usePremium();
+  const [restoring, setRestoring] = useState(false);
 
   const cycleDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -368,6 +374,27 @@ export default function ProfileScreen() {
   async function handleLogout() {
     await clearCredentials();
     await supabase.auth.signOut();
+  }
+
+  function manageSubscription() {
+    const url = Platform.OS === 'ios'
+      ? 'https://apps.apple.com/account/subscriptions'
+      : 'https://play.google.com/store/account/subscriptions';
+    Linking.openURL(url).catch(() => {});
+  }
+
+  async function handleRestore() {
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const ok = await restorePurchases();
+      await refreshPremium();
+      setToast(ok ? 'Premium wiederhergestellt!' : 'Kein aktives Abo gefunden.');
+    } catch {
+      setToast('Wiederherstellung fehlgeschlagen.');
+    } finally {
+      setRestoring(false);
+    }
   }
 
   if (loading) {
@@ -789,6 +816,33 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.menuRow}
+          onPress={() => (isPremium ? manageSubscription() : router.push('/paywall'))}
+          activeOpacity={0.7}>
+          <MaterialIcons name={isPremium ? 'workspace-premium' : 'bolt'} size={18} color="#00E5FF" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.menuRowText}>AvoraSport Premium</Text>
+            <Text style={styles.menuRowSub}>
+              {isPremium ? 'Aktiv · Abo verwalten' : 'Kostenlos · unbegrenzte KI freischalten'}
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={20} color="#555" />
+        </TouchableOpacity>
+
+        {!isPremium && (
+          <TouchableOpacity
+            style={[styles.menuRow, { marginTop: 10 }]}
+            onPress={handleRestore}
+            disabled={restoring}
+            activeOpacity={0.7}>
+            <MaterialIcons name="restore" size={18} color="#888" />
+            <Text style={[styles.menuRowText, { color: '#aaa' }]}>
+              {restoring ? 'Wird geprüft…' : 'Käufe wiederherstellen'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={styles.menuRow}
           onPress={() => router.push('/feedback')}
           activeOpacity={0.7}>
           <MaterialIcons name="chat-bubble-outline" size={18} color="#00E5FF" />
@@ -936,4 +990,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14, marginTop: 20,
   },
   menuRowText: { flex: 1, color: '#eee', fontSize: 14, fontWeight: '600' },
+  menuRowSub: { color: '#888', fontSize: 12, marginTop: 2 },
 });

@@ -1,30 +1,25 @@
 /**
  * lib/socialAuth.ts
  *
- * Native Google-/Apple-Anmeldung über Supabase `signInWithIdToken`.
- *
- * - Google:  @react-native-google-signin/google-signin  (Android + iOS)
- * - Apple:   expo-apple-authentication                    (nur iOS 13+)
- *
- * Voraussetzungen (siehe .env + docs):
- *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   – OAuth-Client "Web" aus Google Cloud
- *   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   – OAuth-Client "iOS" (nur iOS)
- *   Supabase-Dashboard: Provider Google + Apple aktiviert.
+ * - Google:  Supabase-OAuth-Flow im Browser (signInWithOAuth + PKCE +
+ *            WebBrowser.openAuthSessionAsync + exchangeCodeForSession).
+ *            Konfiguration liegt vollständig im Supabase-Dashboard
+ *            (Authentication → Providers → Google) — kein natives SDK,
+ *            keine Client-IDs in der App.
+ * - Apple:   expo-apple-authentication + signInWithIdToken (nur iOS 13+),
+ *            unverändert nativ.
  *
  * Bei Erfolg entsteht eine Supabase-Session; das Routing übernimmt
  * `app/(app)/_layout.tsx` (neue Nutzer → Onboarding).
  */
 
-import {
-  GoogleSignin,
-  isErrorWithCode,
-  isSuccessResponse,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { getAuthErrorMessage } from '@/lib/authErrors';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,66 +29,65 @@ export type SocialAuthResult =
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; message: string };
 
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
+// ─── Google (Supabase-OAuth im Browser) ──────────────────────────────────────
 
-// ─── Google ──────────────────────────────────────────────────────────────────
-
-let googleConfigured = false;
-
-function configureGoogle() {
-  if (googleConfigured) return;
-  GoogleSignin.configure({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-    scopes: ['openid', 'email', 'profile'],
-  });
-  googleConfigured = true;
-}
-
-export function isGoogleConfigured(): boolean {
-  return GOOGLE_WEB_CLIENT_ID.length > 0;
+/** Deep-Link, auf den Google/Supabase nach der Anmeldung zurückspringt. */
+function googleRedirectUri(): string {
+  // Standalone/Dev-Client → "avorasport://auth-callback"
+  return Linking.createURL('auth-callback');
 }
 
 export async function signInWithGoogle(): Promise<SocialAuthResult> {
-  if (!isGoogleConfigured()) {
-    return {
-      ok: false,
-      cancelled: false,
-      message: 'Google-Login ist noch nicht eingerichtet (EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID fehlt).',
-    };
-  }
-
   try {
-    configureGoogle();
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const redirectTo = googleRedirectUri();
 
-    const response = await GoogleSignin.signIn();
-    if (!isSuccessResponse(response)) {
-      return { ok: false, cancelled: true }; // Nutzer hat abgebrochen
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+
+    if (error || !data?.url) {
+      return {
+        ok: false,
+        cancelled: false,
+        message: getAuthErrorMessage(error?.message ?? 'Google-Login konnte nicht gestartet werden.'),
+      };
     }
 
-    const idToken = response.data.idToken;
-    if (!idToken) {
-      return { ok: false, cancelled: false, message: 'Google hat kein ID-Token geliefert.' };
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success' || !result.url) {
+      return { ok: false, cancelled: true }; // Nutzer hat den Browser geschlossen
     }
 
-    const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
-    if (error) return { ok: false, cancelled: false, message: error.message };
+    const { queryParams } = Linking.parse(result.url);
+    const code = typeof queryParams?.code === 'string' ? queryParams.code : null;
+
+    if (!code) {
+      const desc = typeof queryParams?.error_description === 'string'
+        ? decodeURIComponent(queryParams.error_description)
+        : null;
+      return {
+        ok: false,
+        cancelled: false,
+        message: desc ?? 'Google hat keinen Anmelde-Code zurückgegeben.',
+      };
+    }
+
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      return { ok: false, cancelled: false, message: getAuthErrorMessage(exchangeError.message) };
+    }
 
     return { ok: true };
   } catch (err: unknown) {
-    if (isErrorWithCode(err)) {
-      if (err.code === statusCodes.SIGN_IN_CANCELLED) return { ok: false, cancelled: true };
-      if (err.code === statusCodes.IN_PROGRESS) return { ok: false, cancelled: true };
-      if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        return { ok: false, cancelled: false, message: 'Google Play-Dienste sind nicht verfügbar.' };
-      }
-    }
     return {
       ok: false,
       cancelled: false,
-      message: err instanceof Error ? err.message : 'Google-Login fehlgeschlagen.',
+      message: err instanceof Error ? getAuthErrorMessage(err.message) : 'Google-Login fehlgeschlagen.',
     };
   }
 }

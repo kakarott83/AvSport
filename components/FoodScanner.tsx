@@ -1,5 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 import {
@@ -22,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
+import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
 import { analyzeFoodImage } from '@/services/gemini/nutritionProvider';
 import { supabase } from '@/services/supabaseClient';
 import type { FoodAnalysis } from '@/types/vision';
@@ -113,6 +115,7 @@ export function FoodScanner({
   dailyKcalGoal = 2000,
   proteinGoal   = 150,
 }: Props) {
+  const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [phase,  setPhase]  = useState<Phase>('camera');
   const [image1, setImage1] = useState<CapturedPhoto | null>(null);
@@ -187,6 +190,11 @@ export function FoodScanner({
       setResult(data);
       setPhase('result');
     } catch (e: any) {
+      if (isDailyLimitError(e)) {
+        handleClose();
+        openPaywall(router);
+        return;
+      }
       const msg: string = e?.message ?? '';
       if (msg.includes('503')) {
         setError('Die KI ist gerade stark ausgelastet. Bitte versuch es gleich nochmal! ☕');

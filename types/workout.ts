@@ -44,6 +44,8 @@ export interface GeneratedExercise {
   // ─── KI-Detailtexte (siehe exerciseDetailProvider.ts) ───────────────────────
   // Optional, weil roh generierte/manuelle Übungen sie noch nicht haben —
   // enrichDaysWithDetails() füllt sie für jede KI-Übung immer (KI oder Fallback).
+  /** Gängiger englischer Übungsname für die Bildsuche (free-exercise-db); '' wenn die KI keinen lieferte. */
+  name_en?:         string;
   /** Einzeiler, max. 120 Zeichen. */
   short?:            string;
   /** Markdown: 1 kurzer Absatz (Wirkung + Technik) + 2 Bullets (Haltung, Häufiger Fehler). */

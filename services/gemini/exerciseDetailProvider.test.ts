@@ -43,6 +43,7 @@ function makeDays(): GeneratedDay[] {
 function fullDetail(id: string) {
   return {
     id,
+    name_en: 'Barbell Squat',
     short: `Kurzbeschreibung für ${id}`,
     detail_markdown: 'Absatz 1.\n\nAbsatz 2.\n\n- **Atmung**: ein.\n- **Haltung**: gerade.\n- **Häufige Fehler**: keine.',
     instructions: ['Schritt 1 ausführen.', 'Schritt 2 ausführen.', 'Schritt 3 ausführen.'],
@@ -81,12 +82,23 @@ describe('enrichDaysWithDetails — KI-Erfolg', () => {
     const [ex1, ex2] = days[0].exercises;
 
     expect(ex1.short).toBe('Kurzbeschreibung für d1-e0');
+    expect(ex1.name_en).toBe('Barbell Squat');
     expect(ex1.instructions).toHaveLength(3);
     expect(ex1.modifications).toEqual({ beginner: 'Leichter.', advanced: 'Schwerer.' });
     expect(ex1.safety).toBe('Bei Schmerzen abbrechen.');
     expect(ex1.tips).toHaveLength(2);
     expect(ex1.video_url).toBeNull();
     expect(ex2.short).toBe('Kurzbeschreibung für d1-e1');
+  });
+
+  it('akzeptiert die Übung auch ohne name_en (fällt auf "" zurück)', async () => {
+    const detail = fullDetail('d1-e0');
+    delete (detail as { name_en?: string }).name_en;
+    mockFetchOnce({ exercises: [detail, fullDetail('d1-e1')] });
+
+    const days = await enrichDaysWithDetails(makeDays());
+    expect(days[0].exercises[0].name_en).toBe('');
+    expect(days[0].exercises[0].short).toBe('Kurzbeschreibung für d1-e0');
   });
 
   it('behält alle ursprünglichen Feldwerte der Übung bei', async () => {

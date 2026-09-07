@@ -13,7 +13,6 @@ import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View }
 
 import {
   isAppleAuthAvailable,
-  isGoogleConfigured,
   signInWithApple,
   signInWithGoogle,
   type SocialAuthResult,
@@ -30,8 +29,6 @@ export function SocialAuthButtons({
   const [busy, setBusy] = useState<Provider | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const googleAvailable = isGoogleConfigured();
 
   useEffect(() => {
     isAppleAuthAvailable().then(setAppleAvailable);
@@ -54,13 +51,9 @@ export function SocialAuthButtons({
   return (
     <View style={styles.wrap}>
       <TouchableOpacity
-        style={[
-          styles.button,
-          styles.googleButton,
-          (!!busy || !googleAvailable) && styles.disabled,
-        ]}
+        style={[styles.button, styles.googleButton, !!busy && styles.disabled]}
         onPress={() => run('google', signInWithGoogle)}
-        disabled={!!busy || !googleAvailable}
+        disabled={!!busy}
         activeOpacity={0.85}
       >
         {busy === 'google' ? (

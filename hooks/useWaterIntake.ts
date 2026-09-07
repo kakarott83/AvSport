@@ -29,7 +29,7 @@ export interface WaterIntakeResult {
   consumedPercent: number;
   hasIntakeToday: boolean;
   loading: boolean;
-  addIntake: (ml: number) => Promise<void>;
+  addIntake: (ml: number) => Promise<boolean>;
   removeLastIntake: () => Promise<void>;
 }
 
@@ -105,16 +105,16 @@ export function useWaterIntake(): WaterIntakeResult {
     }, [fetchData]),
   );
 
-  const addIntake = useCallback(async (ml: number) => {
+  const addIntake = useCallback(async (ml: number): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return false;
 
     const { data, error } = await supabase
       .from('water_intakes')
       .insert({ user_id: user.id, ml })
       .select('id, ml')
       .single();
-    if (error || !data) { console.warn('[useWaterIntake] addIntake failed:', error?.message); return; }
+    if (error || !data) { console.warn('[useWaterIntake] addIntake failed:', error?.message); return false; }
 
     const previousConsumed = intakes.reduce((sum, r) => sum + r.ml, 0);
     const nextIntakes = [...intakes, data as IntakeRow];
@@ -126,6 +126,7 @@ export function useWaterIntake(): WaterIntakeResult {
     if (crossedGoal) {
       void sendGoalReachedNotification({ goalMl });
     }
+    return true;
   }, [intakes, goalMl]);
 
   const removeLastIntake = useCallback(async () => {

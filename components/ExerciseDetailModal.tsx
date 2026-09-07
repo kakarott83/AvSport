@@ -6,20 +6,23 @@
  * Wird sowohl im aktiven Training (active-workout.tsx) als auch im
  * Plan-Editor (create-plan.tsx) verwendet.
  *
- * Ergänzend wird beim Öffnen ein passendes Übungsbild aus der offenen
- * wger.de-Datenbank nachgeladen (services/wger/exerciseImage.ts) — ohne
- * Treffer bleibt der Bildbereich einfach leer.
+ * Ergänzend wird beim Öffnen die Bewegung als kleine Animation gezeigt: die
+ * zwei Positions-Frames aus der offenen free-exercise-db
+ * (services/exerciseDb/exerciseImage.ts, gematcht über den englischen Namen),
+ * durchgewechselt von <ExerciseAnimation>. Ohne Treffer bleibt der Bereich leer.
  */
 
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 
-import { fetchExerciseImage } from '@/services/wger/exerciseImage';
+import { ExerciseAnimation } from '@/components/ExerciseAnimation';
+import { fetchExerciseFrames } from '@/services/exerciseDb/exerciseImage';
 
 export type ExerciseDetailData = {
   exercise_name: string;
+  name_en?:         string | null;
   short?:            string | null;
   detail_markdown?:  string | null;
   instructions?:     string[] | null;
@@ -40,26 +43,27 @@ export function ExerciseDetailModal({
   onClose: () => void;
 }) {
   const exerciseName = exercise?.exercise_name ?? null;
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(false);
+  const exerciseNameEn = exercise?.name_en ?? null;
+  const [frames, setFrames] = useState<string[]>([]);
+  const [framesLoading, setFramesLoading] = useState(false);
 
   useEffect(() => {
     if (!visible || !exerciseName) {
-      setImageUrl(null);
-      setImageLoading(false);
+      setFrames([]);
+      setFramesLoading(false);
       return;
     }
 
     let cancelled = false;
-    setImageUrl(null);
-    setImageLoading(true);
+    setFrames([]);
+    setFramesLoading(true);
 
-    fetchExerciseImage(exerciseName)
-      .then((url) => { if (!cancelled) setImageUrl(url); })
-      .finally(() => { if (!cancelled) setImageLoading(false); });
+    fetchExerciseFrames(exerciseNameEn, exerciseName)
+      .then((f) => { if (!cancelled) setFrames(f); })
+      .finally(() => { if (!cancelled) setFramesLoading(false); });
 
     return () => { cancelled = true; };
-  }, [visible, exerciseName]);
+  }, [visible, exerciseName, exerciseNameEn]);
 
   if (!exercise) return null;
 
@@ -80,14 +84,12 @@ export function ExerciseDetailModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-            {imageLoading && (
+            {framesLoading && (
               <View style={styles.imageBox}>
                 <ActivityIndicator color="#0a7ea4" />
               </View>
             )}
-            {!imageLoading && !!imageUrl && (
-              <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="contain" />
-            )}
+            {!framesLoading && frames.length > 0 && <ExerciseAnimation frames={frames} />}
 
             {!!exercise.short && <Text style={styles.short}>{exercise.short}</Text>}
 
@@ -162,7 +164,6 @@ const styles = StyleSheet.create({
   title:      { color: '#fff', fontSize: 17, fontWeight: '700', flex: 1, marginRight: 12 },
   closeText:  { color: '#888', fontSize: 18 },
   body:       { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
-  image:      { width: '100%', height: 190, borderRadius: 12, backgroundColor: '#fff', marginBottom: 16 },
   imageBox: {
     width: '100%', height: 190, borderRadius: 12, backgroundColor: '#222',
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,

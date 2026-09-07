@@ -66,21 +66,37 @@ interface LogData {
 async function getCurrentUser(): Promise<{
   id: string | null;
   email: string | null;
+  isPremium: boolean;
 }> {
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    return {
-      id: user?.id ?? null,
-      email: user?.email ?? null,
-    };
+
+    if (!user) return { id: null, email: null, isPremium: false };
+
+    // Premium-Status wird vom RevenueCat-Webhook in profiles.is_premium gesetzt
+    // (supabase/functions/revenuecat-webhook). Fehlt die Spalte / schlägt die
+    // Abfrage fehl, gilt der User als nicht-premium (Limit greift).
+    let isPremium = false;
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_premium")
+        .eq("id", user.id)
+        .maybeSingle();
+      isPremium = data?.is_premium === true;
+    } catch (premiumErr) {
+      console.warn("[Gemini] Premium-Check fehlgeschlagen:", premiumErr);
+    }
+
+    return { id: user.id, email: user.email ?? null, isPremium };
   } catch (authErr) {
     console.warn(
       "[Gemini] Auth-Fehler beim Ermitteln der User-Daten:",
       authErr,
     );
-    return { id: null, email: null };
+    return { id: null, email: null, isPremium: false };
   }
 }
 
@@ -94,8 +110,10 @@ function startOfTodayIso(): string {
 async function assertUnderDailyLimit(
   userId: string,
   email?: string | null,
+  isPremium = false,
 ): Promise<void> {
-  if (isUnlimitedPromptUser(email)) {
+  // Premium-Abonnenten (RevenueCat) und die Allowlist haben kein Tageslimit.
+  if (isPremium || isUnlimitedPromptUser(email)) {
     return;
   }
 
@@ -163,7 +181,7 @@ export async function geminiRequest(parts: GeminiPart[]): Promise<string> {
 
   const currentUser = await getCurrentUser();
   if (currentUser.id) {
-    await assertUnderDailyLimit(currentUser.id, currentUser.email);
+    await assertUnderDailyLimit(currentUser.id, currentUser.email, currentUser.isPremium);
   }
 
   let usage: UsageMetadata | null = null;

@@ -5,6 +5,7 @@
  */
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +20,7 @@ import {
 } from 'react-native';
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 
+import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
 import { generateAiPlan, saveAiPlan } from '@/services/gemini/aiTrainingService';
 import { FITNESS_LEVEL_LABEL } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
@@ -173,6 +175,7 @@ type Props = {
 };
 
 export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
+  const router = useRouter();
   const [step,          setStep]          = useState<Step>('goal');
   const [goal,          setGoal]          = useState<FitnessGoal | null>(null);
   const [environment,   setEnvironment]   = useState<Environment | null>(null);
@@ -296,6 +299,12 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
         if (user) void supabase.from('profiles').update({ fitness_level: level }).eq('id', user.id);
       }
     } catch (e: any) {
+      if (isDailyLimitError(e)) {
+        setStep('restrictions');
+        onClose();
+        openPaywall(router);
+        return;
+      }
       setError(e?.message || 'Plan konnte nicht generiert werden. Bitte versuche es erneut.');
       setStep('restrictions');
     }

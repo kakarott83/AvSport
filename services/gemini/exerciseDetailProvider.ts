@@ -16,6 +16,8 @@ import type { GeneratedDay, GeneratedExercise } from '@/types/workout';
 // ─── Öffentliche Typen ──────────────────────────────────────────────────────
 
 export interface ExerciseDetail {
+  /** Gängiger englischer Übungsname für die Bildsuche, z. B. "Barbell Squat". */
+  name_en:          string;
   short:            string;
   detail_markdown:  string;
   instructions:     string[];
@@ -59,6 +61,7 @@ Aufgabe: Für jede Übung liefere nur JSON gemäß diesem Schema (keine erläute
   "exercises": [
     {
       "id": string,
+      "name_en": string,              // gängiger englischer Übungsname, z. B. "Barbell Squat", "Push-Up", "Romanian Deadlift"
       "short": string,                // Einzeiler, max. 120 Zeichen
       "detail_markdown": string,      // Markdown, genau 1 kurzer Absatz (Wirkung + Technik) + Liste mit genau 2 Stichpunkten: Haltung, Häufiger Fehler
       "instructions": [string],       // 3–4 Schritte, kurze Sätze (6–10 Wörter)
@@ -70,7 +73,8 @@ Aufgabe: Für jede Übung liefere nur JSON gemäß diesem Schema (keine erläute
 }
 
 Regeln:
-- Alle Textfelder: Deutsch, knapp und ohne Füllwörter.
+- Alle Textfelder außer "name_en": Deutsch, knapp und ohne Füllwörter.
+- "name_en": nur der englische Übungsname, so wie er in einer Übungsdatenbank stünde (kein Satz, keine Erklärung).
 - "short" ≤ 120 Zeichen.
 - "detail_markdown": 1 Absatz mit 2 Sätzen (Satz 1 = Wirkung, Satz 2 = Technik); danach genau 2 Bullet-Points (Haltung, Häufiger Fehler).
 - "instructions": geordnet, 3–4 Items, klar und knapp.
@@ -87,6 +91,7 @@ ${JSON.stringify(input)}`;
 
 interface RawDetail {
   id?:               unknown;
+  name_en?:          unknown;
   short?:             unknown;
   detail_markdown?:   unknown;
   instructions?:      unknown;
@@ -120,6 +125,8 @@ function validateDetail(raw: RawDetail): ExerciseDetail | null {
   }
 
   return {
+    // name_en ist optional — fehlt es, greift im UI der deutsche Name für die Bildsuche.
+    name_en:         isNonEmptyString(raw.name_en) ? raw.name_en.trim() : '',
     short:           raw.short.trim(),
     detail_markdown: raw.detail_markdown.trim(),
     instructions:    raw.instructions.map((s) => s.trim()),
@@ -155,6 +162,7 @@ function buildFallbackDetail(exercise: GeneratedExercise): ExerciseDetail {
     : `${exercise.sets} × ${exercise.reps} Wiederholungen`;
 
   return {
+    name_en: '',
     short: `${name} kräftigt ${muscle} — ${dosage}, ${equip}.`.slice(0, 120),
     detail_markdown:
       `${name} trainiert vorrangig ${muscle}. ` +

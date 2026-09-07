@@ -94,6 +94,16 @@ export default function AppLayout() {
           headerShadowVisible: false,
         }}
       />
+      <Stack.Screen
+        name="paywall"
+        options={{
+          presentation: 'modal',
+          title: 'AvoraSport Premium',
+          headerStyle: { backgroundColor: '#121212' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }}
+      />
     </Stack>
   );
 }

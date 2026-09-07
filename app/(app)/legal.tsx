@@ -57,6 +57,26 @@ export default function LegalScreen() {
         </Text>
       </Section>
 
+      {/* ── Abonnement ── */}
+      <Section title="AvoraSport Premium (Abonnement)">
+        <Text style={styles.body}>
+          AvoraSport Premium wird als automatisch verlängerndes Abonnement angeboten
+          (monatlich oder jährlich). Der konkrete Preis wird vor dem Kauf im
+          App Store bzw. Google Play angezeigt.
+        </Text>
+        <Text style={styles.body}>
+          Die Zahlung wird bei Kaufbestätigung über deinen App-Store-Account abgebucht.
+          Das Abo verlängert sich automatisch um den gewählten Zeitraum, sofern es nicht
+          spätestens 24 Stunden vor Ablauf der laufenden Periode gekündigt wird. Die
+          Verwaltung und Kündigung des Abos erfolgt in den Account-Einstellungen des
+          jeweiligen Stores.
+        </Text>
+        <Text style={styles.body}>
+          Es gelten die Standard-Nutzungsbedingungen für Apple-Media-Dienste (EULA)
+          bzw. die Google-Play-Nutzungsbedingungen sowie die Datenschutzhinweise dieser App.
+        </Text>
+      </Section>
+
       {/* ── Allgemein ── */}
       <Section title="Allgemeiner Hinweis">
         <Text style={styles.body}>

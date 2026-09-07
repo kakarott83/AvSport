@@ -93,6 +93,7 @@ export async function saveAiPlan(
           target_duration:   ex.target_duration,
           target_weight_kg:  ex.target_weight_kg,
           rest_seconds:      ex.rest_seconds,
+          name_en:           ex.name_en ?? null,
           short:             ex.short ?? null,
           detail_markdown:   ex.detail_markdown ?? null,
           instructions:      ex.instructions ?? null,

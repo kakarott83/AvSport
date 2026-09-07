@@ -31,6 +31,7 @@ type PlanExercise = {
   target_duration: number | null;
   target_weight_kg: number | null;
   rest_seconds: number | null;
+  name_en: string | null;
   short: string | null;
   detail_markdown: string | null;
   instructions: string[] | null;
@@ -232,7 +233,7 @@ export default function ActiveWorkoutScreen() {
       // Übungen laden — bei Split-Plänen nur die des gewählten Tages
       let query = supabase
         .from('plan_exercises')
-        .select('id, exercise_name, description, muscle_group, equipment_type, sets, reps, target_duration, target_weight_kg, rest_seconds, short, detail_markdown, instructions, modifications, safety, tips')
+        .select('id, exercise_name, description, muscle_group, equipment_type, sets, reps, target_duration, target_weight_kg, rest_seconds, name_en, short, detail_markdown, instructions, modifications, safety, tips')
         .eq('plan_id', planId)
         .order('order_index');
       if (resolvedDayId) query = query.eq('day_id', resolvedDayId);

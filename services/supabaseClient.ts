@@ -13,8 +13,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    // In React Native gibt es keine URL, aus der eine Session gelesen werden
-    // müsste – der OAuth-Rücklauf läuft über signInWithIdToken.
+    // PKCE: nötig für den Google-OAuth-Browserflow (signInWithOAuth →
+    // exchangeCodeForSession) in lib/socialAuth.ts.
+    flowType: "pkce",
+    // In React Native gibt es keine URL, aus der eine Session automatisch
+    // gelesen werden müsste – den OAuth-Rücklauf werten wir selbst aus.
     detectSessionInUrl: false,
   },
 });

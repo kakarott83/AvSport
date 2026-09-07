@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 
+import { AiPlanGeneratorModal } from '@/components/AiPlanGeneratorModal';
 import { resolveDayIndexForDate } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
 
@@ -27,6 +28,7 @@ export default function PlansScreen() {
 
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
 
   async function loadPlans() {
     setLoading(true);
@@ -106,17 +108,34 @@ export default function PlansScreen() {
 
   return (
     <View style={styles.container}>
+      <AiPlanGeneratorModal
+        visible={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onSaved={() => {
+          setAiModalOpen(false);
+          loadPlans();
+        }}
+      />
+
       <View style={styles.header}>
         <Text style={styles.title}>
           {isSelectMode ? 'Plan wählen' : 'Trainingspläne'}
         </Text>
         {!isSelectMode && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push('/create-plan')}
-          >
-            <Text style={styles.addButtonText}>+ Neu</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.aiButton}
+              onPress={() => setAiModalOpen(true)}
+            >
+              <Text style={styles.aiButtonText}>✨ KI-Plan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => router.push('/create-plan')}
+            >
+              <Text style={styles.addButtonText}>+ Neu</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -126,12 +145,20 @@ export default function PlansScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Noch keine Pläne vorhanden.</Text>
           {!isSelectMode && (
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => router.push('/create-plan')}
-            >
-              <Text style={styles.createButtonText}>Ersten Plan erstellen</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/create-plan')}
+              >
+                <Text style={styles.createButtonText}>Ersten Plan erstellen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.createButtonAi}
+                onPress={() => setAiModalOpen(true)}
+              >
+                <Text style={styles.createButtonText}>✨ Plan mit KI erstellen</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       ) : (
@@ -190,6 +217,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#fff',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   addButton: {
     backgroundColor: '#0a7ea4',
     borderRadius: 10,
@@ -200,6 +232,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  aiButton: {
+    backgroundColor: '#1e1e1e',
+    borderColor: '#0a7ea4',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  aiButtonText: {
+    color: '#0a7ea4',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  createButtonAi: {
+    backgroundColor: '#1e1e1e',
+    borderColor: '#0a7ea4',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
   },
   empty: {
     flex: 1,

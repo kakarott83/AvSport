@@ -2,108 +2,83 @@
 
 Der Code ist fertig (`lib/socialAuth.ts`, `components/SocialAuthButtons.tsx`, eingebunden
 in `app/(auth)/login.tsx` + `register.tsx`). Es fehlen nur noch die externen
-Zugangsdaten. Ohne sie zeigt der Google-Button einen Hinweis statt sich anzumelden.
+Zugangsdaten.
+
+- **Google:** Supabase-OAuth-Browserflow (`signInWithOAuth` + PKCE +
+  `WebBrowser.openAuthSessionAsync` + `exchangeCodeForSession`). Kein natives SDK,
+  keine Client-IDs in der App – alles im Supabase-Dashboard.
+- **Apple:** nativ über `expo-apple-authentication` + `signInWithIdToken` (nur iOS).
+
+Projekt-Ref: `assmvtdzjegddyqqaacx` → Callback-Basis
+`https://assmvtdzjegddyqqaacx.supabase.co/auth/v1/callback`.
+App-Deep-Link: `avorasport://auth-callback`.
 
 ---
 
-## 1. Supabase-Dashboard
+## 1. Google Cloud Console → APIs & Dienste → Anmeldedaten
 
-**Authentication → Providers**
+**Genau ein** OAuth-2.0-Client vom Typ **Web**:
 
-### Google
+- **Autorisierte Weiterleitungs-URIs:**
+  `https://assmvtdzjegddyqqaacx.supabase.co/auth/v1/callback`
+- Client-ID + Client-Secret notieren → kommen ins Supabase-Dashboard (Schritt 2).
+
+Kein Android-/iOS-Client, kein SHA-1, kein `google-services.json`, keine `.env`-Werte.
+Den OAuth-Consent-Screen (App-Name, Support-Mail, Scopes `email`, `profile`, `openid`)
+einmalig ausfüllen und ggf. veröffentlichen.
+
+---
+
+## 2. Supabase-Dashboard
+
+**Authentication → Providers → Google**
 1. Provider **Google** aktivieren.
-2. **Client ID (for OAuth)** = die *Web*-Client-ID aus Google Cloud (Schritt 2).
-3. **Client Secret** = das zugehörige Web-Secret.
-4. Unter **Authorized Client IDs** zusätzlich die **iOS**- und **Android**-Client-ID
-   eintragen (kommagetrennt) – nötig, weil die native App mit diesen IDs Tokens holt.
+2. **Client ID** + **Client Secret** = die Werte aus Schritt 1.
+3. „Skip nonce check" aus lassen.
 
-### Apple
+**Authentication → URL Configuration → Redirect URLs**
+- `avorasport://auth-callback` hinzufügen (die App springt nach der Anmeldung hierher zurück).
+- Für Tests im Expo-Dev-Server ggf. zusätzlich die von `expo start` angezeigte
+  `exp://…/--/auth-callback`-URL.
+
+**Authentication → Providers → Apple**
 1. Provider **Apple** aktivieren.
-2. **Client IDs** = die *Services ID* (Schritt 3, z. B. `com.avorasport.app.signin`)
+2. **Client IDs** = *Services ID* (Schritt 3, z. B. `com.avorasport.app.signin`)
    **und** die App-Bundle-ID `com.avorasport.app` (kommagetrennt).
-3. **Secret Key** = das aus Team-ID / Key-ID / `.p8`-Datei generierte JWT
+3. **Secret Key** = das aus Team-ID / Key-ID / `.p8` generierte JWT
    (Supabase-Doku „Generate a Sign in with Apple client secret", gültig max. 6 Monate).
-
-**Authentication → URL Configuration**
-- Bei rein nativer Anmeldung (unser Fall) sind keine Redirect-URLs nötig.
-
----
-
-## 2. Google Cloud Console  → APIs & Dienste → Anmeldedaten
-
-„OAuth 2.0-Client-ID erstellen" – **drei** Clients:
-
-| Typ     | Angaben |
-|---------|---------|
-| **Web** | Keine Redirect-URI nötig für native Nutzung; diese ID/Secret kommen ins Supabase-Dashboard **und** in `.env` als `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. |
-| **Android** | Paketname `com.avorasport.app` + SHA-1-Fingerprint. Debug-SHA-1: `keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android` (Passwort `android`). Für den Release-/Play-Build den SHA-1 aus der Play Console (App-Signatur) ergänzen. |
-| **iOS** | Bundle-ID `com.avorasport.app`. Diese ID kommt in `.env` als `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` **und** – als „reversed client id" – in `app.json`. |
-
-`.env`:
-```
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=1234567890-abcd....apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=1234567890-efgh....apps.googleusercontent.com
-```
-
-`app.json` (Platzhalter ersetzen – „reversed" iOS client id):
-```json
-["@react-native-google-signin/google-signin", { "iosUrlScheme": "com.googleusercontent.apps.1234567890-efgh" }]
-```
-
-> Kein `google-services.json` nötig – die Android-Anmeldung läuft über die
-> Web-Client-ID (`configure({ webClientId })`).
 
 ---
 
 ## 3. Apple Developer  (nur für iOS-Builds relevant)
 
 1. **Certificates, IDs & Profiles → Identifiers**
-   - Beim App-ID `com.avorasport.app` die Capability **Sign In with Apple** aktivieren.
+   - Bei der App-ID `com.avorasport.app` die Capability **Sign In with Apple** aktivieren.
    - Neue **Services ID** anlegen (z. B. `com.avorasport.app.signin`), „Sign In with Apple"
-     konfigurieren, Domain + Return-URL:
-     `https://<PROJECT-REF>.supabase.co/auth/v1/callback`
+     konfigurieren, Return-URL
+     `https://assmvtdzjegddyqqaacx.supabase.co/auth/v1/callback`.
 2. **Keys** → neuer Key mit „Sign In with Apple" → `.p8` herunterladen, **Key ID** notieren.
 3. **Team ID** (oben rechts im Developer-Portal).
 4. Aus Team ID + Key ID + `.p8` das Client-Secret-JWT erzeugen (Supabase-Doku) → ins
    Supabase-Dashboard (Apple-Provider → Secret Key).
 
 `app.json` hat bereits `ios.usesAppleSignIn: true` und das Plugin
-`expo-apple-authentication`.
-
-Apple-Login erscheint nur auf iOS-Geräten (Android blendet den Button aus).
+`expo-apple-authentication`. Apple-Login erscheint nur auf iOS-Geräten.
 
 ---
 
 ## 4. Build
 
-Nach dem Setzen der `.env`-Werte und `app.json`:
+Der Google-Wechsel entfernt ein natives Modul (`@react-native-google-signin`),
+daher ist ein neuer Build nötig:
 ```
-npx expo run:android     # bzw. eas build für iOS
+eas build --profile development --platform android   # bzw. ios
 ```
-Ein reiner JS-Reload reicht nicht – die Client-IDs werden zur Buildzeit eingebettet.
-
----
-
-## Bekannter kosmetischer Fehler in VS Code
-
-Die Expo-Erweiterung markiert in `app.json` die `@react-native-google-signin/google-signin`-
-Zeile mit `ERR_MODULE_NOT_FOUND` (`.../lib/module/signIn/GoogleSignin`). Ursache: Das
-Paket (v16) liefert nur einen ESM-Build mit teils fehlenden `.js`-Endungen; der
-Sprachdienst der Erweiterung lädt es mit Nodes striktem ESM-Resolver.
-
-**Ohne Auswirkung** – verifiziert:
-- `npx expo config --type introspect` → exit 0, Plugin wird angewandt
-- `npx expo run:android` → BUILD SUCCESSFUL, `android/.../autolinking.json` enthält `google-signin`
-- App läuft, `tsc` und ESLint sauber
-
-**Behoben** über `.vscode/settings.json` → `"expo.appManifest.pluginValidation": false`
-(schaltet die Plugin-Validierung der Erweiterung ab; echte Plugin-Fehler zeigt der
-Build ohnehin). Nicht per `patch-package` fixen – ein `.js`-Sibling für die
-`*NativeComponent.ts`-Codegen-Spec bringt den Metro-Bundler zum Absturz
-(„Could not find component config for native component").
+Ein reiner JS-Reload reicht nicht. Danach:
 
 ## Test-Checkliste
-- [ ] Google-Button auf Android → Konto-Auswahl → landet im Onboarding (neuer Nutzer) bzw. in den Tabs.
-- [ ] Zweiter Login mit demselben Google-Konto → direkt in die App, kein Onboarding.
+- [ ] „Mit Google fortfahren" → System-Browser/Custom-Tab mit Google-Kontoauswahl
+      → zurück in die App → neuer Nutzer im Onboarding, bestehender in den Tabs.
+- [ ] Browser abbrechen (zurück/schließen) → keine Fehlermeldung, Button wieder aktiv.
 - [ ] iOS: Apple-Button sichtbar, Face/Touch-ID-Dialog, danach Onboarding.
-- [ ] `supabase.auth.getUser()` nach Neustart der App → Session bleibt erhalten (AsyncStorage).
+- [ ] `supabase.auth.getUser()` nach App-Neustart → Session bleibt (AsyncStorage).

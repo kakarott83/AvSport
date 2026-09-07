@@ -35,6 +35,7 @@ type ExerciseRow = {
   description:      string | null;
   muscle_group:     string | null;
   equipment_type:   string | null;
+  name_en:          string | null;
   short:            string | null;
   detail_markdown:  string | null;
   instructions:     string[] | null;
@@ -60,6 +61,7 @@ function newRow(): ExerciseRow {
     description: null,
     muscle_group: null,
     equipment_type: null,
+    name_en: null,
     short: null,
     detail_markdown: null,
     instructions: null,
@@ -215,7 +217,7 @@ export default function CreatePlanScreen() {
           .from('plan_exercises')
           .select(
             'id, exercise_name, sets, reps, target_duration, target_weight_kg, ' +
-            'description, muscle_group, equipment_type, short, detail_markdown, instructions, modifications, safety, tips, video_url',
+            'description, muscle_group, equipment_type, name_en, short, detail_markdown, instructions, modifications, safety, tips, video_url',
           )
           .eq('plan_id', planId);
 
@@ -239,6 +241,7 @@ export default function CreatePlanScreen() {
               description: e.description ?? null,
               muscle_group: e.muscle_group ?? null,
               equipment_type: e.equipment_type ?? null,
+              name_en: e.name_en ?? null,
               short: e.short ?? null,
               detail_markdown: e.detail_markdown ?? null,
               instructions: e.instructions ?? null,
@@ -335,6 +338,7 @@ export default function CreatePlanScreen() {
       // Übrige KI-Felder unverändert zurückschreiben, damit sie beim Bearbeiten nicht verloren gehen
       muscle_group: e.muscle_group,
       equipment_type: e.equipment_type,
+      name_en: e.name_en,
       short: e.short,
       detail_markdown: e.detail_markdown,
       instructions: e.instructions,
@@ -619,6 +623,7 @@ export default function CreatePlanScreen() {
         visible={!!detailRow}
         exercise={detailRow ? {
           exercise_name:   detailRow.name,
+          name_en:         detailRow.name_en,
           short:           detailRow.short,
           detail_markdown: detailRow.detail_markdown,
           instructions:    detailRow.instructions,

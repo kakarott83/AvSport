@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 
 import { AnimatedLogo } from "@/components/AnimatedLogo";
+import { PremiumProvider } from "@/hooks/usePremium";
+import { configurePurchases, identifyUser, resetUser } from "@/lib/purchases";
 import { supabase } from "@/services/supabaseClient";
 
 export default function RootLayout() {
@@ -13,13 +15,23 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
+    configurePurchases();
+
     supabase.auth
       .getSession()
-      .then(({ data: { session } }) => setSession(session))
+      .then(({ data: { session } }) => {
+        setSession(session);
+        if (session?.user) void identifyUser(session.user.id);
+      })
       .catch(() => setSession(null));
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (session?.user) {
+        void identifyUser(session.user.id);
+      } else if (event === "SIGNED_OUT") {
+        void resetUser();
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -47,7 +59,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <PremiumProvider>
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
@@ -55,6 +67,6 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
       </Stack>
       <StatusBar style="light" />
-    </>
+    </PremiumProvider>
   );
 }
