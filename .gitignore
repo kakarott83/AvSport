@@ -48,3 +48,6 @@ app-example
 
 # MCP config (contains API tokens)
 .mcp.json
+
+# Claude Code local settings (can contain tokens in allowed-command strings)
+.claude/settings.local.json
