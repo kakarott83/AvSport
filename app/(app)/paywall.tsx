@@ -15,34 +15,27 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
-import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
+import type { PurchasesOffering } from 'react-native-purchases';
 
 import { usePremium } from '@/hooks/usePremium';
 import {
-  getCurrentOffering, isPurchasesConfigured, purchasePackage, PurchaseCancelledError, restorePurchases,
+  describePackage, getCurrentOffering, isPurchasesConfigured, purchasePackage, PurchaseCancelledError, restorePurchases,
 } from '@/lib/purchases';
+import { estimateMinMonthlyPremiumRequests } from '@/services/gemini/client';
 
 const C_BG = '#121212';
 const C_CARD = '#1e1e1e';
 const C_ACCENT = '#00E5FF';
 
+// Nicht "unbegrenzt" — Premium hat einen monatlichen Kosten-Deckel statt des
+// täglichen Limits für kostenlose Accounts (PREMIUM_MONTHLY_COST_CAP_EUR in
+// services/gemini/client.ts). Beides in einem Satz, statt getrennter Zeilen
+// ("kein Limit" + "bis zu X/Monat"), die sich sonst widersprüchlich lesen.
 const BENEFITS = [
-  'Unbegrenzte KI-Trainingspläne',
-  'Unbegrenzter Kalorien-Scanner',
-  'Kein tägliches KI-Limit mehr',
+  `Kein tägliches KI-Limit — bis zu ${estimateMinMonthlyPremiumRequests()}+ Anfragen im Monat`,
+  'KI-Trainingspläne & Kalorien-Scanner',
   'Alle künftigen Premium-Funktionen',
 ];
-
-function packageLabel(pkg: PurchasesPackage): { title: string; sub: string } {
-  switch (pkg.packageType) {
-    case 'ANNUAL':
-      return { title: 'Jährlich', sub: `${pkg.product.priceString} / Jahr` };
-    case 'MONTHLY':
-      return { title: 'Monatlich', sub: `${pkg.product.priceString} / Monat` };
-    default:
-      return { title: pkg.product.title || pkg.identifier, sub: pkg.product.priceString };
-  }
-}
 
 export default function PaywallScreen() {
   const router = useRouter();
@@ -141,7 +134,7 @@ export default function PaywallScreen() {
         ) : (
           <View style={styles.packages}>
             {packages.map((pkg) => {
-              const { title, sub } = packageLabel(pkg);
+              const { title, sub } = describePackage(pkg);
               const active = pkg.identifier === selected;
               const isAnnual = pkg.packageType === 'ANNUAL';
               return (

@@ -12,9 +12,46 @@ import { supabase } from "@/services/supabaseClient";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent`;
 
-/** Maximale Anzahl Gemini-Anfragen pro User und Tag. */
+/** Maximale Anzahl Gemini-Anfragen pro User und Tag (kostenlose Accounts). */
 const DAILY_REQUEST_LIMIT = 10;
 const UNLIMITED_PROMPT_EMAILS = new Set(["av@test.de"]);
+
+/**
+ * USD-Preise pro 1M Tokens für gemini-2.5-flash.
+ * Quelle: https://ai.google.dev/gemini-api/docs/pricing (Stand: 09/2026).
+ * Bei einem Modell- oder Preiswechsel hier nachziehen — betrifft sowohl die
+ * Kostenschätzung in persistLog() als auch das Premium-Kostenlimit unten.
+ */
+const PRICE_PER_1M_INPUT_TOKENS_USD = 0.3; // Text/Bild/Video
+const PRICE_PER_1M_OUTPUT_TOKENS_USD = 2.5; // inkl. Thinking-Tokens
+
+/**
+ * Monatliches KI-Kostenlimit für Premium-Abonnenten. Gemini rechnet in USD ab;
+ * statt eines Live-Wechselkurses wird hier bewusst konservativ 1 EUR ≈ 1 USD
+ * angenommen (EUR war zuletzt tendenziell mehr wert als USD) — das Limit
+ * greift dadurch im Zweifel etwas zu früh statt zu spät, echte 10 € Kosten
+ * werden also nie überschritten.
+ */
+const PREMIUM_MONTHLY_COST_CAP_EUR = 10;
+const PREMIUM_MONTHLY_COST_CAP_USD = PREMIUM_MONTHLY_COST_CAP_EUR;
+
+/**
+ * Planungsannahme für die teuerste realistische Einzelanfrage — bewusst über
+ * dem bisher in ai_logs beobachteten Maximum (~0,0166 $ für eine große
+ * Trainingsplan-Generierung), damit auch künftig etwas größere Prompts/Bilder
+ * die Garantie nicht unterlaufen.
+ */
+const WORST_CASE_COST_PER_REQUEST_USD = 0.02;
+
+/**
+ * Konservative Untergrenze, wie viele Anfragen ein Premium-User pro Monat
+ * mindestens hat, bevor der Kosten-Deckel greift — für Paywall-Texte o. Ä.
+ * Reale Nutzung liegt i. d. R. deutlich höher (Durchschnittskosten pro
+ * Anfrage lagen zuletzt bei ~0,0017 $, also eher ~5.800 Anfragen/Monat).
+ */
+export function estimateMinMonthlyPremiumRequests(): number {
+  return Math.floor(PREMIUM_MONTHLY_COST_CAP_USD / WORST_CASE_COST_PER_REQUEST_USD);
+}
 
 function isUnlimitedPromptUser(email?: string | null): boolean {
   return !!email && UNLIMITED_PROMPT_EMAILS.has(email.trim().toLowerCase());
@@ -34,6 +71,17 @@ export class GeminiDailyLimitError extends Error {
         "Bitte versuche es morgen erneut.",
     );
     this.name = "GeminiDailyLimitError";
+  }
+}
+
+/** Wird geworfen, wenn ein Premium-User sein monatliches KI-Kostenlimit erreicht hat. */
+export class GeminiCostLimitError extends Error {
+  constructor() {
+    super(
+      `Du hast dein monatliches KI-Kostenlimit von ${PREMIUM_MONTHLY_COST_CAP_EUR}€ erreicht. ` +
+        "Das Limit wird zu Monatsbeginn zurückgesetzt.",
+    );
+    this.name = "GeminiCostLimitError";
   }
 }
 
@@ -59,6 +107,15 @@ interface LogData {
   completion_tokens: number | null;
   total_tokens: number | null;
   error_message: string | null;
+  cost_usd: number;
+}
+
+/** Schätzt die USD-Kosten einer Anfrage aus der Token-Nutzung (siehe Preise oben). */
+function estimateCostUsd(usage: UsageMetadata | null): number {
+  if (!usage) return 0;
+  const inputCost = ((usage.promptTokenCount ?? 0) / 1_000_000) * PRICE_PER_1M_INPUT_TOKENS_USD;
+  const outputCost = ((usage.candidatesTokenCount ?? 0) / 1_000_000) * PRICE_PER_1M_OUTPUT_TOKENS_USD;
+  return inputCost + outputCost;
 }
 
 // ─── Tageslimit ───────────────────────────────────────────────────────────────
@@ -106,17 +163,15 @@ function startOfTodayIso(): string {
   return start.toISOString();
 }
 
-/** Wirft GeminiDailyLimitError, wenn der User heute bereits DAILY_REQUEST_LIMIT Anfragen gemacht hat. */
-async function assertUnderDailyLimit(
-  userId: string,
-  email?: string | null,
-  isPremium = false,
-): Promise<void> {
-  // Premium-Abonnenten (RevenueCat) und die Allowlist haben kein Tageslimit.
-  if (isPremium || isUnlimitedPromptUser(email)) {
-    return;
-  }
+function startOfMonthIso(): string {
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  return start.toISOString();
+}
 
+/** Wirft GeminiDailyLimitError, wenn der User heute bereits DAILY_REQUEST_LIMIT Anfragen gemacht hat. */
+async function assertUnderDailyLimit(userId: string): Promise<void> {
   const { count, error } = await supabase
     .from("ai_logs")
     .select("id", { count: "exact", head: true })
@@ -136,6 +191,51 @@ async function assertUnderDailyLimit(
   }
 }
 
+/**
+ * Wirft GeminiCostLimitError, wenn ein Premium-User diesen Kalendermonat
+ * bereits PREMIUM_MONTHLY_COST_CAP_USD an geschätzten Gemini-Kosten
+ * verursacht hat (Summe von ai_logs.cost_usd, siehe persistLog()).
+ */
+async function assertUnderMonthlyCostCap(userId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("ai_logs")
+    .select("cost_usd")
+    .eq("user_id", userId)
+    .gte("created_at", startOfMonthIso());
+
+  if (error) {
+    console.warn(
+      "[Gemini] Kosten-Limit-Check fehlgeschlagen, Anfrage wird zugelassen:",
+      error,
+    );
+    return;
+  }
+
+  const totalUsd = (data ?? []).reduce((sum, row) => sum + (row.cost_usd ?? 0), 0);
+  if (totalUsd >= PREMIUM_MONTHLY_COST_CAP_USD) {
+    throw new GeminiCostLimitError();
+  }
+}
+
+/**
+ * Wählt die passende Limit-Prüfung für den aktuellen User: die interne
+ * Test-Allowlist hat gar kein Limit, Premium-Abonnenten unterliegen dem
+ * monatlichen Kosten-Deckel statt dem täglichen Anfragelimit für
+ * kostenlose Accounts.
+ */
+async function assertWithinLimits(
+  userId: string,
+  email: string | null,
+  isPremium: boolean,
+): Promise<void> {
+  if (isUnlimitedPromptUser(email)) return;
+  if (isPremium) {
+    await assertUnderMonthlyCostCap(userId);
+    return;
+  }
+  await assertUnderDailyLimit(userId);
+}
+
 // ─── DB-Logging ───────────────────────────────────────────────────────────────
 
 async function persistLog(
@@ -152,6 +252,7 @@ async function persistLog(
     completion_tokens: usage?.candidatesTokenCount ?? null,
     total_tokens: usage?.totalTokenCount ?? null,
     error_message: errorMessage,
+    cost_usd: estimateCostUsd(usage),
   };
 
   console.log("[Gemini] Versuche in ai_logs zu speichern...", logData);
@@ -181,7 +282,7 @@ export async function geminiRequest(parts: GeminiPart[]): Promise<string> {
 
   const currentUser = await getCurrentUser();
   if (currentUser.id) {
-    await assertUnderDailyLimit(currentUser.id, currentUser.email, currentUser.isPremium);
+    await assertWithinLimits(currentUser.id, currentUser.email, currentUser.isPremium);
   }
 
   let usage: UsageMetadata | null = null;

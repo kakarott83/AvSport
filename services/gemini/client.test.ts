@@ -7,7 +7,7 @@
 jest.mock("@/services/supabaseClient");
 
 import { supabase } from "@/services/supabaseClient";
-import { GeminiDailyLimitError, geminiRequest } from "./client";
+import { GeminiCostLimitError, GeminiDailyLimitError, geminiRequest } from "./client";
 
 const GEMINI_RESPONSE = {
   candidates: [{ content: { parts: [{ text: "ok" }] } }],
@@ -18,9 +18,14 @@ const GEMINI_RESPONSE = {
   },
 };
 
-/** Baut die ai_logs-Mock-Chain nach: select().eq().gte() für den Limit-Check, insert() fürs Logging. */
-function mockAiLogsTable(count: number | null, error: unknown = null) {
-  const gte = jest.fn().mockResolvedValue({ count, error });
+/**
+ * Baut die ai_logs-Mock-Chain nach: select().eq().gte() für Tageslimit (count)
+ * UND Kosten-Deckel (rows), insert() fürs Logging. Eine echte Supabase-Antwort
+ * trägt immer beide Felder (count nur befüllt bei { count: 'exact' }), daher
+ * liefert der Mock hier ebenfalls beide.
+ */
+function mockAiLogsTable(count: number | null, error: unknown = null, rows: { cost_usd: number }[] = []) {
+  const gte = jest.fn().mockResolvedValue({ count, error, data: error ? null : rows });
   const eq = jest.fn().mockReturnValue({ gte });
   const select = jest.fn().mockReturnValue({ eq });
   const insert = jest.fn().mockResolvedValue({ error: null });
@@ -36,9 +41,16 @@ function mockProfilesTable(isPremium: boolean) {
 }
 
 /** Router für supabase.from(): ai_logs + profiles + Fallback fürs Logging. */
-function mockFrom(opts: { aiLogsCount?: number | null; aiLogsError?: unknown; isPremium?: boolean }) {
+function mockFrom(opts: {
+  aiLogsCount?: number | null;
+  aiLogsError?: unknown;
+  aiLogsRows?: { cost_usd: number }[];
+  isPremium?: boolean;
+}) {
   return (table: string) => {
-    if (table === "ai_logs") return mockAiLogsTable(opts.aiLogsCount ?? 0, opts.aiLogsError ?? null);
+    if (table === "ai_logs") {
+      return mockAiLogsTable(opts.aiLogsCount ?? 0, opts.aiLogsError ?? null, opts.aiLogsRows ?? []);
+    }
     if (table === "profiles") return mockProfilesTable(opts.isPremium ?? false);
     return { insert: jest.fn().mockResolvedValue({ error: null }) };
   };
@@ -116,7 +128,7 @@ describe("Tageslimit", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("überspringt das Tageslimit für Premium-Abonnenten", async () => {
+  it("Premium-Abonnenten unterliegen nicht dem täglichen Anfragelimit (nur dem Kosten-Deckel)", async () => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
       data: { user: { id: "user-premium", email: "premium@example.com" } },
     });
@@ -144,5 +156,69 @@ describe("Tageslimit", () => {
     const result = await geminiRequest([{ text: "hi" }]);
     expect(result).toBe("ok");
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Monatliches Kostenlimit (Premium)", () => {
+  beforeEach(() => {
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+      data: { user: { id: "user-premium", email: "premium@example.com" } },
+    });
+  });
+
+  it("wirft GeminiCostLimitError wenn diesen Monat bereits ≥10 $ an Kosten angefallen sind", async () => {
+    (supabase.from as jest.Mock).mockImplementation(
+      mockFrom({ isPremium: true, aiLogsRows: [{ cost_usd: 6 }, { cost_usd: 4 }] }),
+    );
+
+    await expect(geminiRequest([{ text: "hi" }])).rejects.toThrow(GeminiCostLimitError);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("lässt die Anfrage durch wenn die bisherigen Kosten unter dem Limit liegen", async () => {
+    (supabase.from as jest.Mock).mockImplementation(
+      mockFrom({ isPremium: true, aiLogsRows: [{ cost_usd: 3 }, { cost_usd: 2.5 }] }),
+    );
+
+    const result = await geminiRequest([{ text: "hi" }]);
+    expect(result).toBe("ok");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("betrifft nur Premium-User, nicht kostenlose Accounts", async () => {
+    (supabase.from as jest.Mock).mockImplementation(
+      mockFrom({ isPremium: false, aiLogsCount: 0, aiLogsRows: [{ cost_usd: 999 }] }),
+    );
+
+    const result = await geminiRequest([{ text: "hi" }]);
+    expect(result).toBe("ok");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("lässt die Anfrage durch wenn die Kosten-Abfrage selbst fehlschlägt (fail open)", async () => {
+    (supabase.from as jest.Mock).mockImplementation(
+      mockFrom({ isPremium: true, aiLogsError: { message: "DB-Fehler" } }),
+    );
+
+    const result = await geminiRequest([{ text: "hi" }]);
+    expect(result).toBe("ok");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("speichert die geschätzten USD-Kosten der Anfrage in ai_logs.cost_usd", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    (supabase.from as jest.Mock).mockImplementation((table: string) =>
+      table === "ai_logs"
+        ? { ...mockAiLogsTable(0), insert }
+        : mockFrom({ isPremium: true })(table),
+    );
+
+    // GEMINI_RESPONSE: 1 Prompt-Token, 1 Completion-Token.
+    // (1/1e6)*0.30 + (1/1e6)*2.50 = 0.0000028
+    await geminiRequest([{ text: "hi" }]);
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_usd: expect.closeTo(0.0000028, 10) }),
+    );
   });
 });

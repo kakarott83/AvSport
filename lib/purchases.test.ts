@@ -6,7 +6,7 @@
  */
 
 type PurchasesMock = typeof import('react-native-purchases') & {
-  __setPremium: (v: boolean) => void;
+  __setPremium: (v: boolean, productIdentifier?: string) => void;
   __emitCustomerInfo: (info: unknown) => void;
   __setOfferings: (o: unknown) => void;
   __reset: () => void;
@@ -135,6 +135,77 @@ describe('addPremiumListener', () => {
     mock.__emitCustomerInfo({ entitlements: { active: { premium: {} } } });
 
     expect(seen).toEqual([true, false]);
+  });
+});
+
+describe('activeProductId', () => {
+  it('liefert die Produkt-ID des aktiven Entitlements', () => {
+    const { mod } = load();
+    expect(mod.activeProductId({
+      entitlements: { active: { premium: { productIdentifier: 'avorasport_premium_monthly' } } },
+    } as never)).toBe('avorasport_premium_monthly');
+  });
+
+  it('liefert null ohne aktives Entitlement', () => {
+    const { mod } = load();
+    expect(mod.activeProductId({ entitlements: { active: {} } } as never)).toBeNull();
+    expect(mod.activeProductId(null)).toBeNull();
+  });
+});
+
+describe('describePackage', () => {
+  it('beschriftet Jahres- und Monatspakete', () => {
+    const { mod } = load();
+    expect(mod.describePackage({
+      packageType: 'ANNUAL', identifier: 'ann', product: { priceString: '49,99 €' },
+    } as never)).toEqual({ title: 'Jährlich', sub: '49,99 € / Jahr' });
+    expect(mod.describePackage({
+      packageType: 'MONTHLY', identifier: 'mon', product: { priceString: '4,99 €' },
+    } as never)).toEqual({ title: 'Monatlich', sub: '4,99 € / Monat' });
+  });
+
+  it('fällt bei unbekanntem Typ auf Produkttitel/ID zurück', () => {
+    const { mod } = load();
+    expect(mod.describePackage({
+      packageType: 'CUSTOM', identifier: 'custom_id', product: { priceString: '9,99 €', title: '' },
+    } as never)).toEqual({ title: 'custom_id', sub: '9,99 €' });
+  });
+});
+
+describe('getActivePlanLabel', () => {
+  it('liefert null, solange nicht konfiguriert', async () => {
+    const { mod } = load();
+    await expect(mod.getActivePlanLabel()).resolves.toBeNull();
+  });
+
+  it('liefert null, wenn nicht Premium', async () => {
+    const { mod, mock } = load();
+    mod.configurePurchases();
+    mock.__setPremium(false);
+    await expect(mod.getActivePlanLabel()).resolves.toBeNull();
+  });
+
+  it('matcht das aktive Produkt gegen das aktuelle Offering', async () => {
+    const { mod, mock } = load();
+    mod.configurePurchases();
+    mock.__setPremium(true, 'avorasport_premium_monthly');
+    mock.__setOfferings({
+      current: {
+        availablePackages: [
+          { identifier: 'monthly', packageType: 'MONTHLY', product: { identifier: 'avorasport_premium_monthly', priceString: '4,99 €' } },
+          { identifier: 'annual', packageType: 'ANNUAL', product: { identifier: 'avorasport_premium_annual', priceString: '49,99 €' } },
+        ],
+      },
+    });
+    await expect(mod.getActivePlanLabel()).resolves.toBe('Monatlich · 4,99 € / Monat');
+  });
+
+  it('liefert null, wenn kein passendes Paket im Offering gefunden wird', async () => {
+    const { mod, mock } = load();
+    mod.configurePurchases();
+    mock.__setPremium(true, 'unbekanntes_produkt');
+    mock.__setOfferings({ current: { availablePackages: [] } });
+    await expect(mod.getActivePlanLabel()).resolves.toBeNull();
   });
 });
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AvoraSport Admin</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="login-screen" class="screen">
+    <form id="login-form" class="login-card">
+      <h1>AvoraSport <span class="accent">Admin</span></h1>
+      <p class="muted">Login mit deinem AvoraSport-Account (Admin-Freischaltung erforderlich).</p>
+      <input type="email" id="email" placeholder="E-Mail" required autocomplete="username" />
+      <input type="password" id="password" placeholder="Passwort" required autocomplete="current-password" />
+      <button type="submit" id="login-btn">Anmelden</button>
+      <p id="login-error" class="error" hidden></p>
+    </form>
+  </div>
+
+  <div id="app-screen" class="screen" hidden>
+    <header>
+      <h1>AvoraSport <span class="accent">Admin</span></h1>
+      <div class="header-right">
+        <span id="user-email" class="muted"></span>
+        <button id="logout-btn" class="btn-secondary">Abmelden</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="feedback">Feedback</button>
+      <button class="tab-btn" data-tab="users">User</button>
+    </nav>
+
+    <main>
+      <section id="tab-dashboard" class="tab-panel active">
+        <div id="dashboard-content" class="loading">Lade…</div>
+      </section>
+
+      <section id="tab-feedback" class="tab-panel">
+        <label class="filter-row">
+          <input type="checkbox" id="feedback-filter" /> Nur unbearbeitete anzeigen
+        </label>
+        <div id="feedback-content" class="loading">Lade…</div>
+      </section>
+
+      <section id="tab-users" class="tab-panel">
+        <div id="users-content" class="loading">Lade…</div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

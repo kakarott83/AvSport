@@ -12,10 +12,18 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "credentialsSource": "remote"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "./AuthKey_4BWCLUC6DJ.p8",
+        "ascApiKeyId": "4BWCLUC6DJ",
+        "ascApiKeyIssuerId": "eeb86cbe-4823-46e0-8564-dadcdc9bbea5",
+        "appleTeamId": "XN3WF5LR9U"
+      }
+    }
   }
 }

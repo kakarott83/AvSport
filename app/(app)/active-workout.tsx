@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
+import { estimateWorkoutKcal } from '@/lib/calorieBurn';
 import { playBeep } from '@/services/audioService';
 import { supabase } from '@/services/supabaseClient';
 
@@ -190,6 +191,15 @@ export default function ActiveWorkoutScreen() {
   const [countdownDone, setCountdownDone] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Kalorienverbrauch (MET-basiert, siehe lib/calorieBurn.ts) ──
+  // weightKg + intensityFactor kommen aus dem Profil; burnMarkRef merkt sich den
+  // totalElapsed-Stand beim letzten gespeicherten Satz, sodass jeder Satz-Log
+  // nur seinen Zeitanteil als calories_burned bekommt (Summe = Session-Verbrauch).
+  const [weightKg, setWeightKg]             = useState<number | null>(null);
+  const [intensityFactor, setIntensityFactor] = useState(1);
+  const [sessionKcal, setSessionKcal]       = useState(0);
+  const burnMarkRef = useRef(0);
+
   // ── Eingabe ──
   const [exercise, setExercise] = useState('');
   const [weight, setWeight]     = useState('');
@@ -258,6 +268,23 @@ export default function ActiveWorkoutScreen() {
       setTotalElapsed((t) => t + 1);
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  // ── Profil-Daten für die Kalorienschätzung laden ──
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('weight_kg, workout_intensity_factor')
+        .eq('id', user.id)
+        .single();
+      if (data) {
+        setWeightKg(data.weight_kg ?? null);
+        setIntensityFactor(data.workout_intensity_factor ?? 1);
+      }
+    })();
   }, []);
 
   // ── Übungs-Countdown Ende ──
@@ -352,6 +379,15 @@ export default function ActiveWorkoutScreen() {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Kalorien für den Zeitabschnitt seit dem letzten Satz schätzen.
+    const segmentSeconds = Math.max(0, totalElapsed - burnMarkRef.current);
+    const segmentKcal = estimateWorkoutKcal(
+      segmentSeconds,
+      weightKg,
+      planMeta?.is_circuit ? 'circuit' : 'strength',
+      intensityFactor,
+    );
+
     const { error } = await supabase.from('exercise_logs').insert({
       user_id: user?.id,
       exercise_name: exercise.trim(),
@@ -359,10 +395,14 @@ export default function ActiveWorkoutScreen() {
       reps: reps ? parseInt(reps, 10) : null,
       duration_seconds: isDurationEx ? countdownFrom : elapsed,
       workout_total_seconds: totalElapsed,
+      calories_burned: segmentKcal,
     });
 
     setSaving(false);
     if (error) { setInputError(`Speichern fehlgeschlagen: ${error.message}`); return; }
+
+    burnMarkRef.current = totalElapsed;
+    setSessionKcal((k) => k + segmentKcal);
 
     const newSetsThisEx = setsThisExercise + 1;
     setSetsThisExercise(newSetsThisEx);
@@ -499,7 +539,10 @@ export default function ActiveWorkoutScreen() {
         {/* ── Gesamt-Timer ── */}
         <View style={styles.totalTimerRow}>
           <Text style={styles.totalTimerLabel}>Gesamt-Zeit</Text>
-          <Text style={styles.totalTimerValue}>{formatTime(totalElapsed)}</Text>
+          <Text style={styles.totalTimerValue}>
+            {formatTime(totalElapsed)}
+            {sessionKcal > 0 ? ` · ~${sessionKcal} kcal` : ''}
+          </Text>
         </View>
 
         {/* ── Pause-Countdown (überlagert den normalen Timer) ── */}
@@ -648,7 +691,7 @@ export default function ActiveWorkoutScreen() {
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatValue}>{Math.round(totalElapsed * 0.15)}</Text>
+                <Text style={styles.summaryStatValue}>{sessionKcal}</Text>
                 <Text style={styles.summaryStatLabel}>kcal verbrannt</Text>
               </View>
               <View style={styles.summaryDivider} />

@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSHealthShareUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
         "NSHealthUpdateUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
-        "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen."
+        "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,7 +27,9 @@
         "WRITE_EXTERNAL_STORAGE",
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",

@@ -39,8 +39,12 @@ export function __setCustomerInfo(info: any): void {
   customerInfo = info;
 }
 
-export function __setPremium(active: boolean): void {
-  customerInfo = { entitlements: { active: active ? { premium: { identifier: 'premium' } } : {} } };
+export function __setPremium(active: boolean, productIdentifier = 'mock_product'): void {
+  customerInfo = {
+    entitlements: {
+      active: active ? { premium: { identifier: 'premium', productIdentifier } } : {},
+    },
+  };
 }
 
 export function __emitCustomerInfo(info: any): void {

@@ -11,11 +11,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { addPremiumListener, getPremiumStatus, isPurchasesConfigured } from '@/lib/purchases';
+import { addPremiumListener, getActivePlanLabel, getPremiumStatus, isPurchasesConfigured } from '@/lib/purchases';
 
 interface PremiumContextValue {
   isPremium: boolean;
   loading: boolean;
+  /** Anzeige-Label des aktiven Pakets, z. B. "Monatlich · 4,99 € / Monat". `null` solange nicht Premium oder (noch) unbekannt. */
+  planLabel: string | null;
   /** Status neu vom SDK abfragen (z. B. nach „Käufe wiederherstellen"). */
   refresh: () => Promise<void>;
 }
@@ -23,15 +25,19 @@ interface PremiumContextValue {
 const PremiumContext = createContext<PremiumContextValue>({
   isPremium: false,
   loading: true,
+  planLabel: null,
   refresh: async () => {},
 });
 
 export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [isPremium, setIsPremium] = useState(false);
+  const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    setIsPremium(await getPremiumStatus());
+    const premium = await getPremiumStatus();
+    setIsPremium(premium);
+    setPlanLabel(premium ? await getActivePlanLabel() : null);
   }, []);
 
   useEffect(() => {
@@ -42,20 +48,24 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    getPremiumStatus()
-      .then((v) => { if (!cancelled) setIsPremium(v); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    refresh().finally(() => { if (!cancelled) setLoading(false); });
 
     const unsubscribe = addPremiumListener((v) => {
-      if (!cancelled) setIsPremium(v);
+      if (cancelled) return;
+      setIsPremium(v);
+      if (v) {
+        void getActivePlanLabel().then((label) => { if (!cancelled) setPlanLabel(label); });
+      } else {
+        setPlanLabel(null);
+      }
     });
 
     return () => { cancelled = true; unsubscribe(); };
   }, []);
 
   const value = useMemo(
-    () => ({ isPremium, loading, refresh }),
-    [isPremium, loading, refresh],
+    () => ({ isPremium, planLabel, loading, refresh }),
+    [isPremium, planLabel, loading, refresh],
   );
 
   return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>;

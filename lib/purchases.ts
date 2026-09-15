@@ -118,6 +118,11 @@ export function isPremiumFromInfo(info: CustomerInfo | null | undefined): boolea
   return !!info?.entitlements?.active?.[PREMIUM_ENTITLEMENT];
 }
 
+/** Produkt-ID des aktiven Premium-Entitlements, oder `null` wenn nicht Premium. */
+export function activeProductId(info: CustomerInfo | null | undefined): string | null {
+  return info?.entitlements?.active?.[PREMIUM_ENTITLEMENT]?.productIdentifier ?? null;
+}
+
 export async function getCustomerInfoSafe(): Promise<CustomerInfo | null> {
   if (!configured) return null;
   try {
@@ -144,6 +149,39 @@ export async function getCurrentOffering(): Promise<PurchasesOffering | null> {
     console.warn('[Purchases] getOfferings fehlgeschlagen:', err);
     return null;
   }
+}
+
+/** Anzeige-Label für ein Paket, z. B. { title: 'Monatlich', sub: '4,99 € / Monat' }. */
+export function describePackage(pkg: PurchasesPackage): { title: string; sub: string } {
+  switch (pkg.packageType) {
+    case 'ANNUAL':
+      return { title: 'Jährlich', sub: `${pkg.product.priceString} / Jahr` };
+    case 'MONTHLY':
+      return { title: 'Monatlich', sub: `${pkg.product.priceString} / Monat` };
+    default:
+      return { title: pkg.product.title || pkg.identifier, sub: pkg.product.priceString };
+  }
+}
+
+/**
+ * Anzeige-Label des aktiven Premium-Pakets, z. B. "Monatlich · 4,99 € / Monat".
+ * Sucht dafür im aktuellen Offering das Paket, dessen Produkt-ID zum aktiven
+ * Entitlement passt. `null` wenn nicht Premium, nicht konfiguriert, oder kein
+ * Offering (mehr) verfügbar — dann greift der Aufrufer auf einen generischen
+ * Text zurück, statt die rohe Produkt-ID anzuzeigen.
+ */
+export async function getActivePlanLabel(): Promise<string | null> {
+  if (!configured) return null;
+  const info = await getCustomerInfoSafe();
+  const productId = activeProductId(info);
+  if (!productId) return null;
+
+  const offering = await getCurrentOffering();
+  const pkg = offering?.availablePackages.find((p) => p.product.identifier === productId);
+  if (!pkg) return null;
+
+  const { title, sub } = describePackage(pkg);
+  return `${title} · ${sub}`;
 }
 
 function isUserCancelled(err: unknown): boolean {

@@ -30,6 +30,9 @@ export default function PlansScreen() {
   const [loading, setLoading] = useState(true);
   const [aiModalOpen, setAiModalOpen] = useState(false);
 
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   async function loadPlans() {
     setLoading(true);
     const {
@@ -74,7 +77,53 @@ export default function PlansScreen() {
     ]);
   }
 
+  function toggleBulkMode() {
+    setBulkMode((v) => !v);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === plans.length ? new Set() : new Set(plans.map((p) => p.id)),
+    );
+  }
+
+  async function deleteSelectedPlans() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    Alert.alert(
+      `${ids.length} ${ids.length === 1 ? 'Plan' : 'Pläne'} löschen`,
+      'Wirklich löschen? Das kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            // plan_exercises/plan_days hängen per ON DELETE CASCADE an workout_plans.
+            const { error } = await supabase.from('workout_plans').delete().in('id', ids);
+            if (error) { Alert.alert('Fehler', error.message); return; }
+            setPlans((prev) => prev.filter((p) => !selectedIds.has(p.id)));
+            setSelectedIds(new Set());
+            setBulkMode(false);
+          },
+        },
+      ],
+    );
+  }
+
   async function handlePlanPress(plan: WorkoutPlan) {
+    if (bulkMode) { toggleSelected(plan.id); return; }
     if (!isSelectMode) {
       router.push({ pathname: '/create-plan', params: { planId: plan.id } });
       return;
@@ -119,25 +168,51 @@ export default function PlansScreen() {
 
       <View style={styles.header}>
         <Text style={styles.title}>
-          {isSelectMode ? 'Plan wählen' : 'Trainingspläne'}
+          {isSelectMode
+            ? 'Plan wählen'
+            : bulkMode
+              ? `${selectedIds.size} ausgewählt`
+              : 'Trainingspläne'}
         </Text>
-        {!isSelectMode && (
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={styles.aiButton}
-              onPress={() => setAiModalOpen(true)}
-            >
-              <Text style={styles.aiButtonText}>✨ KI-Plan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => router.push('/create-plan')}
-            >
-              <Text style={styles.addButtonText}>+ Neu</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
+
+      {!isSelectMode && (
+        <View style={styles.headerActions}>
+          {bulkMode ? (
+            <TouchableOpacity style={styles.cancelButton} onPress={toggleBulkMode}>
+              <Text style={styles.cancelButtonText}>Fertig</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              {plans.length > 0 && (
+                <TouchableOpacity style={styles.selectButton} onPress={toggleBulkMode}>
+                  <Text style={styles.selectButtonText}>Auswählen</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.aiButton}
+                onPress={() => setAiModalOpen(true)}
+              >
+                <Text style={styles.aiButtonText}>✨ KI-Plan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => router.push('/create-plan')}
+              >
+                <Text style={styles.addButtonText}>+ Neu</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+
+      {bulkMode && (
+        <TouchableOpacity style={styles.selectAllRow} onPress={toggleSelectAll}>
+          <Text style={styles.selectAllText}>
+            {selectedIds.size === plans.length ? 'Alle abwählen' : 'Alle auswählen'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {loading ? (
         <ActivityIndicator color="#0a7ea4" style={{ marginTop: 40 }} />
@@ -165,35 +240,60 @@ export default function PlansScreen() {
         <FlatList
           data={plans}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.planCard}
-              onPress={() => handlePlanPress(item)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.planInfo}>
-                <Text style={styles.planName}>{item.title}</Text>
-                <Text style={styles.planMeta}>
-                  {item.day_count > 1
-                    ? `${item.day_count} Tage · ${item.exercise_count} Übungen gesamt`
-                    : `${item.exercise_count} Übung${item.exercise_count !== 1 ? 'en' : ''}`}
-                </Text>
-              </View>
-              {isSelectMode ? (
-                <Text style={styles.selectArrow}>▶</Text>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => deletePlan(item.id)}
-                  style={styles.deleteBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text style={styles.deleteText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          )}
+          contentContainerStyle={{ paddingBottom: bulkMode ? 96 : 40 }}
+          renderItem={({ item }) => {
+            const selected = selectedIds.has(item.id);
+            return (
+              <TouchableOpacity
+                style={[styles.planCard, bulkMode && selected && styles.planCardSelected]}
+                onPress={() => handlePlanPress(item)}
+                activeOpacity={0.75}
+              >
+                {bulkMode && (
+                  <View style={[styles.checkbox, selected && styles.checkboxChecked]}>
+                    {selected && <Text style={styles.checkboxMark}>✓</Text>}
+                  </View>
+                )}
+                <View style={styles.planInfo}>
+                  <Text style={styles.planName}>{item.title}</Text>
+                  <Text style={styles.planMeta}>
+                    {item.day_count > 1
+                      ? `${item.day_count} Tage · ${item.exercise_count} Übungen gesamt`
+                      : `${item.exercise_count} Übung${item.exercise_count !== 1 ? 'en' : ''}`}
+                  </Text>
+                </View>
+                {isSelectMode ? (
+                  <Text style={styles.selectArrow}>▶</Text>
+                ) : bulkMode ? null : (
+                  <TouchableOpacity
+                    onPress={() => deletePlan(item.id)}
+                    style={styles.deleteBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.deleteText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            );
+          }}
         />
+      )}
+
+      {bulkMode && (
+        <View style={styles.bulkBar}>
+          <TouchableOpacity
+            style={[styles.bulkDeleteBtn, selectedIds.size === 0 && styles.bulkDeleteBtnDisabled]}
+            onPress={deleteSelectedPlans}
+            disabled={selectedIds.size === 0}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.bulkDeleteText}>
+              {selectedIds.size > 0
+                ? `${selectedIds.size} ${selectedIds.size === 1 ? 'Plan' : 'Pläne'} löschen`
+                : 'Pläne auswählen'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -207,10 +307,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
   },
   title: {
     fontSize: 24,
@@ -219,8 +316,11 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 20,
   },
   addButton: {
     backgroundColor: '#0a7ea4',
@@ -245,6 +345,72 @@ const styles = StyleSheet.create({
     color: '#0a7ea4',
     fontWeight: '700',
     fontSize: 14,
+  },
+  selectButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  selectButtonText: {
+    color: '#888',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  cancelButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  cancelButtonText: {
+    color: '#0a7ea4',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  selectAllRow: {
+    alignSelf: 'flex-end',
+    marginBottom: 14,
+  },
+  selectAllText: {
+    color: '#0a7ea4',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  checkboxChecked: {
+    backgroundColor: '#0a7ea4',
+    borderColor: '#0a7ea4',
+  },
+  checkboxMark: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  bulkBar: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 24,
+  },
+  bulkDeleteBtn: {
+    backgroundColor: '#c0392b',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  bulkDeleteBtnDisabled: {
+    backgroundColor: '#3a2222',
+  },
+  bulkDeleteText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
   createButtonAi: {
     backgroundColor: '#1e1e1e',
@@ -282,6 +448,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  planCardSelected: {
+    borderColor: '#0a7ea4',
+    backgroundColor: '#132a30',
   },
   planInfo: {
     flex: 1,

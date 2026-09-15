@@ -104,7 +104,7 @@ export default function ProfileScreen() {
   const [error, setError]     = useState('');
   const [toast, setToast]     = useState<string | null>(null);
   const [isNativeReady, setIsNativeReady] = useState(HealthManager.isNativeReady());
-  const { isPremium, refresh: refreshPremium } = usePremium();
+  const { isPremium, planLabel, refresh: refreshPremium } = usePremium();
   const [restoring, setRestoring] = useState(false);
 
   const cycleDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -822,7 +822,11 @@ export default function ProfileScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.menuRowText}>AvoraSport Premium</Text>
             <Text style={styles.menuRowSub}>
-              {isPremium ? 'Aktiv · Abo verwalten' : 'Kostenlos · unbegrenzte KI freischalten'}
+              {isPremium
+                ? planLabel
+                  ? `Aktiv · ${planLabel}`
+                  : 'Aktiv · Abo verwalten'
+                : 'Kostenlos · KI-Tageslimit aufheben'}
             </Text>
           </View>
           <MaterialIcons name="chevron-right" size={20} color="#555" />
