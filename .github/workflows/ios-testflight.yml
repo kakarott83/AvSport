@@ -68,15 +68,30 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$P12_BASE64" | base64 -D -o "$RUNNER_TEMP/dist.p12"
+          # ── Diagnose (gibt nichts Geheimes aus: nur Längen/Prüfsummen) ──
+          echo "Länge des Base64-Secrets: ${#P12_BASE64} Zeichen (erwartet: 6168)"
+          echo "Länge des Passwort-Secrets: ${#P12_PASSWORD} Zeichen (erwartet: 15)"
 
-          # Klarer Fehler statt kryptischem SecKeychainItemImport-Fehler,
-          # falls das Secret leer/beschädigt ist.
+          # openssl statt base64: identisches Verhalten auf jedem System,
+          # keine GNU-/BSD-Flag-Unterschiede. -A = einzeilige Eingabe erlaubt.
+          printf '%s' "$P12_BASE64" | openssl base64 -d -A -out "$RUNNER_TEMP/dist.p12"
+
+          echo "Dekodierte Datei: $(wc -c < "$RUNNER_TEMP/dist.p12") Bytes (erwartet: 4625)"
+          ACTUAL_SHA="$(shasum -a 256 "$RUNNER_TEMP/dist.p12" | cut -d' ' -f1)"
+          EXPECTED_SHA="1a6f4616b4a8c8e379698dd8d30d38f35c2cbde73e8b3c8b12f640e55f806e05"
+          echo "SHA256 dekodiert: $ACTUAL_SHA"
+          echo "SHA256 erwartet : $EXPECTED_SHA"
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Das Secret IOS_DIST_P12_BASE64 entspricht NICHT der lokalen distribution.p12 — Wert wurde unvollständig/falsch eingefügt."
+            exit 1
+          fi
+
+          # Passwort-Prüfung getrennt, damit der Fehler eindeutig zuzuordnen ist.
           openssl pkcs12 -in "$RUNNER_TEMP/dist.p12" -info -noout -passin "pass:$P12_PASSWORD" \
-            || { echo "::error::distribution.p12 ist nach dem Dekodieren kein gültiges PKCS12 (Secret IOS_DIST_P12_BASE64 oder IOS_DIST_P12_PASSWORD prüfen)."; exit 1; }
+            || { echo "::error::p12 ist korrekt, aber IOS_DIST_P12_PASSWORD passt nicht."; exit 1; }
 
           security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A \
-            -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            -t agg -f pkcs12 -k "$KEYCHAIN_PATH"
           rm "$RUNNER_TEMP/dist.p12"
 
           # Wichtig (siehe Kommentar oben): neue Keychain explizit zur
