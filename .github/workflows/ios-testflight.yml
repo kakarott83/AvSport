@@ -68,7 +68,13 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$P12_BASE64" | base64 --decode -o "$RUNNER_TEMP/dist.p12"
+          echo "$P12_BASE64" | base64 -D -o "$RUNNER_TEMP/dist.p12"
+
+          # Klarer Fehler statt kryptischem SecKeychainItemImport-Fehler,
+          # falls das Secret leer/beschädigt ist.
+          openssl pkcs12 -in "$RUNNER_TEMP/dist.p12" -info -noout -passin "pass:$P12_PASSWORD" \
+            || { echo "::error::distribution.p12 ist nach dem Dekodieren kein gültiges PKCS12 (Secret IOS_DIST_P12_BASE64 oder IOS_DIST_P12_PASSWORD prüfen)."; exit 1; }
+
           security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A \
             -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           rm "$RUNNER_TEMP/dist.p12"
@@ -87,7 +93,7 @@ jobs:
         run: |
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-          echo "$PROFILE_BASE64" | base64 --decode -o "$PROFILE_DIR/AvoraSportApp.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 -D -o "$PROFILE_DIR/AvoraSportApp.mobileprovision"
 
       - name: App Store Connect API Key schreiben
         env:
@@ -95,7 +101,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$ASC_API_KEY_BASE64" | base64 --decode \
+          echo "$ASC_API_KEY_BASE64" | base64 -D \
             -o ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
 
       # ── Bauen ────────────────────────────────────────────────────────────
