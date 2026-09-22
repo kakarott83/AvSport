@@ -21,6 +21,60 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # Läuft bewusst als ERSTER Schritt: schlägt in Sekunden fehl statt erst
+      # nach npm/prebuild/CocoaPods. Gibt nur Zeichenlängen aus, keine Werte.
+      - name: Secrets prüfen
+        env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          EXPO_PUBLIC_REVENUECAT_IOS_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_KEY }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
+        run: |
+          MISSING=""
+          check() {
+            NAME="$1"; VALUE="$2"; EXPECTED="$3"
+            LEN=${#VALUE}
+            if [ "$LEN" -eq 0 ]; then
+              echo "  FEHLT      $NAME"
+              MISSING="$MISSING $NAME"
+            elif [ -n "$EXPECTED" ] && [ "$LEN" -ne "$EXPECTED" ]; then
+              echo "  FALSCH     $NAME ($LEN Zeichen, erwartet $EXPECTED)"
+              MISSING="$MISSING $NAME"
+            else
+              echo "  ok         $NAME ($LEN Zeichen)"
+            fi
+          }
+
+          echo "Signierung:"
+          check IOS_DIST_P12_BASE64            "$IOS_DIST_P12_BASE64"            6168
+          check IOS_DIST_P12_PASSWORD          "$IOS_DIST_P12_PASSWORD"          15
+          check IOS_PROVISION_PROFILE_BASE64   "$IOS_PROVISION_PROFILE_BASE64"   16288
+          check ASC_API_KEY_BASE64             "$ASC_API_KEY_BASE64"             344
+          check ASC_KEY_ID                     "$ASC_KEY_ID"                     10
+          check ASC_ISSUER_ID                  "$ASC_ISSUER_ID"                  36
+          check APPLE_TEAM_ID                  "$APPLE_TEAM_ID"                  10
+
+          echo "App-Konfiguration:"
+          check EXPO_PUBLIC_SUPABASE_URL             "$EXPO_PUBLIC_SUPABASE_URL"             ""
+          check EXPO_PUBLIC_SUPABASE_ANON_KEY        "$EXPO_PUBLIC_SUPABASE_ANON_KEY"        ""
+          check EXPO_PUBLIC_GEMINI_API_KEY           "$EXPO_PUBLIC_GEMINI_API_KEY"           ""
+          check EXPO_PUBLIC_REVENUECAT_IOS_KEY       "$EXPO_PUBLIC_REVENUECAT_IOS_KEY"       ""
+          check EXPO_PUBLIC_REVENUECAT_ANDROID_KEY   "$EXPO_PUBLIC_REVENUECAT_ANDROID_KEY"   ""
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Diese Secrets fehlen oder haben die falsche Länge:$MISSING — anzulegen unter Settings > Secrets and variables > Actions > New repository secret."
+            exit 1
+          fi
+          echo "Alle Secrets vorhanden."
+
       - name: Repository auschecken
         uses: actions/checkout@v4
 
