@@ -213,9 +213,23 @@ jobs:
             <string>${APPLE_TEAM_ID}</string>
             <key>signingStyle</key>
             <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <!-- Bei manueller Signierung verlangt Xcode beim Export eine
+                 explizite Zuordnung Bundle-ID -> Profilname, sonst:
+                 "requires a provisioning profile". "AvoraSportApp" ist der
+                 Name-Eintrag aus AvoraSportApp.mobileprovision. -->
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.avorasport.app</key>
+              <string>AvoraSportApp</string>
+            </dict>
           </dict>
           </plist>
           EOF
+
+          echo "── ExportOptions.plist ──"
+          cat ios/ExportOptions.plist
 
       - name: Archiv bauen
         env:
