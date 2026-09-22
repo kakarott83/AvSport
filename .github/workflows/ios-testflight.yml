@@ -236,6 +236,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd ios
+          # Apple lehnt Uploads mit bereits vergebener Build-Nummer ab. Die
+          # GitHub-Run-Nummer wächst monoton und eignet sich daher direkt als
+          # Build-Nummer (CFBundleVersion). Die Marketing-Version (1.0.0)
+          # bleibt davon unberührt und kommt weiter aus app.json.
+          echo "Build-Nummer für diesen Lauf: ${{ github.run_number }}"
           xcodebuild archive \
             -workspace AvoraSport.xcworkspace \
             -scheme AvoraSport \
@@ -245,7 +250,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution: Michael Lange (XN3WF5LR9U)" \
             PROVISIONING_PROFILE_SPECIFIER="AvoraSportApp" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
       # `destination: upload` in ExportOptions.plist lädt in EINEM Schritt zu
       # App Store Connect hoch — kein separates altool/notarytool nötig.
