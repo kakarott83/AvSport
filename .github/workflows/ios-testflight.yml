@@ -69,20 +69,27 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # ── Diagnose (gibt nichts Geheimes aus: nur Längen/Prüfsummen) ──
-          echo "Länge des Base64-Secrets: ${#P12_BASE64} Zeichen (erwartet: 6168)"
-          echo "Länge des Passwort-Secrets: ${#P12_PASSWORD} Zeichen (erwartet: 15)"
+          LEN=${#P12_BASE64}
+          echo "Länge IOS_DIST_P12_BASE64: $LEN Zeichen (erwartet: 6168)"
+          echo "Länge IOS_DIST_P12_PASSWORD: ${#P12_PASSWORD} Zeichen (erwartet: 15)"
 
           # openssl statt base64: identisches Verhalten auf jedem System,
           # keine GNU-/BSD-Flag-Unterschiede. -A = einzeilige Eingabe erlaubt.
-          printf '%s' "$P12_BASE64" | openssl base64 -d -A -out "$RUNNER_TEMP/dist.p12"
+          printf '%s' "$P12_BASE64" | openssl base64 -d -A -out "$RUNNER_TEMP/dist.p12" || true
 
-          echo "Dekodierte Datei: $(wc -c < "$RUNNER_TEMP/dist.p12") Bytes (erwartet: 4625)"
+          SIZE=$(wc -c < "$RUNNER_TEMP/dist.p12" | tr -d ' ')
           ACTUAL_SHA="$(shasum -a 256 "$RUNNER_TEMP/dist.p12" | cut -d' ' -f1)"
-          EXPECTED_SHA="1a6f4616b4a8c8e379698dd8d30d38f35c2cbde73e8b3c8b12f640e55f806e05"
-          echo "SHA256 dekodiert: $ACTUAL_SHA"
-          echo "SHA256 erwartet : $EXPECTED_SHA"
-          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-            echo "::error::Das Secret IOS_DIST_P12_BASE64 entspricht NICHT der lokalen distribution.p12 — Wert wurde unvollständig/falsch eingefügt."
+          echo "Dekodiert: $SIZE Bytes (erwartet: 4625), SHA256 $ACTUAL_SHA"
+
+          if [ "$ACTUAL_SHA" != "1a6f4616b4a8c8e379698dd8d30d38f35c2cbde73e8b3c8b12f640e55f806e05" ]; then
+            case "$LEN" in
+              0)     HINT="Das Secret ist LEER — es wurde nichts gespeichert." ;;
+              16288) HINT="Hier steht der Inhalt von IOS_PROVISION_PROFILE_BASE64 — die beiden Werte sind VERTAUSCHT." ;;
+              344)   HINT="Hier steht der Inhalt von ASC_API_KEY_BASE64 — die Werte sind VERTAUSCHT." ;;
+              6168)  HINT="Länge stimmt, Inhalt nicht — beim Kopieren wurden Zeichen verändert." ;;
+              *)     HINT="Nur $LEN von 6168 Zeichen angekommen — der Wert wurde beim Einfügen abgeschnitten." ;;
+            esac
+            echo "::error::IOS_DIST_P12_BASE64 stimmt nicht mit der lokalen distribution.p12 überein. $HINT"
             exit 1
           fi
 
@@ -108,7 +115,15 @@ jobs:
         run: |
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-          echo "$PROFILE_BASE64" | base64 -D -o "$PROFILE_DIR/AvoraSportApp.mobileprovision"
+          printf '%s' "$PROFILE_BASE64" | openssl base64 -d -A \
+            -out "$PROFILE_DIR/AvoraSportApp.mobileprovision" || true
+
+          SHA="$(shasum -a 256 "$PROFILE_DIR/AvoraSportApp.mobileprovision" | cut -d' ' -f1)"
+          echo "Profile: ${#PROFILE_BASE64} Zeichen (erwartet 16288), SHA256 $SHA"
+          if [ "$SHA" != "d237be271c05447fdf07c4948b938515121fb99f3f2f6b850d8bd6d5a8df2e8f" ]; then
+            echo "::error::IOS_PROVISION_PROFILE_BASE64 stimmt nicht mit AvoraSportApp.mobileprovision überein (${#PROFILE_BASE64} von 16288 Zeichen angekommen)."
+            exit 1
+          fi
 
       - name: App Store Connect API Key schreiben
         env:
@@ -116,8 +131,15 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$ASC_API_KEY_BASE64" | base64 -D \
-            -o ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          printf '%s' "$ASC_API_KEY_BASE64" | openssl base64 -d -A -out "$KEY_PATH" || true
+
+          SHA="$(shasum -a 256 "$KEY_PATH" | cut -d' ' -f1)"
+          echo "ASC-Key: ${#ASC_API_KEY_BASE64} Zeichen (erwartet 344), SHA256 $SHA"
+          if [ "$SHA" != "29e5bab3e8a3fd8cc3f14356aadafcca91a53532cf77d060761fd7947557da63" ]; then
+            echo "::error::ASC_API_KEY_BASE64 stimmt nicht mit AuthKey_4BWCLUC6DJ.p8 überein (${#ASC_API_KEY_BASE64} von 344 Zeichen angekommen)."
+            exit 1
+          fi
 
       # ── Bauen ────────────────────────────────────────────────────────────
       - name: Export-Optionen schreiben
