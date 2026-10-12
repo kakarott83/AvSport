@@ -5,12 +5,31 @@ import { supabase } from '@/services/supabaseClient';
 
 // ── Types (exported for testing) ──────────────────────────────────────────────
 
+/** User-chosen direction of the calorie goal (profiles.calorie_goal). */
+export type CalorieGoalType = 'lose' | 'maintain' | 'gain';
+
+export const CALORIE_GOAL_TYPES: CalorieGoalType[] = ['lose', 'maintain', 'gain'];
+
+export const CALORIE_GOAL_LABELS: Record<CalorieGoalType, string> = {
+  lose:     'Abnehmen',
+  maintain: 'Halten',
+  gain:     'Muskelaufbau',
+};
+
+/** kcal applied on top of the TDEE: moderate deficit / lean-bulk surplus. */
+export const CALORIE_GOAL_ADJUSTMENT: Record<CalorieGoalType, number> = {
+  lose:     -500,
+  maintain: 0,
+  gain:     300,
+};
+
 export type ProfileData = {
   gender: 'male' | 'female' | null;
   date_of_birth: string | null;
   height_cm: number | null;
   weight_kg: number | null;
   manual_calorie_offset: number | null;
+  calorie_goal?: CalorieGoalType | null;
   auto_adjust_calories: boolean | null;
   cycle_tracking_enabled: boolean | null;
   cycle_length_days: number | null;
@@ -38,15 +57,16 @@ function ageFromDOB(dob: string | null): number {
 }
 
 function calcBaseTDEE(p: ProfileData): number {
-  const age = ageFromDOB(p.date_of_birth);
+  const age    = ageFromDOB(p.date_of_birth);
+  const adjust = CALORIE_GOAL_ADJUSTMENT[p.calorie_goal ?? 'maintain'] + (p.manual_calorie_offset ?? 0);
   if (!p.weight_kg || !p.height_cm || !age || !p.gender) {
-    return 2500 + (p.manual_calorie_offset ?? 0);
+    return 2500 + adjust;
   }
   const bmr =
     p.gender === 'male'
       ? 88.362 + 13.397 * p.weight_kg + 4.799 * p.height_cm - 5.677 * age
       : 447.593 + 9.247 * p.weight_kg + 3.098 * p.height_cm - 4.33 * age;
-  return Math.round(bmr * 1.55) + (p.manual_calorie_offset ?? 0);
+  return Math.round(bmr * 1.55) + adjust;
 }
 
 function isInLutealPhase(logs: DailyLogRow[], p: ProfileData): boolean {
@@ -139,7 +159,7 @@ export function useCalorieGoal(healthKcal = 0): CalorieGoalResult {
         const [profileRes, logsRes, burnedRes] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, date_of_birth, height_cm, weight_kg, manual_calorie_offset, auto_adjust_calories, cycle_tracking_enabled, cycle_length_days, cycle_calorie_bonus')
+            .select('gender, date_of_birth, height_cm, weight_kg, manual_calorie_offset, calorie_goal, auto_adjust_calories, cycle_tracking_enabled, cycle_length_days, cycle_calorie_bonus')
             .eq('id', user.id)
             .single(),
           supabase

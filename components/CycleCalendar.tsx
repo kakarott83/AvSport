@@ -51,6 +51,7 @@ export function CycleCalendar({ selectedDate, phases, onDayPress, onMonthChange 
   return (
     <Calendar
       current={selectedDate}
+      firstDay={1}
       onMonthChange={(m: { dateString: string }) => onMonthChange(m.dateString.slice(0, 7))}
       dayComponent={DayCellRenderer}
       theme={CALENDAR_THEME}

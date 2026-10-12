@@ -12,8 +12,8 @@
       "bundleIdentifier": "com.avorasport.app",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSHealthShareUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
-        "NSHealthUpdateUsageDescription": "AvoraSport nutzt deine Schritt- und Kaloriendaten...",
+        "NSHealthShareUsageDescription": "AvoraSport liest deine Schritte und Aktivitätskalorien aus Apple Health, um sie in deinem Tagesziel zu berücksichtigen.",
+        "NSHealthUpdateUsageDescription": "AvoraSport schreibt keine Daten in Apple Health; diese Angabe wird nur von iOS vorausgesetzt.",
         "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -78,6 +78,7 @@
         }
       ],
       "./plugins/withHealthConnectPermissionDelegate",
+      "react-native-health",
       "expo-apple-authentication",
       "expo-font"
     ],

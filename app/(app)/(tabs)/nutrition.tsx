@@ -611,7 +611,7 @@ export default function NutritionScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#121212' },
-  container: { padding: 20, paddingTop: 16, paddingBottom: 56 },
+  container: { padding: 20, paddingTop: 60, paddingBottom: 56 },
 
   card: { backgroundColor: '#1e1e1e', borderRadius: 20, padding: 20, marginBottom: 16 },
   greeting: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 2 },

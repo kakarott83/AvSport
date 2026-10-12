@@ -101,6 +101,16 @@ describe('computeCalorieGoal', () => {
       expect(result.bonusActive).toBe(false);
     });
 
+    it('zieht beim Ziel "Abnehmen" 500 kcal ab', () => {
+      const profile: ProfileData = { ...BASE_PROFILE, calorie_goal: 'lose' };
+      expect(computeCalorieGoal(profile, [], 0).currentGoal).toBe(2234 - 500);
+    });
+
+    it('addiert beim Ziel "Muskelaufbau" 300 kcal plus manuellen Offset', () => {
+      const profile: ProfileData = { ...BASE_PROFILE, calorie_goal: 'gain', manual_calorie_offset: -50 };
+      expect(computeCalorieGoal(profile, [], 0).currentGoal).toBe(2234 + 300 - 50);
+    });
+
     it('fällt auf 2 500 kcal zurück wenn Körperdaten fehlen', () => {
       const incomplete: ProfileData = {
         ...BASE_PROFILE,

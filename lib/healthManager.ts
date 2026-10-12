@@ -24,12 +24,53 @@ if (Platform.OS === "android") {
   }
 }
 
+// Same pattern for Apple HealthKit (react-native-health) on iOS. The module
+// exposes callback-style methods; see the promise wrappers below.
+type AHK = typeof import("react-native-health").default;
+let ahk: AHK | null = null;
+
+if (Platform.OS === "ios") {
+  try {
+    const mod = require("react-native-health");
+    ahk = (mod?.default ?? mod) as AHK;
+    // The JS wrapper loads even when the native side is not linked.
+    if (typeof ahk?.initHealthKit !== "function") ahk = null;
+  } catch {
+    ahk = null;
+  }
+}
+
+/** Promise wrapper for react-native-health's (err, result) callbacks. */
+function hk<T>(call: (cb: (err: unknown, res: T) => void) => void): Promise<T> {
+  return new Promise((resolve, reject) =>
+    call((err, res) => (err ? reject(err) : resolve(res))),
+  );
+}
+
+const HK_READ_PERMISSIONS = ["Steps", "ActiveEnergyBurned"];
+
+/** Sums Steps + ActiveEnergyBurned from HealthKit for the given range. */
+async function fetchHealthKit(range: DateRange): Promise<StepsAndCalories> {
+  if (!ahk) return { ...EMPTY_DATA };
+  const options = { startDate: range.startTime, endDate: range.endTime };
+  const [stepSamples, energySamples] = await Promise.all([
+    hk<{ value: number }[]>((cb) => ahk!.getDailyStepCountSamples(options as any, cb as any)),
+    hk<{ value: number }[]>((cb) => ahk!.getActiveEnergyBurned(options as any, cb as any)),
+  ]);
+  const sum = (rows: { value: number }[] | null | undefined) =>
+    (rows ?? []).reduce((s, r) => s + (Number(r.value) || 0), 0);
+  return {
+    steps: Math.round(sum(stepSamples)),
+    calories: Math.round(sum(energySamples)),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AvailabilityReason =
-  | "not_android" // running on iOS / web
+  | "not_android" // running on web (or an unsupported platform)
   | "simulator" // emulator detected via expo-device
   | "module_not_found" // native bridge not linked
   | "sdk_unavailable" // Health Connect app not installed
@@ -117,6 +158,25 @@ export const HealthManager = {
     this._status = "pending";
     this._initPromise = (async (): Promise<boolean> => {
       try {
+        // iOS: HealthKit. Read permissions are requested in
+        // requestPermissions(); here we only check that HealthKit exists.
+        if (Platform.OS === "ios") {
+          if (!ahk) {
+            if (__DEV__)
+              console.log("[HealthManager] init() skipped — HealthKit not available.");
+            this._status = "unavailable";
+            return false;
+          }
+          const available = await hk<boolean>((cb) => ahk!.isAvailable(cb as any));
+          if (!available) {
+            this._status = "unavailable";
+            return false;
+          }
+          this._isNativeReady = true;
+          this._status = "ready";
+          return true;
+        }
+
         // Guard 1: Android only
         if (Platform.OS !== "android") {
           if (__DEV__)
@@ -210,6 +270,19 @@ export const HealthManager = {
     try {
       const ready = await this.init();
       if (!ready) return false;
+
+      // iOS: initHealthKit shows the HealthKit sheet once. HealthKit never
+      // reveals whether *read* access was granted, so success = sheet handled.
+      if (Platform.OS === "ios") {
+        if (!ahk) return false;
+        await hk((cb) =>
+          ahk!.initHealthKit(
+            { permissions: { read: HK_READ_PERMISSIONS, write: [] } } as any,
+            cb as any,
+          ),
+        );
+        return true;
+      }
 
       // Fast path: if permissions are already granted (e.g. user just came back
       // from HC settings), skip the dialog entirely.
@@ -360,7 +433,7 @@ export const HealthManager = {
 
     // Simulator guard — identical to the one in init(), but explicit here so
     // callers that skip init() (e.g. read-only background fetches) are safe.
-    if (!Device.isDevice) {
+    if (Platform.OS === "android" && !Device.isDevice) {
       if (__DEV__)
         console.log(
           "[HealthManager] getStepsToday() — simulator, returning 0.",
@@ -371,6 +444,16 @@ export const HealthManager = {
     try {
       const ready = await this.init();
       if (!ready) return 0;
+
+      if (Platform.OS === "ios") {
+        const midnight = new Date();
+        midnight.setHours(0, 0, 0, 0);
+        const { steps } = await fetchHealthKit({
+          startTime: midnight.toISOString(),
+          endTime: new Date().toISOString(),
+        });
+        return steps;
+      }
 
       // Midnight of the current day in local time
       const now = new Date();
@@ -414,11 +497,13 @@ export const HealthManager = {
       return { steps, calories };
     }
 
-    if (!Device.isDevice) return { ...EMPTY_DATA };
+    if (Platform.OS === "android" && !Device.isDevice) return { ...EMPTY_DATA };
 
     try {
       const ready = await this.init();
       if (!ready) return { ...EMPTY_DATA };
+
+      if (Platform.OS === "ios") return await fetchHealthKit(dateRange);
 
       const timeRangeFilter = {
         operator: "between" as const,
@@ -453,6 +538,15 @@ export const HealthManager = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkAvailability(): Promise<HealthAvailability> {
+  if (Platform.OS === "ios") {
+    if (!ahk) return { available: false, reason: "module_not_found" };
+    try {
+      const ok = await hk<boolean>((cb) => ahk!.isAvailable(cb as any));
+      return ok ? { available: true } : { available: false, reason: "sdk_unavailable" };
+    } catch {
+      return { available: false, reason: "error" };
+    }
+  }
   if (Platform.OS !== "android")
     return { available: false, reason: "not_android" };
   if (!Device.isDevice) return { available: false, reason: "simulator" };

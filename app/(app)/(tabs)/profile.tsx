@@ -23,6 +23,12 @@ import { DatePickerInput } from '@/components/DatePickerInput';
 import { Toast } from '@/components/Toast';
 import * as Device from 'expo-device';
 
+import {
+  CALORIE_GOAL_ADJUSTMENT,
+  CALORIE_GOAL_LABELS,
+  CALORIE_GOAL_TYPES,
+  CalorieGoalType,
+} from '@/hooks/useCalorieGoal';
 import { clearCredentials } from '@/lib/credentialStore';
 import { checkAvailability, checkGoogleFitConnected, HealthManager, openHealthConnectSettings, requestPermissions } from '@/lib/healthManager';
 import { syncHealthToSupabase } from '@/lib/healthSync';
@@ -50,6 +56,7 @@ type ProfileForm = {
   height_cm: string;
   weight_kg: string;
   manual_calorie_offset: string;
+  calorie_goal: CalorieGoalType;
   protein_per_kg: string;
   auto_adjust_calories: boolean;
   cycle_tracking_enabled: boolean;
@@ -75,6 +82,7 @@ const EMPTY: ProfileForm = {
   height_cm: '',
   weight_kg: '',
   manual_calorie_offset: '0',
+  calorie_goal: 'maintain',
   protein_per_kg: '2.0',
   auto_adjust_calories: false,
   cycle_tracking_enabled: false,
@@ -125,7 +133,7 @@ export default function ProfileScreen() {
       const { data } = await supabase
         .from('profiles')
         .select(`display_name, gender, date_of_birth, height_cm, weight_kg,
-                 manual_calorie_offset, protein_per_kg, auto_adjust_calories,
+                 manual_calorie_offset, calorie_goal, protein_per_kg, auto_adjust_calories,
                  cycle_tracking_enabled, cycle_length_days, period_duration_days,
                  cycle_calorie_bonus, cycle_period_reminder, cycle_fertile_reminder,
                  activity_level, manual_step_goal, sync_health,
@@ -142,6 +150,7 @@ export default function ProfileScreen() {
           height_cm:               data.height_cm != null ? String(data.height_cm) : '',
           weight_kg:               data.weight_kg != null ? String(data.weight_kg) : '',
           manual_calorie_offset:   data.manual_calorie_offset != null ? String(data.manual_calorie_offset) : '0',
+          calorie_goal:            (data.calorie_goal as CalorieGoalType) ?? 'maintain',
           protein_per_kg:          data.protein_per_kg != null ? String(data.protein_per_kg) : '2.0',
           auto_adjust_calories:    data.auto_adjust_calories ?? false,
           cycle_tracking_enabled:  data.cycle_tracking_enabled ?? false,
@@ -177,7 +186,33 @@ export default function ProfileScreen() {
   }
 
   async function handleToggleHealth(enabled: boolean) {
-    if (enabled) {
+    if (enabled && Platform.OS === 'ios') {
+      try {
+        const availability = await checkAvailability();
+        if (!availability.available) {
+          Alert.alert(
+            'Apple Health nicht verfügbar',
+            availability.reason === 'module_not_found'
+              ? 'Diese App-Version unterstützt Apple Health noch nicht. Bitte aktualisiere die App.'
+              : 'Apple Health ist auf diesem Gerät nicht verfügbar.',
+          );
+          return;
+        }
+        const granted = await requestPermissions();
+        if (!granted) {
+          Alert.alert(
+            'Berechtigung fehlt',
+            'Bitte erlaube AvoraSport den Zugriff auf Schritte und Aktivitätskalorien unter ' +
+            'Einstellungen › Health › Datenzugriff & Geräte › AvoraSport.',
+          );
+          return;
+        }
+      } catch (e) {
+        console.error('[profile] handleToggleHealth (iOS) error:', e);
+        Alert.alert('Fehler', 'Apple Health konnte nicht verbunden werden. Bitte versuche es erneut.');
+        return;
+      }
+    } else if (enabled) {
       if (!Device.isDevice) {
         Alert.alert(
           'Simulator erkannt',
@@ -345,6 +380,7 @@ export default function ProfileScreen() {
         height_cm:                form.height_cm ? parseProfileFloat(form.height_cm, 0) : null,
         weight_kg:                form.weight_kg ? parseProfileFloat(form.weight_kg, 0) : null,
         manual_calorie_offset:    offset,
+        calorie_goal:             form.calorie_goal,
         protein_per_kg:           proteinPkg,
         auto_adjust_calories:     form.auto_adjust_calories,
         cycle_tracking_enabled:   form.cycle_tracking_enabled,
@@ -484,9 +520,30 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Kalorien-Ziel</Text>
           <Text style={styles.hint}>
-            Passe dein dauerhaftes Tagesziel an. Negativ zum Abnehmen (z.B. -500), positiv zum Aufbauen (z.B. +300).
+            Wähle dein Ziel – der Tagesbedarf wird automatisch angepasst.
           </Text>
-          <Text style={styles.label}>Standard-Offset (kcal/Tag)</Text>
+          <Text style={styles.label}>Mein Ziel</Text>
+          <View style={styles.chipRow}>
+            {CALORIE_GOAL_TYPES.map((goal) => (
+              <TouchableOpacity
+                key={goal}
+                style={[styles.chip, styles.chipNarrow, form.calorie_goal === goal && styles.chipActive]}
+                onPress={() => patch('calorie_goal', goal)}
+                activeOpacity={0.8}>
+                <Text style={[styles.chipText, form.calorie_goal === goal && styles.chipTextActive]}>
+                  {CALORIE_GOAL_LABELS[goal]}
+                </Text>
+                <Text style={[styles.chipSub, form.calorie_goal === goal && styles.chipTextActive]}>
+                  {CALORIE_GOAL_ADJUSTMENT[goal] > 0 ? '+' : CALORIE_GOAL_ADJUSTMENT[goal] < 0 ? '−' : '±'}
+                  {Math.abs(CALORIE_GOAL_ADJUSTMENT[goal])} kcal
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.label}>Zusätzlicher Offset (kcal/Tag)</Text>
+          <Text style={styles.hint}>
+            Optionale Feinjustierung zusätzlich zum Ziel, z.B. -100 oder +150.
+          </Text>
           <TextInput
             style={styles.input}
             value={form.manual_calorie_offset}
@@ -790,9 +847,9 @@ export default function ProfileScreen() {
               <Switch
                 value={form.sync_health}
                 onValueChange={handleToggleHealth}
-                disabled={!isNativeReady}
+                disabled={Platform.OS === 'android' && !isNativeReady}
                 trackColor={{ false: '#2a2a2a', true: '#0a3a3a' }}
-                thumbColor={!isNativeReady ? '#333' : form.sync_health ? '#00E5FF' : '#555'}
+                thumbColor={Platform.OS === 'android' && !isNativeReady ? '#333' : form.sync_health ? '#00E5FF' : '#555'}
               />
             </View>
           </View>
@@ -965,6 +1022,7 @@ const styles = StyleSheet.create({
   chipText:       { color: '#666', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   chipTextActive: { color: '#00E5FF' },
   chipTextOrange: { color: '#FF9100' },
+  chipSub:        { color: '#555', fontSize: 11, marginTop: 2 },
 
   rowFields: { flexDirection: 'row', gap: 12 },
   rowField:  { flex: 1 },

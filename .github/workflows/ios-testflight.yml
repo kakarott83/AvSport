@@ -56,7 +56,7 @@ jobs:
           echo "Signierung:"
           check IOS_DIST_P12_BASE64            "$IOS_DIST_P12_BASE64"            6168
           check IOS_DIST_P12_PASSWORD          "$IOS_DIST_P12_PASSWORD"          15
-          check IOS_PROVISION_PROFILE_BASE64   "$IOS_PROVISION_PROFILE_BASE64"   16288
+          check IOS_PROVISION_PROFILE_BASE64   "$IOS_PROVISION_PROFILE_BASE64"   16908
           check ASC_API_KEY_BASE64             "$ASC_API_KEY_BASE64"             344
           check ASC_KEY_ID                     "$ASC_KEY_ID"                     10
           check ASC_ISSUER_ID                  "$ASC_ISSUER_ID"                  36
@@ -138,7 +138,7 @@ jobs:
           if [ "$ACTUAL_SHA" != "1a6f4616b4a8c8e379698dd8d30d38f35c2cbde73e8b3c8b12f640e55f806e05" ]; then
             case "$LEN" in
               0)     HINT="Das Secret ist LEER — es wurde nichts gespeichert." ;;
-              16288) HINT="Hier steht der Inhalt von IOS_PROVISION_PROFILE_BASE64 — die beiden Werte sind VERTAUSCHT." ;;
+              16908) HINT="Hier steht der Inhalt von IOS_PROVISION_PROFILE_BASE64 — die beiden Werte sind VERTAUSCHT." ;;
               344)   HINT="Hier steht der Inhalt von ASC_API_KEY_BASE64 — die Werte sind VERTAUSCHT." ;;
               6168)  HINT="Länge stimmt, Inhalt nicht — beim Kopieren wurden Zeichen verändert." ;;
               *)     HINT="Nur $LEN von 6168 Zeichen angekommen — der Wert wurde beim Einfügen abgeschnitten." ;;
@@ -173,9 +173,9 @@ jobs:
             -out "$PROFILE_DIR/AvoraSportApp.mobileprovision" || true
 
           SHA="$(shasum -a 256 "$PROFILE_DIR/AvoraSportApp.mobileprovision" | cut -d' ' -f1)"
-          echo "Profile: ${#PROFILE_BASE64} Zeichen (erwartet 16288), SHA256 $SHA"
-          if [ "$SHA" != "d237be271c05447fdf07c4948b938515121fb99f3f2f6b850d8bd6d5a8df2e8f" ]; then
-            echo "::error::IOS_PROVISION_PROFILE_BASE64 stimmt nicht mit AvoraSportApp.mobileprovision überein (${#PROFILE_BASE64} von 16288 Zeichen angekommen)."
+          echo "Profile: ${#PROFILE_BASE64} Zeichen (erwartet 16908), SHA256 $SHA"
+          if [ "$SHA" != "a855e38b2dcabcabf02056d242eff3259d19c36d4ae0153a9d02e5601ec6780a" ]; then
+            echo "::error::IOS_PROVISION_PROFILE_BASE64 stimmt nicht mit AvoraSportApp.mobileprovision überein (${#PROFILE_BASE64} von 16908 Zeichen angekommen)."
             exit 1
           fi
 

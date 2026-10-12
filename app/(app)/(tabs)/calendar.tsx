@@ -335,6 +335,7 @@ export default function CalendarScreen() {
           <View style={styles.card}>
             <Calendar
               current={selectedDate}
+              firstDay={1}
               onDayPress={onDayPress}
               onMonthChange={onMonthChange}
               dayComponent={DayCellRenderer}
