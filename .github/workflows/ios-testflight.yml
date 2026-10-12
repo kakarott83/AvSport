@@ -15,6 +15,13 @@ on:
   push:
     branches: [main]
 
+# Mehrere Pushes kurz hintereinander starteten parallele Builds, deren
+# gleichzeitige Uploads App Store Connect ablehnt ("relationship 'buildUpload'").
+# Ein neuer Lauf bricht daher den noch laufenden ab — es baut nur der neueste Stand.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: true
+
 jobs:
   build-and-upload:
     runs-on: macos-latest
