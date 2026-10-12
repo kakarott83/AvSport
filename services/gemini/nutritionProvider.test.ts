@@ -16,7 +16,7 @@ jest.mock('@/services/nutrition/nutritionCache');
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-import { analyzeFoodImage }                from './nutritionProvider';
+import { analyzeFoodImage, analyzeFoodItems } from './nutritionProvider';
 import { supabase }                        from '@/services/supabaseClient';
 import { recognizeFoodItems }              from '@/services/nutrition/foodRecognition';
 import { lookupNutrients }                 from '@/services/nutrition/usdaLookup';
@@ -313,5 +313,29 @@ describe('Rundungslogik', () => {
     expect(r.protein).toBe(4.4);  // Math.round(4.35 * 10) / 10
     expect(r.carbs).toBe(25.5);   // Math.round(25.45 * 10) / 10
     expect(r.fat).toBe(1.4);      // Math.round(1.35 * 10) / 10
+  });
+});
+
+// ── Text-Erfassung: bearbeitete Item-Liste ───────────────────────────────────
+
+describe('analyzeFoodItems (bearbeitete Liste)', () => {
+  it('nutzt USDA für unveränderte Items und summiert', async () => {
+    mockLookup.mockResolvedValueOnce({ macros: MACROS_APPLE, source: 'usda' });
+    mockLookup.mockResolvedValueOnce({ macros: MACROS_RICE, source: 'usda' });
+
+    const r = await analyzeFoodItems([ITEM_APPLE, ITEM_RICE] as any);
+    expect(r.calories).toBe(95 + 206);
+    expect(r.name).toBe('Apfel, Reis');
+    expect(mockRecognize).not.toHaveBeenCalled();
+  });
+
+  it('geht bei umbenannten Items (ohne englischen Namen) direkt zum LLM mit dem deutschen Namen', async () => {
+    mockLLM.mockResolvedValue({ calories: 120, protein: 2, carbs: 20, fat: 3 });
+
+    const r = await analyzeFoodItems([{ name: '', name_de: 'Laugenbrezel', grams: 80, preparation: '' }]);
+    expect(mockLookup).not.toHaveBeenCalled();
+    expect(mockLLM).toHaveBeenCalledWith('Laugenbrezel', 80, '');
+    expect(r.calories).toBe(120);
+    expect(r.confidence).toBe(0.8);
   });
 });

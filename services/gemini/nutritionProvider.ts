@@ -1,4 +1,4 @@
-import { recognizeFoodItems }             from '@/services/nutrition/foodRecognition';
+import { recognizeFoodItems, type RecognizedItem } from '@/services/nutrition/foodRecognition';
 import { lookupNutrients }               from '@/services/nutrition/usdaLookup';
 import { lookupNutrientsViaLLM }         from './nutritionFallback';
 import { GeminiDailyLimitError }         from './client';
@@ -85,7 +85,21 @@ export async function analyzeFoodImage(
   // ── Schritt 1: Vision-Call → Item-Liste ───────────────────────────────────
   const { items } = await recognizeFoodItems(base64_1, base64_2, notes);
 
-  // ── Schritt 2: Nährwert-Lookup für jedes Item ─────────────────────────────
+  // ── Schritt 2: Nährwerte für die erkannte Liste ───────────────────────────
+  const result = await analyzeFoodItems(items);
+
+  // Cache asynchron schreiben — blockiert die Antwort nicht
+  void setCachedResult(base64_1, result);
+  return result;
+}
+
+/**
+ * Nährwert-Kette (USDA → USDA ohne Zubereitung → LLM) für eine Item-Liste.
+ * Wird vom Foto-Flow und direkt von der Text-Erfassung (bearbeitete Liste)
+ * genutzt. Items ohne englischen Namen (umbenannt / neu angelegt) gehen
+ * direkt an den LLM-Fallback mit dem deutschen Namen.
+ */
+export async function analyzeFoodItems(items: RecognizedItem[]): Promise<FoodAnalysisResponse> {
   const totals: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
   let usedLLMFallback  = false;
   let resolvedCount    = 0;
@@ -93,23 +107,28 @@ export async function analyzeFoodImage(
   for (const item of items) {
     let macros: Macros | null = null;
 
-    // USDA-Lookup (Netzwerkfehler → direkt zum LLM-Fallback)
-    try {
-      const result = await lookupNutrients(item.name, item.preparation, item.grams);
-      if (result) {
-        macros = result.macros;
-        logCost(result.source, `${item.grams}g ${item.name}`);
+    // USDA-Lookup (Netzwerkfehler → direkt zum LLM-Fallback). Braucht den
+    // englischen Namen — fehlt der, weil der Nutzer das Item umbenannt hat,
+    // übernimmt direkt der LLM-Fallback.
+    if (item.name) {
+      try {
+        const result = await lookupNutrients(item.name, item.preparation, item.grams);
+        if (result) {
+          macros = result.macros;
+          logCost(result.source, `${item.grams}g ${item.name}`);
+        }
+      } catch (err) {
+        console.warn(`[Nutrition] USDA nicht erreichbar für "${item.name}":`, err);
       }
-    } catch (err) {
-      console.warn(`[Nutrition] USDA nicht erreichbar für "${item.name}":`, err);
     }
 
     // LLM-Fallback wenn USDA keinen Treffer hatte oder nicht erreichbar war
     if (!macros) {
-      console.warn(`[Nutrition] LLM-Fallback für "${item.name}"`);
+      console.warn(`[Nutrition] LLM-Fallback für "${item.name || item.name_de}"`);
       try {
-        macros = await lookupNutrientsViaLLM(item.name, item.grams, item.preparation);
-        logCost('llm_fallback', `${item.grams}g ${item.name}`);
+        const llmName = item.name || item.name_de;
+        macros = await lookupNutrientsViaLLM(llmName, item.grams, item.preparation);
+        logCost('llm_fallback', `${item.grams}g ${llmName}`);
         usedLLMFallback = true;
       } catch (llmErr) {
         if (llmErr instanceof GeminiDailyLimitError) throw llmErr;
@@ -147,10 +166,7 @@ export async function analyzeFoodImage(
     `Items: ${resolvedCount}/${items.length} aufgelöst`,
   );
 
-  // Cache + Logs asynchron schreiben — blockiert die Antwort nicht
   const userId = await getUserId();
-  void setCachedResult(base64_1, result);
   void flushCostLogs(userId);
-
   return result;
 }

@@ -24,7 +24,8 @@ import Animated, {
 import Svg, { Circle } from 'react-native-svg';
 
 import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
-import { analyzeFoodImage } from '@/services/gemini/nutritionProvider';
+import { analyzeFoodImage, analyzeFoodItems } from '@/services/gemini/nutritionProvider';
+import { recognizeFoodFromText, type RecognizedItem } from '@/services/nutrition/foodRecognition';
 import { supabase } from '@/services/supabaseClient';
 import type { FoodAnalysis } from '@/types/vision';
 
@@ -50,8 +51,19 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'camera' | 'tip' | 'camera2' | 'review' | 'analyzing' | 'result' | 'saving';
+type Phase =
+  | 'camera' | 'tip' | 'camera2' | 'review'          // Foto-Erfassung
+  | 'describe' | 'parsing' | 'items'                 // Text-/Sprach-Erfassung
+  | 'analyzing' | 'result' | 'saving';
 type CapturedPhoto = { base64: string; uri: string };
+
+/** Bearbeitbare Zeile der Text-Erfassung. `name` (englisch) wird beim Umbenennen geleert. */
+type EditableItem = { key: string; name: string; name_de: string; grams: string; preparation: string };
+
+let itemKeySeq = 0;
+function toEditable(item: RecognizedItem): EditableItem {
+  return { key: `i${++itemKeySeq}`, ...item, grams: String(Math.round(item.grams)) };
+}
 
 type Props = {
   visible: boolean;
@@ -121,6 +133,9 @@ export function FoodScanner({
   const [image1, setImage1] = useState<CapturedPhoto | null>(null);
   const [image2, setImage2] = useState<CapturedPhoto | null>(null);
   const [notes,  setNotes]  = useState('');
+  const [mode,   setMode]   = useState<'photo' | 'text'>('photo');
+  const [description, setDescription] = useState('');
+  const [items,  setItems]  = useState<EditableItem[]>([]);
   const [result, setResult] = useState<FoodAnalysis | null>(null);
   const [error,  setError]  = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -131,6 +146,9 @@ export function FoodScanner({
     setImage1(null);
     setImage2(null);
     setNotes('');
+    setMode('photo');
+    setDescription('');
+    setItems([]);
     setResult(null);
     setError(null);
     setIsCapturing(false);
@@ -177,6 +195,26 @@ export function FoodScanner({
     }
   }
 
+  /** Gemeinsame Fehlerbehandlung für alle KI-Aufrufe; springt zurück nach `backTo`. */
+  function handleAiError(e: any, backTo: Phase) {
+    if (isDailyLimitError(e)) {
+      handleClose();
+      openPaywall(router);
+      return;
+    }
+    const msg: string = e?.message ?? '';
+    if (msg.includes('503')) {
+      setError('Die KI ist gerade stark ausgelastet. Bitte versuch es gleich nochmal! ☕');
+    } else if (e instanceof TypeError || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+      setError('Verbindung fehlgeschlagen. Prüfe dein Internet.');
+    } else if (e instanceof SyntaxError) {
+      setError('Die KI-Antwort war unvollständig. Bitte versuch es nochmal.');
+    } else {
+      setError(msg || 'Analyse fehlgeschlagen');
+    }
+    setPhase(backTo);
+  }
+
   async function handleAnalyze() {
     if (!image1) return;
     setError(null);
@@ -190,20 +228,54 @@ export function FoodScanner({
       setResult(data);
       setPhase('result');
     } catch (e: any) {
-      if (isDailyLimitError(e)) {
-        handleClose();
-        openPaywall(router);
-        return;
-      }
-      const msg: string = e?.message ?? '';
-      if (msg.includes('503')) {
-        setError('Die KI ist gerade stark ausgelastet. Bitte versuch es gleich nochmal! ☕');
-      } else if (e instanceof TypeError || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-        setError('Verbindung fehlgeschlagen. Prüfe dein Internet.');
-      } else {
-        setError(msg || 'Analyse fehlgeschlagen');
-      }
-      setPhase('review');
+      handleAiError(e, 'review');
+    }
+  }
+
+  // ── Text-/Sprach-Erfassung ──────────────────────────────────────────────────
+
+  function openDescribe() {
+    setError(null);
+    setMode('text');
+    setPhase('describe');
+  }
+
+  async function handleParseDescription() {
+    if (description.trim().length < 3) return;
+    setError(null);
+    setPhase('parsing');
+    try {
+      const { items: recognized } = await recognizeFoodFromText(description);
+      setItems(recognized.map(toEditable));
+      setPhase('items');
+    } catch (e: any) {
+      handleAiError(e, 'describe');
+    }
+  }
+
+  function updateItem(key: string, patch: Partial<EditableItem>) {
+    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  }
+
+  function addItem() {
+    setItems((prev) => [...prev, { key: `i${++itemKeySeq}`, name: '', name_de: '', grams: '', preparation: '' }]);
+  }
+
+  /** Nur vollständige Zeilen (Name + Menge > 0) gehen in die Analyse. */
+  const validItems: RecognizedItem[] = items
+    .map((it) => ({ name: it.name, name_de: it.name_de.trim(), grams: parseInt(it.grams, 10), preparation: it.preparation }))
+    .filter((it) => it.name_de && it.grams > 0);
+
+  async function handleAnalyzeItems() {
+    if (validItems.length === 0) return;
+    setError(null);
+    setPhase('analyzing');
+    try {
+      const data = await analyzeFoodItems(validItems);
+      setResult(data);
+      setPhase('result');
+    } catch (e: any) {
+      handleAiError(e, 'items');
     }
   }
 
@@ -264,6 +336,9 @@ export function FoodScanner({
                 <TouchableOpacity style={s.primaryBtn} onPress={requestPermission} activeOpacity={0.8}>
                   <Text style={s.primaryBtnText}>Erlauben</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={s.retryBtn} onPress={openDescribe} activeOpacity={0.7}>
+                  <Text style={s.retryText}>Mahlzeit stattdessen beschreiben</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -291,9 +366,139 @@ export function FoodScanner({
                     <Text style={s.skipText}>Überspringen</Text>
                   </TouchableOpacity>
                 )}
+                {phase === 'camera' && (
+                  <TouchableOpacity style={s.describeBtn} onPress={openDescribe} activeOpacity={0.8}>
+                    <MaterialIcons name="keyboard-voice" size={16} color="#fff" />
+                    <Text style={s.describeBtnText}>Stattdessen beschreiben</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </>
+        )}
+
+        {/* ── Describe phase (Text / Diktat) ── */}
+        {phase === 'describe' && (
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: '#121212' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <ScrollView
+              contentContainerStyle={s.reviewContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={s.sectionLabel}>WAS HAST DU GEGESSEN?</Text>
+              <TextInput
+                style={[s.notesInput, s.describeInput]}
+                placeholder={'z. B. „Zwei Scheiben Vollkornbrot mit Butter und Käse, ein Apfel und ein Glas Orangensaft“'}
+                placeholderTextColor="#444"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+              />
+              <View style={s.tipBox}>
+                <MaterialIcons name="keyboard-voice" size={18} color="#FF9100" style={{ marginTop: 1 }} />
+                <Text style={s.tipText}>
+                  Tipp: Tippe auf das Mikrofon deiner Tastatur und sprich einfach, was du gegessen hast. Mengenangaben machen das Ergebnis genauer.
+                </Text>
+              </View>
+
+              {error && <Text style={s.errorText}>{error}</Text>}
+
+              <TouchableOpacity
+                style={[s.analyzeBtn, description.trim().length < 3 && s.btnDisabled]}
+                onPress={handleParseDescription}
+                disabled={description.trim().length < 3}
+                activeOpacity={0.85}
+              >
+                <MaterialIcons name="playlist-add-check" size={20} color="#121212" />
+                <Text style={s.analyzeBtnText}>Erfassen</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
+                <Text style={s.retryText}>Stattdessen Foto aufnehmen</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        )}
+
+        {/* ── Parsing phase ── */}
+        {phase === 'parsing' && (
+          <View style={[s.centeredBox, { justifyContent: 'center', alignItems: 'center' }]}>
+            <AnimatedLogo size={90} />
+            <Text style={s.analyzingText}>Erfasse deine Mahlzeit…</Text>
+          </View>
+        )}
+
+        {/* ── Items phase (Liste vor der Analyse bearbeiten) ── */}
+        {phase === 'items' && (
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: '#121212' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <ScrollView
+              contentContainerStyle={s.reviewContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={s.sectionLabel}>ERFASSTE LEBENSMITTEL</Text>
+              <Text style={s.itemsHint}>
+                Prüfe die Liste und passe Namen oder Mengen an, bevor die Nährwerte berechnet werden.
+              </Text>
+
+              {items.map((it) => (
+                <View key={it.key} style={s.itemRow}>
+                  <TextInput
+                    style={[s.itemInput, s.itemName]}
+                    value={it.name_de}
+                    onChangeText={(v) => updateItem(it.key, { name_de: v, name: '', preparation: '' })}
+                    placeholder="Lebensmittel"
+                    placeholderTextColor="#444"
+                  />
+                  <TextInput
+                    style={[s.itemInput, s.itemGrams]}
+                    value={it.grams}
+                    onChangeText={(v) => updateItem(it.key, { grams: v.replace(/\D/g, '').slice(0, 4) })}
+                    placeholder="0"
+                    placeholderTextColor="#444"
+                    keyboardType="number-pad"
+                    textAlign="right"
+                  />
+                  <Text style={s.itemUnit}>g</Text>
+                  <TouchableOpacity
+                    onPress={() => setItems((prev) => prev.filter((x) => x.key !== it.key))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="close" size={18} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity style={s.addItemBtn} onPress={addItem} activeOpacity={0.7}>
+                <MaterialIcons name="add" size={18} color={COLOR_CALORIES} />
+                <Text style={s.addItemText}>Lebensmittel hinzufügen</Text>
+              </TouchableOpacity>
+
+              {error && <Text style={s.errorText}>{error}</Text>}
+
+              <TouchableOpacity
+                style={[s.analyzeBtn, validItems.length === 0 && s.btnDisabled]}
+                onPress={handleAnalyzeItems}
+                disabled={validItems.length === 0}
+                activeOpacity={0.85}
+              >
+                <MaterialIcons name="auto-awesome" size={18} color="#121212" />
+                <Text style={s.analyzeBtnText}>Analysieren</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.retryBtn} onPress={() => { setError(null); setPhase('describe'); }} activeOpacity={0.7}>
+                <Text style={s.retryText}>Beschreibung ändern</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
         )}
 
         {/* ── Tip phase ── */}
@@ -454,9 +659,15 @@ export function FoodScanner({
 
             {error && <Text style={s.errorText}>{error}</Text>}
 
-            <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
-              <Text style={s.retryText}>Nochmal aufnehmen</Text>
-            </TouchableOpacity>
+            {mode === 'text' ? (
+              <TouchableOpacity style={s.retryBtn} onPress={() => { setError(null); setPhase('items'); }} activeOpacity={0.7}>
+                <Text style={s.retryText}>Liste bearbeiten</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
+                <Text style={s.retryText}>Nochmal aufnehmen</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -652,6 +863,39 @@ const s = StyleSheet.create({
     paddingVertical: 16,
   },
   analyzeBtnText: { color: '#121212', fontSize: 16, fontWeight: '800' },
+  btnDisabled:    { opacity: 0.35 },
+
+  // Describe / items
+  describeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  describeBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  describeInput:   { minHeight: 140, fontSize: 15 },
+  itemsHint:       { color: '#777', fontSize: 13, lineHeight: 19, marginTop: -6 },
+  itemRow:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  itemInput: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#fff',
+    fontSize: 14,
+  },
+  itemName:    { flex: 1 },
+  itemGrams:   { width: 64 },
+  itemUnit:    { color: '#666', fontSize: 13, marginLeft: -4 },
+  addItemBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  addItemText: { color: COLOR_CALORIES, fontSize: 14, fontWeight: '600' },
 
   analyzingText:    { color: '#fff', fontSize: 16, fontWeight: '600', marginTop: 16, textAlign: 'center' },
   analyzingSubText: { color: '#555', fontSize: 12, marginTop: 4, textAlign: 'center' },
