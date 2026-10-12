@@ -32,7 +32,7 @@ import {
 import { clearCredentials } from '@/lib/credentialStore';
 import { checkAvailability, checkGoogleFitConnected, HealthManager, openHealthConnectSettings, requestPermissions } from '@/lib/healthManager';
 import { syncHealthToSupabase } from '@/lib/healthSync';
-import { clampStepper, parseProfileFloat, parseProfileInt, STEPPER_BOUNDS, validateProfileForm } from '@/lib/profile';
+import { clampStepper, formatDecimal, parseProfileFloat, parseProfileInt, sanitizeDecimalInput, STEPPER_BOUNDS, validateProfileForm } from '@/lib/profile';
 import {
   ACTIVITY_LEVEL_LABELS,
   ACTIVITY_LEVELS,
@@ -83,7 +83,7 @@ const EMPTY: ProfileForm = {
   weight_kg: '',
   manual_calorie_offset: '0',
   calorie_goal: 'maintain',
-  protein_per_kg: '2.0',
+  protein_per_kg: '2,0',
   auto_adjust_calories: false,
   cycle_tracking_enabled: false,
   cycle_length_days: 28,
@@ -147,11 +147,11 @@ export default function ProfileScreen() {
           display_name:            data.display_name ?? '',
           gender:                  data.gender ?? null,
           date_of_birth:           data.date_of_birth ?? '',
-          height_cm:               data.height_cm != null ? String(data.height_cm) : '',
-          weight_kg:               data.weight_kg != null ? String(data.weight_kg) : '',
+          height_cm:               formatDecimal(data.height_cm),
+          weight_kg:               formatDecimal(data.weight_kg),
           manual_calorie_offset:   data.manual_calorie_offset != null ? String(data.manual_calorie_offset) : '0',
           calorie_goal:            (data.calorie_goal as CalorieGoalType) ?? 'maintain',
-          protein_per_kg:          data.protein_per_kg != null ? String(data.protein_per_kg) : '2.0',
+          protein_per_kg:          data.protein_per_kg != null ? formatDecimal(data.protein_per_kg) : '2,0',
           auto_adjust_calories:    data.auto_adjust_calories ?? false,
           cycle_tracking_enabled:  data.cycle_tracking_enabled ?? false,
           cycle_length_days:       data.cycle_length_days ?? 28,
@@ -484,6 +484,7 @@ export default function ProfileScreen() {
             value={form.date_of_birth}
             onChange={(v) => patch('date_of_birth', v)}
             label="Geburtsdatum wählen"
+            showQuickDates={false}
           />
         </View>
 
@@ -496,7 +497,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={form.height_cm}
-                onChangeText={(v) => patch('height_cm', v.replace(/[^0-9.]/g, ''))}
+                onChangeText={(v) => patch('height_cm', sanitizeDecimalInput(v))}
                 placeholder="175"
                 placeholderTextColor="#555"
                 keyboardType="decimal-pad"
@@ -507,8 +508,8 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={form.weight_kg}
-                onChangeText={(v) => patch('weight_kg', v.replace(/[^0-9.]/g, ''))}
-                placeholder="75.0"
+                onChangeText={(v) => patch('weight_kg', sanitizeDecimalInput(v))}
+                placeholder="75,0"
                 placeholderTextColor="#555"
                 keyboardType="decimal-pad"
               />
@@ -565,8 +566,8 @@ export default function ProfileScreen() {
           <TextInput
             style={styles.input}
             value={form.protein_per_kg}
-            onChangeText={(v) => patch('protein_per_kg', v.replace(/[^0-9.]/g, ''))}
-            placeholder="2.0"
+            onChangeText={(v) => patch('protein_per_kg', sanitizeDecimalInput(v))}
+            placeholder="2,0"
             placeholderTextColor="#555"
             keyboardType="decimal-pad"
           />

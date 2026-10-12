@@ -45,9 +45,11 @@ type Props = {
   value: string;       // YYYY-MM-DD
   onChange: (v: string) => void;
   label?: string;
+  /** Schnellauswahl "Heute / Gestern / Vorgestern" — aus z.B. beim Geburtsdatum. */
+  showQuickDates?: boolean;
 };
 
-export function DatePickerInput({ value, onChange, label }: Props) {
+export function DatePickerInput({ value, onChange, label, showQuickDates = true }: Props) {
   const [open, setOpen] = useState(false);
   const parts = isoToParts(value);
   const [day, setDay] = useState(parts.day);
@@ -145,6 +147,7 @@ export function DatePickerInput({ value, onChange, label }: Props) {
             </View>
 
             {/* Schnell-Buttons */}
+            {showQuickDates && (
             <View style={styles.quickRow}>
               {[
                 { label: 'Heute', offset: 0 },
@@ -168,6 +171,7 @@ export function DatePickerInput({ value, onChange, label }: Props) {
                 );
               })}
             </View>
+            )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 

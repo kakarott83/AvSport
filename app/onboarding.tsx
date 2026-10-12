@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,14 +13,21 @@ import {
 
 import { DatePickerInput } from '@/components/DatePickerInput';
 import {
+  CALORIE_GOAL_ADJUSTMENT,
+  CALORIE_GOAL_LABELS,
+  CALORIE_GOAL_TYPES,
+  CalorieGoalType,
+} from '@/hooks/useCalorieGoal';
+import {
   ACTIVITY_LEVEL_LABELS,
   ACTIVITY_LEVELS,
   ActivityLevel,
   DEFAULT_ACTIVITY_LEVEL,
 } from '@/lib/stepGoal';
+import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
@@ -29,8 +36,18 @@ export default function OnboardingScreen() {
   const [dob, setDob] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
+  const [calorieGoal, setCalorieGoal] = useState<CalorieGoalType>('maintain');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(DEFAULT_ACTIVITY_LEVEL);
   const [saving, setSaving] = useState(false);
+
+  // Google/Apple sign-in deliver the name in the user metadata — pre-fill it.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const meta = user?.user_metadata ?? {};
+      const metaName = (meta.full_name ?? meta.name ?? '').toString().trim();
+      if (metaName) setName((prev) => prev || metaName);
+    });
+  }, []);
 
   const isOptional = step > 1;
   const isLast = step === TOTAL_STEPS;
@@ -51,8 +68,9 @@ export default function OnboardingScreen() {
         display_name: name.trim(),
         gender: gender ?? null,
         date_of_birth: dob || null,
-        height_cm: height ? parseFloat(height) : null,
-        weight_kg: weight ? parseFloat(weight) : null,
+        height_cm: height && !isNaN(parseDecimal(height)) ? parseDecimal(height) : null,
+        weight_kg: weight && !isNaN(parseDecimal(weight)) ? parseDecimal(weight) : null,
+        calorie_goal: calorieGoal,
         activity_level: activityLevel,
       },
       { onConflict: 'id' },
@@ -101,6 +119,9 @@ export default function OnboardingScreen() {
             <StepBody height={height} weight={weight} onHeight={setHeight} onWeight={setWeight} />
           )}
           {step === 5 && (
+            <StepGoal goal={calorieGoal} onChange={setCalorieGoal} />
+          )}
+          {step === 6 && (
             <StepActivity activityLevel={activityLevel} onChange={setActivityLevel} />
           )}
         </View>
@@ -201,6 +222,7 @@ function StepDob({ dob, onChange }: { dob: string; onChange: (v: string) => void
         value={dob}
         onChange={onChange}
         label="Geburtsdatum wählen"
+        showQuickDates={false}
       />
     </View>
   );
@@ -232,7 +254,7 @@ function StepBody({
           <TextInput
             style={styles.input}
             value={height}
-            onChangeText={(v) => onHeight(v.replace(/[^0-9.]/g, ''))}
+            onChangeText={(v) => onHeight(sanitizeDecimalInput(v))}
             placeholder="175"
             placeholderTextColor="#555"
             keyboardType="decimal-pad"
@@ -243,7 +265,7 @@ function StepBody({
           <TextInput
             style={styles.input}
             value={weight}
-            onChangeText={(v) => onWeight(v.replace(/[^0-9.]/g, ''))}
+            onChangeText={(v) => onWeight(sanitizeDecimalInput(v))}
             placeholder="75"
             placeholderTextColor="#555"
             keyboardType="decimal-pad"
@@ -254,7 +276,51 @@ function StepBody({
   );
 }
 
-// ─── Step 5: Activity level ──────────────────────────────────────────────────
+// ─── Step 5: Calorie goal ────────────────────────────────────────────────────
+
+const GOAL_HINTS: Record<CalorieGoalType, string> = {
+  lose:     'Moderates Defizit für stetigen Fettabbau',
+  maintain: 'Gewicht halten und fit bleiben',
+  gain:     'Leichter Überschuss für Muskelaufbau',
+};
+
+function StepGoal({
+  goal,
+  onChange,
+}: {
+  goal: CalorieGoalType;
+  onChange: (v: CalorieGoalType) => void;
+}) {
+  return (
+    <View>
+      <Text style={styles.emoji}>🎯</Text>
+      <Text style={styles.heading}>Was ist dein Ziel?</Text>
+      <Text style={styles.sub}>
+        Danach richte ich dein tägliches Kalorienziel aus. Du kannst es später im Profil ändern.
+      </Text>
+      <View style={styles.activityGrid}>
+        {CALORIE_GOAL_TYPES.map((g) => {
+          const adj = CALORIE_GOAL_ADJUSTMENT[g];
+          return (
+            <TouchableOpacity
+              key={g}
+              style={[styles.activityChip, goal === g && styles.goalChipActive]}
+              onPress={() => onChange(g)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.activityChipText, goal === g && styles.chipTextActive]}>
+                {CALORIE_GOAL_LABELS[g]} · {adj > 0 ? '+' : adj < 0 ? '−' : '±'}{Math.abs(adj)} kcal
+              </Text>
+              <Text style={styles.goalHint}>{GOAL_HINTS[g]}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── Step 6: Activity level ──────────────────────────────────────────────────
 
 function StepActivity({
   activityLevel,
@@ -321,6 +387,8 @@ const styles = StyleSheet.create({
   activityChipActive:   { backgroundColor: '#1a1000', borderColor: '#FF9100' },
   activityChipText:     { color: '#666', fontSize: 14, fontWeight: '600' },
   activityChipTextActive: { color: '#FF9100' },
+  goalChipActive:       { backgroundColor: '#0a3a3a', borderColor: '#00E5FF' },
+  goalHint:             { color: '#555', fontSize: 12, marginTop: 4 },
 
   actions:  { paddingBottom: 16 },
   nextBtn:  { backgroundColor: '#00E5FF', borderRadius: 16, padding: 18, alignItems: 'center' },

@@ -20,6 +20,7 @@ import { Toast } from '@/components/Toast';
 import { FoodScanner } from '@/components/FoodScanner';
 import { useCalorieGoal } from '@/hooks/useCalorieGoal';
 import { buildWeekDays, computeDayTotals, type FoodLog, type WeekDay } from '@/lib/nutrition';
+import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { calculateWaterGoal } from '@/lib/waterGoal';
 import { supabase } from '@/services/supabaseClient';
 
@@ -212,9 +213,9 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
       user_id: user.id,
       meal_name: name.trim(),
       calories: kcal,
-      protein: protein ? parseFloat(protein) : null,
-      carbs: carbs ? parseFloat(carbs) : null,
-      fat: fat ? parseFloat(fat) : null,
+      protein: protein && !isNaN(parseDecimal(protein)) ? parseDecimal(protein) : null,
+      carbs: carbs && !isNaN(parseDecimal(carbs)) ? parseDecimal(carbs) : null,
+      fat: fat && !isNaN(parseDecimal(fat)) ? parseDecimal(fat) : null,
     });
 
     if (dbErr) { setSaving(false); setError(`Fehler: ${dbErr.message}`); return; }
@@ -257,7 +258,7 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
               ([lbl, val, setter]) => (
                 <View key={lbl} style={modalStyles.macroField}>
                   <Text style={modalStyles.label}>{lbl} (g)</Text>
-                  <TextInput style={modalStyles.input} value={val} onChangeText={setter}
+                  <TextInput style={modalStyles.input} value={val} onChangeText={(t) => setter(sanitizeDecimalInput(t))}
                     placeholder="0" placeholderTextColor="#555" keyboardType="decimal-pad" />
                 </View>
               )

@@ -13,9 +13,12 @@ jest.mock('expo-router', () => ({ useFocusEffect: jest.fn() }));
 
 import {
   clampStepper,
+  formatDecimal,
+  parseDecimal,
   parseProfileFloat,
   parseProfileInt,
   STEPPER_BOUNDS,
+  sanitizeDecimalInput,
   validateProfileForm,
 } from '@/lib/profile';
 
@@ -187,5 +190,32 @@ describe('parseProfileInt', () => {
 
   it('parst einen positiven Offset-Wert korrekt', () => {
     expect(parseProfileInt('+200', 0)).toBe(200);
+  });
+});
+
+describe('Dezimalzahlen im deutschen Format', () => {
+  it('parseDecimal akzeptiert Komma und Punkt', () => {
+    expect(parseDecimal('75,5')).toBe(75.5);
+    expect(parseDecimal('75.5')).toBe(75.5);
+    expect(parseDecimal(' 80 ')).toBe(80);
+    expect(parseDecimal('')).toBeNaN();
+    expect(parseDecimal(',')).toBeNaN();
+  });
+
+  it('parseProfileFloat liest Komma-Zahlen statt sie abzuschneiden', () => {
+    expect(parseProfileFloat('82,3', 0)).toBe(82.3);
+  });
+
+  it('sanitizeDecimalInput lässt genau ein Trennzeichen zu', () => {
+    expect(sanitizeDecimalInput('75,5')).toBe('75,5');
+    expect(sanitizeDecimalInput('75,5,')).toBe('75,5');
+    expect(sanitizeDecimalInput('7a5.5.1')).toBe('75.51');
+    expect(sanitizeDecimalInput('kg')).toBe('');
+  });
+
+  it('formatDecimal zeigt Komma an', () => {
+    expect(formatDecimal(75.5)).toBe('75,5');
+    expect(formatDecimal(80)).toBe('80');
+    expect(formatDecimal(null)).toBe('');
   });
 });

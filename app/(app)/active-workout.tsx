@@ -15,6 +15,7 @@ import {
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { estimateWorkoutKcal } from '@/lib/calorieBurn';
 import { playBeep } from '@/services/audioService';
+import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────
@@ -256,7 +257,7 @@ export default function ActiveWorkoutScreen() {
       setCountdownFrom(data[0].target_duration ?? 0);
       setReps(data[0].reps ? String(data[0].reps) : '');
       const lastWeight = await loadLastWeight(data[0].exercise_name);
-      setWeight(lastWeight || (data[0].target_weight_kg != null ? String(data[0].target_weight_kg) : ''));
+      setWeight(lastWeight || (data[0].target_weight_kg != null ? formatDecimal(data[0].target_weight_kg) : ''));
     }
     loadPlan();
   }, [planId, dayId]);
@@ -338,7 +339,7 @@ export default function ActiveWorkoutScreen() {
       .not('weight_kg', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1);
-    return data?.[0]?.weight_kg ? String(data[0].weight_kg) : '';
+    return data?.[0]?.weight_kg ? formatDecimal(data[0].weight_kg) : '';
   }
 
   async function goToExercise(idx: number) {
@@ -351,7 +352,7 @@ export default function ActiveWorkoutScreen() {
     setReps(next.reps ? String(next.reps) : '');
     resetSetTimer();
     const lastWeight = await loadLastWeight(next.exercise_name);
-    setWeight(lastWeight || (next.target_weight_kg != null ? String(next.target_weight_kg) : ''));
+    setWeight(lastWeight || (next.target_weight_kg != null ? formatDecimal(next.target_weight_kg) : ''));
   }
 
   function startRestBetweenExercises(nextExerciseIdx: number) {
@@ -391,7 +392,7 @@ export default function ActiveWorkoutScreen() {
     const { error } = await supabase.from('exercise_logs').insert({
       user_id: user?.id,
       exercise_name: exercise.trim(),
-      weight_kg: weight ? parseFloat(weight) : null,
+      weight_kg: weight && !isNaN(parseDecimal(weight)) ? parseDecimal(weight) : null,
       reps: reps ? parseInt(reps, 10) : null,
       duration_seconds: isDurationEx ? countdownFrom : elapsed,
       workout_total_seconds: totalElapsed,
@@ -628,7 +629,7 @@ export default function ActiveWorkoutScreen() {
                 <TextInput
                   style={styles.input}
                   value={weight}
-                  onChangeText={setWeight}
+                  onChangeText={(t) => setWeight(sanitizeDecimalInput(t))}
                   placeholder="0"
                   placeholderTextColor="#555"
                   keyboardType="decimal-pad"

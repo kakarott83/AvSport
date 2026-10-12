@@ -16,6 +16,7 @@ import {
 
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { Toast } from '@/components/Toast';
+import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────
@@ -237,7 +238,7 @@ export default function CreatePlanScreen() {
               targetSets: String(e.sets ?? 3),
               targetReps: String(e.reps ?? 10),
               targetDuration: e.target_duration ? String(e.target_duration) : '',
-              targetWeight: e.target_weight_kg != null ? String(e.target_weight_kg) : '',
+              targetWeight: formatDecimal(e.target_weight_kg),
               description: e.description ?? null,
               muscle_group: e.muscle_group ?? null,
               equipment_type: e.equipment_type ?? null,
@@ -332,7 +333,7 @@ export default function CreatePlanScreen() {
       sets: isCircuit ? 1 : (parseInt(e.targetSets, 10) || 3),
       reps: parseInt(e.targetReps, 10) || 0,
       target_duration: e.targetDuration.trim() ? parseInt(e.targetDuration, 10) : null,
-      target_weight_kg: e.targetWeight.trim() ? parseFloat(e.targetWeight) : null,
+      target_weight_kg: e.targetWeight.trim() && !isNaN(parseDecimal(e.targetWeight)) ? parseDecimal(e.targetWeight) : null,
       // Beschreibung: manuell erfasst oder von der KI übernommen (editierbar).
       description: e.description?.trim() ? e.description.trim() : null,
       // Übrige KI-Felder unverändert zurückschreiben, damit sie beim Bearbeiten nicht verloren gehen
@@ -556,7 +557,7 @@ export default function CreatePlanScreen() {
                 <TextInput
                   style={styles.input}
                   value={ex.targetWeight}
-                  onChangeText={(v) => updateRow(ex.localId, 'targetWeight', v.replace(/[^0-9.]/g, ''))}
+                  onChangeText={(v) => updateRow(ex.localId, 'targetWeight', sanitizeDecimalInput(v))}
                   keyboardType="decimal-pad"
                   placeholder="—"
                   placeholderTextColor="#444"

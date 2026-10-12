@@ -17,6 +17,7 @@ import { LineChart } from 'react-native-gifted-charts';
 
 import { DatePickerInput, isoToGerman } from '@/components/DatePickerInput';
 import { Toast } from '@/components/Toast';
+import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────
@@ -251,7 +252,7 @@ export default function BodyStatsScreen() {
   // ── Gewicht speichern ──
   async function handleSaveWeight() {
     setWeightError('');
-    const v = parseFloat(weightInput);
+    const v = parseDecimal(weightInput);
     if (!weightInput.trim() || isNaN(v) || v <= 0) {
       setWeightError('Bitte ein gültiges Gewicht eingeben.');
       return;
@@ -270,7 +271,7 @@ export default function BodyStatsScreen() {
     if (error) { setWeightError(`Fehler: ${error.message}`); return; }
 
     setLatestWeight(v);
-    setToast(`Gewicht: ${v} kg – ${isoToGerman(weightDate)} gespeichert`);
+    setToast(`Gewicht: ${formatDecimal(v)} kg – ${isoToGerman(weightDate)} gespeichert`);
     setWeightInput('');
     loadAll();
     if (activeTab === 'Gewicht') loadChartData('Gewicht');
@@ -280,7 +281,7 @@ export default function BodyStatsScreen() {
   async function handleSaveMeasurement() {
     setMeasError('');
     if (!region.trim()) { setMeasError('Bitte eine Region angeben.'); return; }
-    const v = parseFloat(valueInput);
+    const v = parseDecimal(valueInput);
     if (!valueInput.trim() || isNaN(v) || v <= 0) {
       setMeasError('Bitte einen gültigen Wert eingeben.');
       return;
@@ -333,7 +334,7 @@ export default function BodyStatsScreen() {
             <MaterialIcons name="monitor-weight" size={20} color="#0a7ea4" />
             <Text style={styles.cardTitle}>Körpergewicht</Text>
             {latestWeight !== null && (
-              <Text style={styles.currentBadge}>{latestWeight} kg</Text>
+              <Text style={styles.currentBadge}>{formatDecimal(latestWeight)} kg</Text>
             )}
           </View>
 
@@ -341,8 +342,8 @@ export default function BodyStatsScreen() {
             <TextInput
               style={[styles.input, styles.weightInput]}
               value={weightInput}
-              onChangeText={setWeightInput}
-              placeholder="z.B. 82.5"
+              onChangeText={(t) => setWeightInput(sanitizeDecimalInput(t))}
+              placeholder="z.B. 82,5"
               placeholderTextColor="#555"
               keyboardType="decimal-pad"
               returnKeyType="done"
@@ -382,8 +383,8 @@ export default function BodyStatsScreen() {
             <TextInput
               style={[styles.input, styles.weightInput]}
               value={valueInput}
-              onChangeText={setValueInput}
-              placeholder="z.B. 85.0"
+              onChangeText={(t) => setValueInput(sanitizeDecimalInput(t))}
+              placeholder="z.B. 85,0"
               placeholderTextColor="#555"
               keyboardType="decimal-pad"
               returnKeyType="done"
@@ -523,7 +524,7 @@ export default function BodyStatsScreen() {
                   <Text style={styles.historyRegion}>{m.region}</Text>
                   <Text style={styles.historyDate}>{formatDisplayDate(m.measured_at)}</Text>
                 </View>
-                <Text style={styles.historyValue}>{m.value} {meta.unit}</Text>
+                <Text style={styles.historyValue}>{formatDecimal(m.value)} {meta.unit}</Text>
                 <TouchableOpacity
                   onPress={() => handleDelete(m.id)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

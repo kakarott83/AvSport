@@ -76,9 +76,31 @@ export function validateProfileForm(form: {
 
 // ── Input parsing ──────────────────────────────────────────────────────────────
 
+/**
+ * Keystroke filter for decimal fields: digits plus ONE separator. Accepts the
+ * German comma as well as a dot (decimal-pad shows either, depending on locale).
+ */
+export function sanitizeDecimalInput(raw: string): string {
+  const cleaned = raw.replace(/[^0-9.,]/g, '');
+  const sep = cleaned.search(/[.,]/);
+  if (sep === -1) return cleaned;
+  return cleaned.slice(0, sep + 1) + cleaned.slice(sep + 1).replace(/[.,]/g, '');
+}
+
+/** Parse "75,5" or "75.5" → 75.5; NaN for empty/invalid input. */
+export function parseDecimal(raw: string): number {
+  const s = raw.trim().replace(',', '.');
+  return s ? parseFloat(s) : NaN;
+}
+
+/** Number → German display string for input fields ("75.5" → "75,5"). */
+export function formatDecimal(n: number | null | undefined): string {
+  return n == null ? '' : String(n).replace('.', ',');
+}
+
 /** Parse a user-typed decimal string; return `fallback` on NaN or empty input. */
 export function parseProfileFloat(raw: string, fallback: number): number {
-  const n = parseFloat(raw);
+  const n = parseDecimal(raw);
   return isNaN(n) ? fallback : n;
 }
 
