@@ -76,6 +76,12 @@ jobs:
           check EXPO_PUBLIC_REVENUECAT_IOS_KEY       "$EXPO_PUBLIC_REVENUECAT_IOS_KEY"       ""
           check EXPO_PUBLIC_REVENUECAT_ANDROID_KEY   "$EXPO_PUBLIC_REVENUECAT_ANDROID_KEY"   ""
 
+          # Test-Store-Keys crashen Release-Builds im RevenueCat-SDK; die App
+          # schaltet Abos dann ab (lib/purchases.ts) — Käufe gehen erst mit appl_-Key.
+          case "$EXPO_PUBLIC_REVENUECAT_IOS_KEY" in
+            test_*) echo "::warning::EXPO_PUBLIC_REVENUECAT_IOS_KEY ist ein Test-Store-Key — In-App-Abos sind in diesem Build deaktiviert. Für den Store den appl_-Key aus RevenueCat eintragen." ;;
+          esac
+
           if [ -n "$MISSING" ]; then
             echo "::error::Diese Secrets fehlen oder haben die falsche Länge:$MISSING — anzulegen unter Settings > Secrets and variables > Actions > New repository secret."
             exit 1

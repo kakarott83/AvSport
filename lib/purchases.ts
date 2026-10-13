@@ -56,7 +56,17 @@ function resolveApiKey(): string | null {
     Platform.OS === 'ios'
       ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
       : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
-  return key && key.trim().length > 0 ? key.trim() : null;
+  if (!key || key.trim().length === 0) return null;
+  const trimmed = key.trim();
+  // Test-Store-Keys (`test_…`) bringt das RevenueCat-SDK in Release-Builds
+  // absichtlich per fatalError zum Absturz (Schutz davor, sie auszuliefern) —
+  // TestFlight-Build 4 crashte deshalb direkt beim Start. Außerhalb von
+  // __DEV__ daher wie „kein Key" behandeln.
+  if (!__DEV__ && trimmed.startsWith('test_')) {
+    console.warn('[Purchases] Test-Store-Key in Release-Build — In-App-Abos inaktiv.');
+    return null;
+  }
+  return trimmed;
 }
 
 /**
