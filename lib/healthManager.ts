@@ -1,5 +1,5 @@
 import * as Device from "expo-device";
-import { AppState, Platform } from "react-native";
+import { AppState, NativeModules, Platform } from "react-native";
 
 import { mockHealthService } from "@/services/mockHealthService";
 
@@ -30,14 +30,13 @@ type AHK = typeof import("react-native-health").default;
 let ahk: AHK | null = null;
 
 if (Platform.OS === "ios") {
-  try {
-    const mod = require("react-native-health");
-    ahk = (mod?.default ?? mod) as AHK;
-    // The JS wrapper loads even when the native side is not linked.
-    if (typeof ahk?.initHealthKit !== "function") ahk = null;
-  } catch {
-    ahk = null;
-  }
+  // Use the native module directly instead of react-native-health's index.js:
+  // that wrapper builds its export via Object.assign({}, AppleHealthKit), and
+  // under the New Architecture the module is a JSI host object whose methods
+  // are not enumerable — the copy ends up without initHealthKit & co.
+  const native = NativeModules.AppleHealthKit as AHK | undefined;
+  // The JS side can exist even when the native side is not linked.
+  ahk = typeof native?.initHealthKit === "function" ? native : null;
 }
 
 /** Promise wrapper for react-native-health's (err, result) callbacks. */

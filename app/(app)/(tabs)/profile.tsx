@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Alert,
@@ -106,6 +107,7 @@ const EMPTY: ProfileForm = {
 // ─────────────────────────────────────────
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [form, setForm]       = useState<ProfileForm>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -449,7 +451,10 @@ export default function ProfileScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 16 }]}
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* ── Allgemein ── */}
         <View style={styles.card}>
