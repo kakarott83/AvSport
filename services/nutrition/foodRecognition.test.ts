@@ -24,6 +24,8 @@ describe('recognizeFoodFromText', () => {
     const parts = mockGemini.mock.calls[0][0];
     expect(parts).toHaveLength(1);
     expect(parts[0].text).toContain('Zwei Scheiben Vollkornbrot und ein Apfel');
+    // Gerichte bleiben ein Item, da jedes Item ein eigener Journal-Eintrag wird
+    expect(parts[0].text).toContain('do not split it into ingredients');
     expect(items.map((i) => i.name_de)).toEqual(['Vollkornbrot', 'Apfel']);
     expect(items[1].grams).toBe(180);
   });

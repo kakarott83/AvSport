@@ -291,14 +291,27 @@ export function FoodScanner({
       return;
     }
 
-    const { error: dbErr } = await supabase.from('food_logs').insert({
-      user_id:   user.id,
-      meal_name: result.name,
-      calories:  result.calories,
-      protein:   result.protein,
-      carbs:     result.carbs,
-      fat:       result.fat,
-    });
+    // Text-Erfassung (oft ein ganzer Tag): jedes Gericht als eigener Journal-
+    // Eintrag. Foto: ein Teller = eine Mahlzeit.
+    const rows = mode === 'text' && result.items?.length
+      ? result.items.map((it) => ({
+          user_id:   user.id,
+          meal_name: it.name,
+          calories:  it.calories,
+          protein:   it.protein,
+          carbs:     it.carbs,
+          fat:       it.fat,
+        }))
+      : [{
+          user_id:   user.id,
+          meal_name: result.name,
+          calories:  result.calories,
+          protein:   result.protein,
+          carbs:     result.carbs,
+          fat:       result.fat,
+        }];
+
+    const { error: dbErr } = await supabase.from('food_logs').insert(rows);
 
     if (dbErr) {
       setError(`Speichern fehlgeschlagen: ${dbErr.message}`);
@@ -320,6 +333,7 @@ export function FoodScanner({
   const protProgress = result ? result.protein / proteinGoal : 0;
 
   const isCameraPhase = phase === 'camera' || phase === 'camera2';
+  const savesSeparately = mode === 'text' && (result?.items?.length ?? 0) > 1;
 
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={handleClose}>
@@ -391,7 +405,7 @@ export function FoodScanner({
               <Text style={s.sectionLabel}>WAS HAST DU GEGESSEN?</Text>
               <TextInput
                 style={[s.notesInput, s.describeInput]}
-                placeholder={'z. B. „Zwei Scheiben Vollkornbrot mit Butter und Käse, ein Apfel und ein Glas Orangensaft“'}
+                placeholder={'z. B. „Morgens Müsli mit Milch, mittags Spaghetti Bolognese, abends zwei Käsebrote und ein Apfel“'}
                 placeholderTextColor="#444"
                 value={description}
                 onChangeText={setDescription}
@@ -402,7 +416,7 @@ export function FoodScanner({
               <View style={s.tipBox}>
                 <MaterialIcons name="keyboard-voice" size={18} color="#FF9100" style={{ marginTop: 1 }} />
                 <Text style={s.tipText}>
-                  Tipp: Tippe auf das Mikrofon deiner Tastatur und sprich einfach, was du gegessen hast. Mengenangaben machen das Ergebnis genauer.
+                  Tipp: Tippe auf das Mikrofon deiner Tastatur und sprich einfach, was du gegessen hast — gern auch den ganzen Tag. Jedes Gericht wird ein eigener Eintrag. Mengenangaben machen das Ergebnis genauer.
                 </Text>
               </View>
 
@@ -677,7 +691,9 @@ export function FoodScanner({
                   <ActivityIndicator size="small" color={COLOR_CALORIES} />
                 ) : (
                   <>
-                    <Text style={s.cardLinkText}>Mahlzeit bestätigen</Text>
+                    <Text style={s.cardLinkText}>
+                      {savesSeparately ? `${result.items!.length} Einträge speichern` : 'Mahlzeit bestätigen'}
+                    </Text>
                     <MaterialIcons name="chevron-right" size={15} color={COLOR_CALORIES} />
                   </>
                 )}

@@ -53,11 +53,17 @@ function buildPrompt(notes?: string): string {
  * Wandelt eine frei formulierte (getippte oder diktierte) Beschreibung in eine
  * Item-Liste um — gleiches Format wie die Foto-Erkennung, damit die
  * Nährwert-Kette (USDA → LLM-Fallback) unverändert weiterarbeitet.
+ * Jedes Item wird später als eigener food_logs-Eintrag gespeichert, daher
+ * bleiben vom Nutzer genannte Gerichte ein Item statt in Zutaten zu zerfallen.
  */
 export async function recognizeFoodFromText(description: string): Promise<FoodRecognitionResult> {
   const prompt =
     'You are a food logging assistant. The user describes in German (possibly ' +
-    'dictated, informal) what they ate. Split the description into distinct food items. ' +
+    'dictated, informal) what they ate, possibly over a whole day. Split the description ' +
+    'into the distinct dishes, foods and drinks the user mentions. ' +
+    'Keep a named dish as ONE item — do not split it into ingredients ' +
+    '(e.g. "Spaghetti Bolognese", "Müsli mit Milch" or "Käsebrot" are one item each, ' +
+    'with "name" like "spaghetti bolognese"). ' +
     'Use the quantities the user states (convert pieces, slices, cups, spoons etc. to grams); ' +
     'if no quantity is given, estimate a typical single portion. ' +
     'Ignore anything that is not food or drink. ' +
