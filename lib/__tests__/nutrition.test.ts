@@ -5,14 +5,17 @@
  *  - computeDayTotals: normal meals, null macros, 0-kcal entries, empty list
  *  - computeRemaining: positive / negative remaining
  *  - buildWeekDays: length, "Heute" label, dayMap values, missing days
+ *  - buildMealSuggestions / scaleMeal: Vorschläge für "Tag erfassen"
  */
 
 jest.mock('@/services/supabaseClient');
 jest.mock('expo-router', () => ({ useFocusEffect: jest.fn() }));
 
 import {
+  buildMealSuggestions,
   buildWeekDays,
   computeDayTotals,
+  scaleMeal,
   computeRemaining,
   type FoodLog,
 } from '@/lib/nutrition';
@@ -178,5 +181,58 @@ describe('buildWeekDays', () => {
     days.slice(0, 6).forEach(d => {
       expect(DE).toContain(d.label);
     });
+  });
+});
+
+// ── buildMealSuggestions ──────────────────────────────────────────────────────
+
+describe('buildMealSuggestions', () => {
+  const h = (meal_name: string, calories: number, created_at: string, protein: number | null = 10) =>
+    ({ meal_name, calories, protein, carbs: 20, fat: 5, created_at });
+
+  it('fasst gleiche Namen (Groß-/Kleinschreibung, Leerzeichen) zusammen und zählt sie', () => {
+    const s = buildMealSuggestions([
+      h('Haferflocken mit Milch', 350, '2026-04-10T08:00:00Z'),
+      h('haferflocken  mit milch ', 360, '2026-04-11T08:00:00Z'),
+    ]);
+    expect(s).toHaveLength(1);
+    expect(s[0].count).toBe(2);
+  });
+
+  it('nimmt Name und Nährwerte der jüngsten Erfassung', () => {
+    const s = buildMealSuggestions([
+      h('Müsli', 400, '2026-04-11T08:00:00Z', 12),
+      h('müsli', 300, '2026-04-09T08:00:00Z', 8),
+    ]);
+    expect(s[0]).toMatchObject({ name: 'Müsli', calories: 400, protein: 12, lastAt: '2026-04-11T08:00:00Z' });
+  });
+
+  it('sortiert nach Häufigkeit, dann nach letzter Erfassung', () => {
+    const s = buildMealSuggestions([
+      h('Apfel', 95, '2026-04-11T10:00:00Z'),
+      h('Brot', 250, '2026-04-08T10:00:00Z'),
+      h('Brot', 250, '2026-04-09T10:00:00Z'),
+      h('Salat', 150, '2026-04-12T10:00:00Z'),
+    ]);
+    expect(s.map(x => x.name)).toEqual(['Brot', 'Salat', 'Apfel']);
+  });
+
+  it('ignoriert leere Namen und Einträge ohne Kalorien und begrenzt die Anzahl', () => {
+    const s = buildMealSuggestions([
+      h('  ', 100, '2026-04-11T10:00:00Z'),
+      h('Wasser', 0, '2026-04-11T10:00:00Z'),
+      h('A', 1, '2026-04-11T10:00:00Z'),
+      h('B', 1, '2026-04-11T10:00:00Z'),
+      h('C', 1, '2026-04-11T10:00:00Z'),
+    ], 2);
+    expect(s).toHaveLength(2);
+    expect(s.every(x => x.name.trim() && x.calories > 0)).toBe(true);
+  });
+});
+
+describe('scaleMeal', () => {
+  it('skaliert kcal ganzzahlig und Makros auf eine Dezimalstelle, null bleibt null', () => {
+    expect(scaleMeal({ calories: 350, protein: 12.3, carbs: null, fat: 7 }, 1.5))
+      .toEqual({ calories: 525, protein: 18.5, carbs: null, fat: 10.5 });
   });
 });

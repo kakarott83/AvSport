@@ -63,3 +63,61 @@ export function buildWeekDays(dayMap: Record<string, number>): WeekDay[] {
     };
   });
 }
+
+// ── Vorschläge für "Tag erfassen" ──────────────────────────────────────────────
+
+/** Ein bereits erfasstes Gericht als Vorlage (Werte = letzte Erfassung, 1 Portion). */
+export type MealSuggestion = {
+  key:      string; // normalisierter Name, eindeutig
+  name:     string;
+  calories: number;
+  protein:  number | null;
+  carbs:    number | null;
+  fat:      number | null;
+  count:    number; // wie oft erfasst
+  lastAt:   string; // ISO-Zeitpunkt der letzten Erfassung
+};
+
+export type MealHistoryEntry = Omit<FoodLog, 'id'>;
+
+const normalizeMealName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Fasst bisherige Erfassungen zu Gericht-Vorschlägen zusammen:
+ * gleiche Namen (ohne Groß-/Kleinschreibung) werden gezählt, die Nährwerte
+ * stammen aus der jüngsten Erfassung. Sortiert nach Häufigkeit, dann Aktualität.
+ */
+export function buildMealSuggestions(history: MealHistoryEntry[], limit = 40): MealSuggestion[] {
+  const map = new Map<string, MealSuggestion>();
+  for (const h of history) {
+    const name = h.meal_name?.trim();
+    if (!name || !(h.calories > 0)) continue;
+    const key = normalizeMealName(name);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { key, name, calories: h.calories, protein: h.protein, carbs: h.carbs, fat: h.fat, count: 1, lastAt: h.created_at });
+      continue;
+    }
+    prev.count++;
+    if (h.created_at > prev.lastAt) {
+      Object.assign(prev, { name, calories: h.calories, protein: h.protein, carbs: h.carbs, fat: h.fat, lastAt: h.created_at });
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt))
+    .slice(0, limit);
+}
+
+/** Skaliert ein Gericht auf `factor` Portionen (kcal ganzzahlig, Makros auf 0,1 g). */
+export function scaleMeal(
+  meal: Pick<MealSuggestion, 'calories' | 'protein' | 'carbs' | 'fat'>,
+  factor: number,
+): { calories: number; protein: number | null; carbs: number | null; fat: number | null } {
+  const g = (v: number | null) => (v == null ? null : Math.round(v * factor * 10) / 10);
+  return {
+    calories: Math.round(meal.calories * factor),
+    protein:  g(meal.protein),
+    carbs:    g(meal.carbs),
+    fat:      g(meal.fat),
+  };
+}

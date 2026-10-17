@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 
+import { DayLogModal } from '@/components/DayLogModal';
 import { Toast } from '@/components/Toast';
 import { FoodScanner } from '@/components/FoodScanner';
 import { useCalorieGoal } from '@/hooks/useCalorieGoal';
@@ -357,6 +358,7 @@ export default function NutritionScreen() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [dayLogOpen, setDayLogOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [waterGoalMl, setWaterGoalMl] = useState(0);
   const [waterConsumedMl, setWaterConsumedMl] = useState(0);
@@ -539,6 +541,14 @@ export default function NutritionScreen() {
         <View style={styles.journalHeader}>
           <Text style={styles.sectionTitle}>Tages-Journal</Text>
           <View style={styles.journalActions}>
+            <TouchableOpacity
+              style={styles.dayLogBtn}
+              onPress={() => setDayLogOpen(true)}
+              activeOpacity={0.8}
+              accessibilityLabel="Tag erfassen"
+            >
+              <MaterialIcons name="playlist-add-check" size={20} color="#0a7ea4" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.cameraBtn} onPress={() => setScannerOpen(true)} activeOpacity={0.8}>
               <MaterialIcons name="camera-alt" size={18} color="#00E5FF" />
             </TouchableOpacity>
@@ -558,6 +568,9 @@ export default function NutritionScreen() {
             <Text style={styles.emptyText}>Noch keine Mahlzeiten heute</Text>
             <TouchableOpacity style={styles.emptyButton} onPress={() => setModalOpen(true)}>
               <Text style={styles.emptyButtonText}>Erste Mahlzeit erfassen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setDayLogOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.emptyLink}>Aus bisherigen Gerichten wählen</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -593,6 +606,16 @@ export default function NutritionScreen() {
         visible={modalOpen}
         onClose={() => setModalOpen(false)}
         onSaved={() => { setModalOpen(false); setToast('Mahlzeit gespeichert!'); loadData(); }}
+      />
+
+      <DayLogModal
+        visible={dayLogOpen}
+        onClose={() => setDayLogOpen(false)}
+        onSaved={(count) => {
+          setDayLogOpen(false);
+          setToast(count === 1 ? 'Gericht gespeichert!' : `${count} Gerichte gespeichert!`);
+          loadData();
+        }}
       />
 
       <FoodScanner
@@ -664,6 +687,11 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   journalActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dayLogBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#0a7ea444',
+    alignItems: 'center', justifyContent: 'center',
+  },
   cameraBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#00E5FF44',
@@ -679,6 +707,7 @@ const styles = StyleSheet.create({
   emptyText: { color: '#888', fontSize: 14 },
   emptyButton: { backgroundColor: '#0a7ea4', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
   emptyButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  emptyLink: { color: '#0a7ea4', fontSize: 13, fontWeight: '600' },
 
   logCard: {
     flexDirection: 'row', alignItems: 'center',

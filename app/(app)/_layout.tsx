@@ -86,6 +86,15 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="features"
+        options={{
+          title: 'Funktionen & Tipps',
+          headerStyle: { backgroundColor: '#121212' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
         name="feedback"
         options={{
           title: 'Feedback',

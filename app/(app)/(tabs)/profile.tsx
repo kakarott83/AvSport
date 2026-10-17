@@ -910,6 +910,15 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.menuRow}
+          onPress={() => router.push('/features')}
+          activeOpacity={0.7}>
+          <MaterialIcons name="lightbulb-outline" size={18} color="#00E5FF" />
+          <Text style={styles.menuRowText}>Funktionen &amp; Tipps</Text>
+          <MaterialIcons name="chevron-right" size={20} color="#555" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuRow}
           onPress={() => router.push('/feedback')}
           activeOpacity={0.7}>
           <MaterialIcons name="chat-bubble-outline" size={18} color="#00E5FF" />
