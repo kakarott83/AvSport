@@ -45,10 +45,11 @@ const SECTIONS: Section[] = [
     where: 'Tab „Ernährung“',
     points: [
       'Foto-Scanner: Teller fotografieren — die KI erkennt die Zutaten, die Nährwerte kommen aus der USDA-Datenbank. Ein zweites Foto mit Hand oder Besteck macht die Portion genauer.',
-      'Ohne Foto: „Stattdessen beschreiben“ im Scanner — tippen oder diktieren, was du gegessen hast.',
+      'Ohne Foto: „Stattdessen beschreiben“ im Scanner — tippen oder diktieren, was du gegessen hast, auch den ganzen Tag auf einmal. Die Nährwerte werden berechnet und jedes Gericht landet als eigener Eintrag im Journal.',
       'Tag erfassen (Listen-Symbol): mehrere bisherige Gerichte auf einmal auswählen und Portion oder kcal anpassen — oder neue Gerichte direkt selbst eintragen.',
       'Manuell erfassen über „+ Mahlzeit“, optional mit dem Wasser dazu.',
       'Kalorienziel für heute anpassen und Verlauf der letzten 7 Tage ansehen.',
+      'Tippe auf „Ziel kcal“ (oder auf dem Home-Screen auf „von … kcal“), um Schritt für Schritt zu sehen, wie dein Kalorienziel berechnet wird.',
     ],
   },
   {
@@ -64,10 +65,12 @@ const SECTIONS: Section[] = [
   {
     icon: 'water-drop',
     color: '#FF5252',
-    title: 'Periode',
-    where: 'Tab „Periode“ (im Profil aktivierbar)',
+    title: 'Zyklus & Periode',
+    where: 'Tab „Kalender“ (bei weiblichem Profil mit Zyklus-Tracking)',
     points: [
-      'Blutungstage erfassen, Zyklusphasen, Prognose und fruchtbares Fenster ansehen.',
+      'Der Kalender zeigt deine Periode, die Prognose für die nächsten Monate, fruchtbare Tage und den Eisprung.',
+      'Periodendaten werden aus Apple Health bzw. Health Connect übernommen — einmal „Periode aus … übernehmen“ antippen.',
+      'Blutungstage lassen sich zusätzlich direkt im Kalender erfassen; beides zählt.',
       'Optionale Erinnerungen vor der Periode und zum fruchtbaren Fenster.',
       'In der Lutealphase erhöht sich dein Kalorienziel automatisch um einen kleinen Bonus.',
     ],
@@ -88,7 +91,7 @@ const SECTIONS: Section[] = [
       'Apple Health bzw. Health Connect verbinden, um Schritte automatisch zu übernehmen.',
       'Wasserziel und Trink-Erinnerungen einstellen.',
       'Premium: hebt das tägliche KI-Limit auf.',
-      'Feedback direkt an uns schicken.',
+      'Feedback direkt an uns schicken — über „Feedback geben“ oder den kleinen Sprechblasen-Button unten rechts (lange drücken blendet ihn aus).',
     ],
   },
 ];

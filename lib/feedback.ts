@@ -17,6 +17,13 @@ export type FeedbackResult =
 
 export const FEEDBACK_MAX_LENGTH = 5000;
 
+/**
+ * Schwebender Feedback-Button auf allen Screens (components/FeedbackFab.tsx)
+ * für die Testphase. Vor dem öffentlichen Store-Release auf `false` setzen —
+ * "Profil → Feedback geben" bleibt davon unberührt.
+ */
+export const FEEDBACK_BUTTON_ENABLED = true;
+
 export async function sendFeedback(input: {
   subject: string;
   message: string;

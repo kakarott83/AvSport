@@ -2,15 +2,25 @@
  * supabase/functions/send-feedback
  *
  * Nimmt Nutzer-Feedback entgegen, speichert es IMMER in public.feedback und
- * schickt es zusätzlich best-effort per E-Mail an das Support-Postfach
- * (über Resend). Schlägt der Mailversand fehl, ist das Feedback trotzdem
- * gespeichert – der Client bekommt `{ ok: true, emailed: false }`.
+ * schickt es zusätzlich best-effort per E-Mail an das Support-Postfach.
+ * Schlägt der Mailversand fehl, ist das Feedback trotzdem gespeichert –
+ * der Client bekommt `{ ok: true, emailed: false }`.
  *
- * Erforderliche Secrets:
- *   RESEND_API_KEY   – API-Key von https://resend.com  (sonst wird nur gespeichert)
+ * Versand über SMTP (z. B. Strato), sonst Resend, sonst nur Speichern.
+ *
+ * SMTP-Secrets (bevorzugt):
+ *   SMTP_USER        – Postfach-Login, z. B. support@milan-muc.de
+ *   SMTP_PASS        – Postfach-Passwort
+ *   SMTP_HOST        – Default: smtp.strato.de
+ *   SMTP_PORT        – Default: 465 (SSL). Achtung: 25 und 587 sind in
+ *                      Supabase Edge Functions gesperrt.
+ * Alternativ:
+ *   RESEND_API_KEY   – API-Key von https://resend.com
  * Optionale Secrets:
- *   FEEDBACK_TO      – Zieladresse (Default: support@milan.mus.de)
- *   FEEDBACK_FROM    – Absender, Domain muss in Resend verifiziert sein
+ *   FEEDBACK_TO      – Zieladresse (Default: support@milan-muc.de)
+ *   FEEDBACK_FROM    – Absender. SMTP: Default "AvoraSport Feedback <SMTP_USER>"
+ *                      (Strato erlaubt nur das eigene Postfach bzw. Aliase);
+ *                      Resend: Domain muss verifiziert sein
  *                      (Default: "AvoraSport Feedback <onboarding@resend.dev>")
  *
  * SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY werden von
@@ -18,10 +28,60 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import nodemailer from 'npm:nodemailer@6.9.16';
 
+const SMTP_USER = Deno.env.get('SMTP_USER') ?? '';
+const SMTP_PASS = Deno.env.get('SMTP_PASS') ?? '';
+const SMTP_HOST = Deno.env.get('SMTP_HOST') ?? 'smtp.strato.de';
+const SMTP_PORT = Number(Deno.env.get('SMTP_PORT') ?? '465');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-const FEEDBACK_TO = Deno.env.get('FEEDBACK_TO') ?? 'support@milan.mus.de';
-const FEEDBACK_FROM = Deno.env.get('FEEDBACK_FROM') ?? 'AvoraSport Feedback <onboarding@resend.dev>';
+const FEEDBACK_TO = Deno.env.get('FEEDBACK_TO') ?? 'support@milan-muc.de';
+const FEEDBACK_FROM =
+  Deno.env.get('FEEDBACK_FROM') ??
+  (SMTP_USER ? `AvoraSport Feedback <${SMTP_USER}>` : 'AvoraSport Feedback <onboarding@resend.dev>');
+
+interface Mail {
+  subject: string;
+  text: string;
+  replyTo?: string;
+}
+
+/** SMTP (SSL auf 465) — z. B. Strato. */
+async function sendViaSmtp(mail: Mail): Promise<boolean> {
+  const transport = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+  await transport.sendMail({
+    from: FEEDBACK_FROM,
+    to: FEEDBACK_TO,
+    replyTo: mail.replyTo,
+    subject: mail.subject,
+    text: mail.text,
+  });
+  return true;
+}
+
+async function sendViaResend(mail: Mail): Promise<boolean> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: FEEDBACK_FROM,
+      to: [FEEDBACK_TO],
+      reply_to: mail.replyTo,
+      subject: mail.subject,
+      text: mail.text,
+    }),
+  });
+  if (!res.ok) console.error('[send-feedback] Resend', res.status, await res.text());
+  return res.ok;
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -92,38 +152,26 @@ Deno.serve(async (req) => {
 
   // 2) E-Mail (best effort)
   let emailed = false;
-  if (RESEND_API_KEY) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: FEEDBACK_FROM,
-          to: [FEEDBACK_TO],
-          reply_to: user.email ?? undefined,
-          subject: `[AvoraSport] ${subject}`,
-          text:
-            `Neues App-Feedback\n\n` +
-            `Von:        ${user.email ?? 'unbekannt'}\n` +
-            `User-ID:    ${user.id}\n` +
-            `Plattform:  ${platform ?? '?'}   App-Version: ${appVersion ?? '?'}\n` +
-            `Zeit:       ${new Date().toISOString()}\n` +
-            `Feedback-ID: ${row.id}\n\n` +
-            `--- Nachricht ---\n${message}\n`,
-        }),
-      });
-      emailed = res.ok;
-      if (res.ok) {
-        await admin.from('feedback').update({ emailed: true }).eq('id', row.id);
-      } else {
-        console.error('[send-feedback] Resend', res.status, await res.text());
-      }
-    } catch (err) {
-      console.error('[send-feedback] Resend fetch failed', err);
-    }
+  const mail: Mail = {
+    subject: `[AvoraSport] ${subject}`,
+    replyTo: user.email ?? undefined,
+    text:
+      `Neues App-Feedback\n\n` +
+      `Von:        ${user.email ?? 'unbekannt'}\n` +
+      `User-ID:    ${user.id}\n` +
+      `Plattform:  ${platform ?? '?'}   App-Version: ${appVersion ?? '?'}\n` +
+      `Zeit:       ${new Date().toISOString()}\n` +
+      `Feedback-ID: ${row.id}\n\n` +
+      `--- Nachricht ---\n${message}\n`,
+  };
+  try {
+    if (SMTP_USER && SMTP_PASS) emailed = await sendViaSmtp(mail);
+    else if (RESEND_API_KEY) emailed = await sendViaResend(mail);
+  } catch (err) {
+    console.error('[send-feedback] Mailversand fehlgeschlagen', err);
+  }
+  if (emailed) {
+    await admin.from('feedback').update({ emailed: true }).eq('id', row.id);
   }
 
   return json({ ok: true, emailed });

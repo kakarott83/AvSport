@@ -2,7 +2,7 @@
  * app/(app)/feedback.tsx — "Feedback"
  *
  * Freitext-Feedback an den Support. Geht an die Edge Function `send-feedback`
- * (speichert + mailt an support@milan.mus.de). Erreichbar über Profil → Feedback.
+ * (speichert + mailt an support@milan-muc.de). Erreichbar über Profil → Feedback.
  */
 
 import { router } from 'expo-router';

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { AnimatedLogo } from '@/components/AnimatedLogo';
+import { FeedbackFab } from '@/components/FeedbackFab';
 import { supabase } from '@/services/supabaseClient';
 
 export default function AppLayout() {
@@ -38,6 +39,7 @@ export default function AppLayout() {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
@@ -114,5 +116,8 @@ export default function AppLayout() {
         }}
       />
     </Stack>
+    {/* Testphase: Feedback von jedem Screen aus (FEEDBACK_BUTTON_ENABLED) */}
+    <FeedbackFab />
+    </View>
   );
 }
