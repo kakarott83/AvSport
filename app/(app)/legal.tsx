@@ -1,7 +1,8 @@
 /**
  * app/(app)/legal.tsx — "Rechtliches"
  *
- * Impressum + rechtliche/gesundheitliche Hinweise. Der Zyklus-/Perioden-Teil
+ * Impressum, Nutzungsbedingungen (errechnete Werte, keine Gewähr, Haftung)
+ * + rechtliche/gesundheitliche Hinweise. Der Zyklus-/Perioden-Teil
  * stellt klar, dass die Berechnungen nur eine rechnerische, keine tatsächliche
  * Sicherheit bieten (keine Verhütungsmethode).
  *
@@ -33,6 +34,47 @@ export default function LegalScreen() {
         <Text style={styles.hint}>
           Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV: [Name, Anschrift].
         </Text>
+      </Section>
+
+      {/* ── Nutzungsbedingungen: errechnete Werte / Gewährleistung / Haftung ── */}
+      <Section title="Nutzungsbedingungen (AGB)">
+        <Text style={styles.subTitle}>1. Errechnete Werte</Text>
+        <Text style={styles.body}>
+          Alle in AvoraSport angezeigten Werte werden automatisch errechnet oder
+          geschätzt; es handelt sich nicht um Messwerte. Dazu gehören insbesondere:
+        </Text>
+        <Text style={styles.body}>
+          • Zyklusphasen, Periodenprognosen, fruchtbares Fenster, Eisprung und die
+          Einschätzung des Empfängnisrisikos{'\n'}
+          • Kalorien- und Nährwerte von Mahlzeiten (KI-Erkennung aus Fotos und
+          Beschreibungen sowie Lebensmitteldatenbanken){'\n'}
+          • Kalorienziel, Wasserziel und Kalorienverbrauch aus Training und Schritten{'\n'}
+          • KI-erstellte Trainingspläne und Übungsbeschreibungen
+        </Text>
+        <Text style={styles.body}>
+          Die Berechnungen beruhen auf Durchschnittswerten, deinen eigenen Angaben
+          und Daten Dritter (z. B. Apple Health, Health Connect, USDA FoodData
+          Central). Sie können erheblich von den tatsächlichen Werten abweichen.
+        </Text>
+
+        <Text style={styles.subTitle}>2. Keine Gewähr</Text>
+        <Text style={styles.body}>
+          Der Anbieter übernimmt keine Gewähr für die Richtigkeit, Vollständigkeit
+          und Aktualität der errechneten Werte. Entscheidungen über Gesundheit,
+          Ernährung, Training, Verhütung oder Kinderwunsch solltest du nicht allein
+          auf diese Werte stützen.
+        </Text>
+
+        <Text style={styles.subTitle}>3. Haftung</Text>
+        <Text style={styles.body}>
+          Der Anbieter haftet unbeschränkt bei Vorsatz und grober Fahrlässigkeit,
+          bei Verletzung des Lebens, des Körpers oder der Gesundheit sowie nach dem
+          Produkthaftungsgesetz. Bei leicht fahrlässiger Verletzung wesentlicher
+          Vertragspflichten ist die Haftung auf den vorhersehbaren, vertragstypischen
+          Schaden begrenzt. Im Übrigen ist die Haftung für Schäden, die auf der
+          Verwendung errechneter Werte beruhen, ausgeschlossen.
+        </Text>
+        <Text style={styles.hint}>Stand: Oktober 2026</Text>
       </Section>
 
       {/* ── Gesundheitshinweis Zyklus-Tracking ── */}
@@ -111,6 +153,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  subTitle: { color: '#eee', fontSize: 13, fontWeight: '700', marginTop: 4 },
   body: { color: '#ccc', fontSize: 13, lineHeight: 19 },
   placeholder: {
     color: '#888',
