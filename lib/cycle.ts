@@ -72,6 +72,8 @@ export interface CycleEvent {
   date: string;
   /** 1 = light … 4 = heavy. */
   flow: number;
+  /** Herkunft: manuell in der App oder aus Apple Health / Health Connect. */
+  source?: 'manual' | 'health' | null;
 }
 
 export interface CycleProfile {

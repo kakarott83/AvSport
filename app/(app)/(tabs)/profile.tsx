@@ -821,8 +821,8 @@ export default function ProfileScreen() {
                 />
               </View>
 
-              <TouchableOpacity style={styles.cycleLinkRow} onPress={() => router.push('/(app)/(tabs)/cycle')} activeOpacity={0.7}>
-                <Text style={styles.cycleLinkText}>Zum Periode-Tab</Text>
+              <TouchableOpacity style={styles.cycleLinkRow} onPress={() => router.push('/(app)/(tabs)/calendar')} activeOpacity={0.7}>
+                <Text style={styles.cycleLinkText}>Zum Zykluskalender</Text>
                 <MaterialIcons name="chevron-right" size={20} color="#00E5FF" />
               </TouchableOpacity>
             </>

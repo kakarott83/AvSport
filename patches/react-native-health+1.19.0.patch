@@ -1,0 +1,75 @@
+diff --git a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit+TypesAndPermissions.m b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit+TypesAndPermissions.m
+index 287399f..6a53d39 100644
+--- a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit+TypesAndPermissions.m
++++ b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit+TypesAndPermissions.m
+@@ -224,6 +224,11 @@
+         return [HKObjectType categoryTypeForIdentifier:HKCategoryTypeIdentifierSleepAnalysis];
+     }
+ 
++    // Reproductive health (AvoraSport patch)
++    if ([@"MenstrualFlow" isEqualToString: key]) {
++        return [HKObjectType categoryTypeForIdentifier:HKCategoryTypeIdentifierMenstrualFlow];
++    }
++
+     // workouts
+     if ([@"MindfulSession" isEqualToString: key] && systemVersion >= 10.0) {
+         return [HKObjectType categoryTypeForIdentifier:HKCategoryTypeIdentifierMindfulSession];
+diff --git a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+index e8ddce1..41c497c 100644
+--- a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
++++ b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+@@ -8,6 +8,7 @@
+ 
+ #import "RCTAppleHealthKit.h"
+ #import "RCTAppleHealthKit+TypesAndPermissions.h"
++#import "RCTAppleHealthKit+Utils.h"
+ 
+ #import "RCTAppleHealthKit+Methods_Activity.h"
+ #import "RCTAppleHealthKit+Methods_Body.h"
+@@ -549,6 +550,46 @@ RCT_EXPORT_METHOD(saveMindfulSession:(NSDictionary *)input callback:(RCTResponse
+     [self mindfulness_saveMindfulSession:input callback:callback];
+ }
+ 
++// AvoraSport patch: Menstruationsdaten lesen (HKCategoryTypeIdentifierMenstrualFlow).
++// value = HKCategoryValueMenstrualFlow (1 unspecified, 2 light, 3 medium, 4 heavy, 5 none).
++RCT_EXPORT_METHOD(getMenstrualFlowSamples:(NSDictionary *)input callback:(RCTResponseSenderBlock)callback)
++{
++    [self _initializeHealthStore];
++
++    NSDate *startDate = [RCTAppleHealthKit dateFromOptions:input key:@"startDate" withDefault:nil];
++    NSDate *endDate = [RCTAppleHealthKit dateFromOptions:input key:@"endDate" withDefault:[NSDate date]];
++    if (startDate == nil) {
++        callback(@[RCTMakeError(@"startDate is required in options", nil, nil)]);
++        return;
++    }
++
++    HKCategoryType *type = [HKCategoryType categoryTypeForIdentifier:HKCategoryTypeIdentifierMenstrualFlow];
++    NSPredicate *predicate = [RCTAppleHealthKit predicateForSamplesBetweenDates:startDate endDate:endDate];
++    NSSortDescriptor *sort = [[NSSortDescriptor alloc] initWithKey:HKSampleSortIdentifierStartDate ascending:YES];
++
++    HKSampleQuery *query = [[HKSampleQuery alloc]
++        initWithSampleType:type
++        predicate:predicate
++        limit:HKObjectQueryNoLimit
++        sortDescriptors:@[sort]
++        resultsHandler:^(HKSampleQuery *q, NSArray *results, NSError *error) {
++            if (error != nil) {
++                callback(@[RCTMakeError(@"error reading menstrual flow samples", error, nil)]);
++                return;
++            }
++            NSMutableArray *data = [NSMutableArray arrayWithCapacity:results.count];
++            for (HKCategorySample *sample in results) {
++                [data addObject:@{
++                    @"startDate" : [RCTAppleHealthKit buildISO8601StringFromDate:sample.startDate],
++                    @"endDate"   : [RCTAppleHealthKit buildISO8601StringFromDate:sample.endDate],
++                    @"value"     : @(sample.value),
++                }];
++            }
++            callback(@[[NSNull null], data]);
++        }];
++    [self.healthStore executeQuery:query];
++}
++
+ RCT_EXPORT_METHOD(saveWorkout:(NSDictionary *)input callback:(RCTResponseSenderBlock)callback)
+ {
+     [self _initializeHealthStore];

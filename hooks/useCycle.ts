@@ -9,12 +9,14 @@
  * synchronisiert (services/notifications/cycleReminderService.ts). Alles
  * best-effort — ein Notification- oder Spiegel-Fehler darf das Tracking nie
  * blockieren. `logFlow` spiegelt den Blutungstag zusätzlich als `period`-Tag
- * in `daily_logs`, damit der Kalender-Tab und useCalorieGoal weiter passen.
+ * in `daily_logs` (Kalender-Statistik, Altbestand).
+ *
+ * Ist Apple Health / Health Connect verknüpft, werden vor dem Laden die
+ * Periodendaten von dort übernommen (services/cycleHealthSync.ts).
  */
 
-import { useFocusEffect, usePathname } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   buildPhaseCalendar,
@@ -25,6 +27,7 @@ import {
   type DayPhase,
 } from '@/lib/cycle';
 import { sanitizeCycleReminderSettings } from '@/lib/cycleReminders';
+import { isCycleHealthLinked, linkCycleHealth, syncCycleFromHealth } from '@/services/cycleHealthSync';
 import { syncCycleReminders } from '@/services/notifications/cycleReminderService';
 import { supabase } from '@/services/supabaseClient';
 
@@ -58,6 +61,12 @@ export interface CycleResult {
   profilePeriodLength: number | null;
   /** flow value (1–4) keyed by ISO date, for the calendar / quick-entry UI. */
   flowByDate: Map<string, number>;
+  /** Dates imported from Apple Health / Health Connect. */
+  healthDates: Set<string>;
+  /** Whether Apple Health / Health Connect is linked for cycle data. */
+  healthLinked: boolean;
+  /** Ask for read access and import right away. Returns false if denied/unavailable. */
+  linkHealth: () => Promise<boolean>;
   /** Phases for an arbitrary visible range, keyed by ISO date. Pure + cheap. */
   phasesForRange: (rangeStart: string, rangeEnd: string) => Map<string, DayPhase>;
   logFlow: (date: string, flow: number) => Promise<void>;
@@ -69,20 +78,30 @@ export interface CycleResult {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useCycle(): CycleResult {
+/** `enabled = false` → lädt nichts (z. B. Zyklus-Tracking im Profil aus). */
+export function useCycle(enabled = true): CycleResult {
   const [events, setEvents] = useState<CycleEvent[]>([]);
   const [profile, setProfile] = useState<CycleProfileRow>(EMPTY_PROFILE);
   const [loading, setLoading] = useState(true);
+  const [healthLinked, setHealthLinked] = useState(false);
 
   const fetchData = useCallback(async (signal?: { cancelled: boolean }) => {
     try {
+      if (!enabled) return;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || signal?.cancelled) return;
+
+      // Health zuerst übernehmen (gedrosselt, best-effort), dann laden.
+      const linked = await isCycleHealthLinked();
+      if (signal?.cancelled) return;
+      setHealthLinked(linked);
+      if (linked) await syncCycleFromHealth();
+      if (signal?.cancelled) return;
 
       const [eventsRes, profileRes] = await Promise.all([
         supabase
           .from('cycle_events')
-          .select('date, flow')
+          .select('date, flow, source')
           .eq('user_id', user.id)
           .order('date', { ascending: true }),
         supabase.from('profiles').select(CYCLE_PROFILE_COLUMNS).eq('id', user.id).maybeSingle(),
@@ -109,9 +128,10 @@ export function useCycle(): CycleResult {
     } catch (e) {
       console.warn('[useCycle] fetch failed:', e);
     } finally {
-      if (!signal?.cancelled) setLoading(false);
+      // Deaktiviert bleibt loading=true, damit beim Aktivieren kein leerer Zustand aufblitzt.
+      if (!signal?.cancelled && enabled) setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useFocusEffect(
     useCallback(() => {
@@ -129,12 +149,12 @@ export function useCycle(): CycleResult {
 
     const { error } = await supabase
       .from('cycle_events')
-      .upsert({ user_id: user.id, date, flow }, { onConflict: 'user_id,date' });
+      .upsert({ user_id: user.id, date, flow, source: 'manual' }, { onConflict: 'user_id,date' });
     if (error) { console.warn('[useCycle] logFlow failed:', error.message); return; }
 
     setEvents((prev) => {
       const without = prev.filter((e) => e.date !== date);
-      return [...without, { date, flow }].sort((a, b) => a.date.localeCompare(b.date));
+      return [...without, { date, flow, source: 'manual' as const }].sort((a, b) => a.date.localeCompare(b.date));
     });
 
     // Spiegel in daily_logs (period-Tag) — best-effort, blockiert nie.
@@ -162,6 +182,20 @@ export function useCycle(): CycleResult {
     () => new Map(events.map((e) => [e.date, e.flow])),
     [events],
   );
+
+  const healthDates = useMemo(
+    () => new Set(events.filter((e) => e.source === 'health').map((e) => e.date)),
+    [events],
+  );
+
+  const linkHealth = useCallback(async () => {
+    const ok = await linkCycleHealth();
+    if (ok) {
+      setHealthLinked(true);
+      await fetchData();
+    }
+    return ok;
+  }, [fetchData]);
 
   const overview = useMemo(
     () => getCycleOverview(events, profile, todayISO()),
@@ -197,6 +231,9 @@ export function useCycle(): CycleResult {
     profileCycleLength: profile.cycle_length_days ?? null,
     profilePeriodLength: profile.period_duration_days ?? null,
     flowByDate,
+    healthDates,
+    healthLinked,
+    linkHealth,
     phasesForRange,
     logFlow,
     removeFlow,
@@ -237,43 +274,3 @@ async function mirrorPeriodTag(userId: string, date: string, present: boolean): 
     console.warn('[useCycle] mirrorPeriodTag failed:', e);
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab-Sichtbarkeit
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Ob der "Periode"-Tab angezeigt wird: nur wenn im Profil das Geschlecht
- * "weiblich" ist. Wird bei jeder Navigation und bei App-Fokus neu geprüft,
- * damit der Tab direkt nach dem Umstellen im Profil erscheint/verschwindet.
- */
-export function useCycleTabEnabled(): boolean {
-  const [enabled, setEnabled] = useState(false);
-  const pathname = usePathname();
-
-  useEffect(() => {
-    let active = true;
-
-    const check = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || !active) return;
-        const { data } = await supabase
-          .from('profiles')
-          .select('gender')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (active) setEnabled(data?.gender === 'female');
-      } catch {
-        // letzten bekannten Wert behalten
-      }
-    };
-
-    check();
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') check(); });
-    return () => { active = false; sub.remove(); };
-  }, [pathname]);
-
-  return enabled;
-}
-

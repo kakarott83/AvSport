@@ -16,7 +16,10 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 
+import { CycleLegend, CyclePanel, PERIOD_COLOR } from '@/components/CyclePanel';
+import { useCycle } from '@/hooks/useCycle';
 import { buildMarked, computeMonthStats, type LogRow, type MarkedDates, type Tag } from '@/lib/calendar';
+import { addDays, FERTILE_WINDOW_COLOR, type DayPhase } from '@/lib/cycle';
 import { supabase } from '@/services/supabaseClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +41,9 @@ const COLOR_PALETTE = [
 
 const EMPTY_LOG: DayLog = { tagIds: [], note: '' };
 
+/** Zyklusdaten kommen aus cycle_events (useCycle), nicht mehr aus dem period-Tag. */
+const PERIOD_TAG_ID = 'period';
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
@@ -52,7 +58,9 @@ export default function CalendarScreen() {
   const [markedDates, setMarkedDates]   = useState<MarkedDates>({});
   const [saving, setSaving]               = useState(false);
   const [noteFocused, setNoteFocused]     = useState(false);
-  const [cycleTracking, setCycleTracking] = useState(true); // default true until profile loads
+  // Zyklus im Kalender: nur bei weiblichem Profil mit aktivem Zyklus-Tracking
+  const [cycleTracking, setCycleTracking] = useState(false);
+  const cycle = useCycle(cycleTracking);
 
   // Tag modal (add + edit)
   const [modalVisible, setModalVisible] = useState(false);
@@ -69,18 +77,38 @@ export default function CalendarScreen() {
 
   // ── Monthly stats (derived, live) ─────────────────────────────────────────
 
+  // period-Zählung kommt aus cycle_events (inkl. Health-Daten), Rest aus daily_logs
+  const statsLogs = useMemo(() => {
+    const rows = allLogs.map((r) => ({ ...r, tag_ids: r.tag_ids.filter((id) => id !== PERIOD_TAG_ID) }));
+    if (!cycleTracking) return rows;
+    const byDate = new Map(rows.map((r) => [r.date, r]));
+    for (const date of cycle.flowByDate.keys()) {
+      const row = byDate.get(date);
+      if (row) row.tag_ids = [...row.tag_ids, PERIOD_TAG_ID];
+      else rows.push({ date, tag_ids: [PERIOD_TAG_ID], note: null });
+    }
+    return rows;
+  }, [allLogs, cycleTracking, cycle.flowByDate]);
+
   const monthStats = useMemo(
-    () => computeMonthStats(allLogs, currentMonth, tags),
-    [allLogs, currentMonth, tags]
+    () => computeMonthStats(statsLogs, currentMonth, tags.filter((t) => cycleTracking || t.id !== PERIOD_TAG_ID)),
+    [statsLogs, currentMonth, tags, cycleTracking]
   );
+
+  // Zyklusphasen für den sichtbaren Monat (+/- eine Woche für Randzeilen)
+  const { phasesForRange } = cycle;
+  const phases = useMemo(() => {
+    if (!cycleTracking) return new Map<string, DayPhase>();
+    const [y, m] = currentMonth.split('-').map(Number);
+    const last = `${currentMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    return phasesForRange(addDays(`${currentMonth}-01`, -7), addDays(last, 7));
+  }, [cycleTracking, phasesForRange, currentMonth]);
 
   // ── Per-day tag list for calendar bars (derived, live) ────────────────────
 
   const tagsByDate = useMemo(() => {
     const tagMap = new Map(tags.map((t) => [t.id, t]));
-    const visibleIds = new Set(
-      tags.filter((t) => cycleTracking || t.id !== 'period').map((t) => t.id)
-    );
+    const visibleIds = new Set(tags.filter((t) => t.id !== PERIOD_TAG_ID).map((t) => t.id));
     const result = new Map<string, Tag[]>();
     for (const row of allLogs) {
       const dayTags = row.tag_ids
@@ -90,15 +118,15 @@ export default function CalendarScreen() {
       if (dayTags.length > 0) result.set(row.date, dayTags);
     }
     return result;
-  }, [allLogs, tags, cycleTracking]);
+  }, [allLogs, tags]);
 
   // ── Custom day renderer (memoised to avoid recreation on every render) ────
 
   const DayCellRenderer = useCallback(
     (props: any) => (
-      <DayCell {...props} tagsByDate={tagsByDate} selectedDate={selectedDate} />
+      <DayCell {...props} tagsByDate={tagsByDate} selectedDate={selectedDate} phases={phases} />
     ),
-    [tagsByDate, selectedDate],
+    [tagsByDate, selectedDate, phases],
   );
 
   // ── data loading ───────────────────────────────────────────────────────────
@@ -109,7 +137,7 @@ export default function CalendarScreen() {
       if (!user) return;
 
       const [profileRes, allRes, dayRes] = await Promise.all([
-        supabase.from('profiles').select('custom_tags, cycle_tracking_enabled').eq('id', user.id).maybeSingle(),
+        supabase.from('profiles').select('custom_tags, cycle_tracking_enabled, gender').eq('id', user.id).maybeSingle(),
         supabase.from('daily_logs').select('date, tags, note').eq('user_id', user.id),
         supabase
           .from('daily_logs')
@@ -119,7 +147,8 @@ export default function CalendarScreen() {
           .maybeSingle(),
       ]);
 
-      const cycleEnabled: boolean = profileRes.data?.cycle_tracking_enabled ?? true;
+      const cycleEnabled =
+        profileRes.data?.gender === 'female' && profileRes.data?.cycle_tracking_enabled !== false;
       setCycleTracking(cycleEnabled);
 
       let resolvedTags: Tag[] = DEFAULT_TAGS;
@@ -129,10 +158,10 @@ export default function CalendarScreen() {
       }
       setTags(resolvedTags);
 
-      // When cycle tracking is off, exclude the period tag from calendar dots
+      // Periode wird über die Zyklus-Einfärbung dargestellt, nicht als Tag-Punkt
       const tagMap = new Map(
         resolvedTags
-          .filter((t) => cycleEnabled || t.id !== 'period')
+          .filter((t) => t.id !== PERIOD_TAG_ID)
           .map((t) => [t.id, t])
       );
       const rows: LogRow[] = (allRes.data ?? []).map((r) => ({
@@ -352,7 +381,18 @@ export default function CalendarScreen() {
               }}
               style={styles.calendar}
             />
+            {cycleTracking && <CycleLegend />}
           </View>
+
+          {/* Zyklus (ehemals Periode-Tab) */}
+          {cycleTracking && (
+            <CyclePanel
+              cycle={cycle}
+              selectedDate={selectedDate}
+              selectedPhase={phases.get(selectedDate)}
+              today={today}
+            />
+          )}
 
           {/* Input Area */}
           <View style={styles.card}>
@@ -375,7 +415,7 @@ export default function CalendarScreen() {
 
             <View style={styles.chipRow}>
               {tags
-                .filter((t) => cycleTracking || t.id !== 'period')
+                .filter((t) => t.id !== PERIOD_TAG_ID)
                 .map((tag) => (
                   <TagChip
                     key={tag.id}
@@ -560,6 +600,7 @@ function DayCell({
   onPress,
   tagsByDate,
   selectedDate,
+  phases,
 }: {
   date?: DateData;
   state?: 'disabled' | 'today' | '';
@@ -567,6 +608,7 @@ function DayCell({
   onPress?: (date: DateData) => void;
   tagsByDate: Map<string, Tag[]>;
   selectedDate: string;
+  phases: Map<string, DayPhase>;
 }) {
   if (!date) return <View style={{ flex: 1 }} />;
 
@@ -577,13 +619,23 @@ function DayCell({
   const displayTags = dayTags.slice(0, MAX_BARS);
   const hasOverflow = dayTags.length > MAX_BARS;
 
+  // Zyklus: Periode = rote Füllung (Prognose: blass + gestrichelt),
+  // fruchtbares Fenster = gepunkteter gelber Rand, Eisprung = Ei-Symbol
+  const phase = phases.get(date.dateString);
+  const cycleStyle = !phase
+    ? null
+    : phase.bleeding
+      ? phase.predicted ? dayStyles.periodPredicted : dayStyles.period
+      : phase.fertileWindow ? dayStyles.fertile : null;
+
   return (
     <TouchableOpacity
-      style={dayStyles.container}
+      style={[dayStyles.container, cycleStyle, isDisabled && cycleStyle && dayStyles.cycleDisabled]}
       onPress={() => !isDisabled && onPress?.(date)}
       activeOpacity={0.7}
       disabled={isDisabled}
     >
+      {phase?.phase === 'ovulation' && <Text style={dayStyles.egg}>{'🥚'}</Text>}
       {/* Date number with selection / today indicator */}
       <View style={[
         dayStyles.circle,
@@ -617,7 +669,16 @@ const dayStyles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 5,
     paddingBottom: 4,
+    marginHorizontal: 1,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
+  period:          { backgroundColor: PERIOD_COLOR + '55' },
+  periodPredicted: { backgroundColor: PERIOD_COLOR + '18', borderColor: PERIOD_COLOR + '99', borderStyle: 'dashed' },
+  fertile:         { backgroundColor: FERTILE_WINDOW_COLOR + '14', borderColor: FERTILE_WINDOW_COLOR, borderStyle: 'dotted' },
+  cycleDisabled:   { opacity: 0.4 },
+  egg: { position: 'absolute', top: 1, right: 2, fontSize: 8 },
   circle: {
     width: 28,
     height: 28,

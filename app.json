@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.avorasport.app",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSHealthShareUsageDescription": "AvoraSport liest deine Schritte und Aktivitätskalorien aus Apple Health, um sie in deinem Tagesziel zu berücksichtigen.",
+        "NSHealthShareUsageDescription": "AvoraSport liest deine Schritte und Aktivitätskalorien aus Apple Health, um sie in deinem Tagesziel zu berücksichtigen, und – falls du es erlaubst – deine Periodendaten für den Zykluskalender.",
         "NSHealthUpdateUsageDescription": "AvoraSport schreibt keine Daten in Apple Health; diese Angabe wird nur von iOS vorausgesetzt.",
         "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen.",
         "ITSAppUsesNonExemptEncryption": false
@@ -27,6 +27,7 @@
         "WRITE_EXTERNAL_STORAGE",
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_MENSTRUATION",
         "POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
@@ -73,7 +74,9 @@
         {
           "permissions": [
             "Steps",
-            "ActiveCaloriesBurned"
+            "ActiveCaloriesBurned",
+            "MenstruationFlow",
+            "MenstruationPeriod"
           ]
         }
       ],

@@ -1,6 +1,14 @@
 import * as Device from "expo-device";
 import { AppState, NativeModules, Platform } from "react-native";
 
+import {
+  expandDays,
+  localISODate,
+  mapHealthConnectFlow,
+  mapHealthKitFlow,
+  mergeHealthDays,
+  type HealthCycleDay,
+} from "@/lib/cycleHealth";
 import { mockHealthService } from "@/services/mockHealthService";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,6 +55,9 @@ function hk<T>(call: (cb: (err: unknown, res: T) => void) => void): Promise<T> {
 }
 
 const HK_READ_PERMISSIONS = ["Steps", "ActiveEnergyBurned"];
+// "MenstrualFlow" needs patches/react-native-health+1.19.0.patch (permission + getMenstrualFlowSamples).
+const HK_CYCLE_PERMISSIONS = ["MenstrualFlow"];
+const HC_CYCLE_RECORDS = ["MenstruationFlow", "MenstruationPeriod"];
 
 /** Sums Steps + ActiveEnergyBurned from HealthKit for the given range. */
 async function fetchHealthKit(range: DateRange): Promise<StepsAndCalories> {
@@ -265,6 +276,24 @@ export const HealthManager = {
         console.log("[HealthManager] mock — requestPermissions() → true");
       return true;
     }
+    return this._requestRead(HK_READ_PERMISSIONS, ["Steps", "ActiveCaloriesBurned"]);
+  },
+
+  /**
+   * Requests read access for menstruation data (Zykluskalender). Separate from
+   * requestPermissions() so Steps users are not asked for cycle data.
+   */
+  async requestMenstruationPermission(): Promise<boolean> {
+    return this._requestRead(HK_CYCLE_PERMISSIONS, HC_CYCLE_RECORDS);
+  },
+
+  /**
+   * Shared permission flow. iOS: HealthKit sheet for `hkRead`. Android: Health
+   * Connect dialog for `hcRecords` (success = at least one of them granted).
+   */
+  async _requestRead(hkRead: string[], hcRecords: string[]): Promise<boolean> {
+    const isGranted = (perms: any[]) =>
+      perms.some((p) => p.accessType === "read" && hcRecords.includes(p.recordType));
 
     try {
       const ready = await this.init();
@@ -276,7 +305,7 @@ export const HealthManager = {
         if (!ahk) return false;
         await hk((cb) =>
           ahk!.initHealthKit(
-            { permissions: { read: HK_READ_PERMISSIONS, write: [] } } as any,
+            { permissions: { read: hkRead, write: [] } } as any,
             cb as any,
           ),
         );
@@ -287,14 +316,7 @@ export const HealthManager = {
       // from HC settings), skip the dialog entirely.
       if (hc) {
         const already = await hc.getGrantedPermissions();
-        if (
-          (already as any[]).some(
-            (p) =>
-              p.accessType === "read" &&
-              (p.recordType === "Steps" ||
-                p.recordType === "ActiveCaloriesBurned"),
-          )
-        ) {
+        if (isGranted(already as any[])) {
           if (__DEV__)
             console.log(
               "[HealthManager] permissions already granted — skipping dialog.",
@@ -348,10 +370,9 @@ export const HealthManager = {
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          const granted = await hc.requestPermission([
-            { accessType: "read", recordType: "Steps" },
-            { accessType: "read", recordType: "ActiveCaloriesBurned" },
-          ]);
+          const granted = await hc.requestPermission(
+            hcRecords.map((recordType) => ({ accessType: "read", recordType })) as any,
+          );
 
           if (__DEV__)
             console.log(
@@ -370,12 +391,7 @@ export const HealthManager = {
               "[HealthManager] getGrantedPermissions fallback:",
               JSON.stringify(actual),
             );
-          return (actual as any[]).some(
-            (p) =>
-              p.accessType === "read" &&
-              (p.recordType === "Steps" ||
-                p.recordType === "ActiveCaloriesBurned"),
-          );
+          return isGranted(actual as any[]);
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e ?? "");
           const isLateInitError =
@@ -403,7 +419,7 @@ export const HealthManager = {
 
       return false;
     } catch (e) {
-      console.error("[HealthManager] requestPermissions() threw:", e);
+      console.error("[HealthManager] _requestRead() threw:", e);
       this._isNativeReady = false;
       this._status = "idle";
       this._initPromise = null;
@@ -526,6 +542,85 @@ export const HealthManager = {
     } catch (e) {
       console.error("[HealthManager] fetchStepsAndCalories() threw:", e);
       return { ...EMPTY_DATA };
+    }
+  },
+
+  // ── Menstruation (Zykluskalender) ──────────────────────────────────────────
+
+  /**
+   * Android: whether menstruation read access is granted. iOS cannot tell
+   * (HealthKit hides read status) → null; callers track that themselves.
+   */
+  async hasMenstruationPermission(): Promise<boolean | null> {
+    if (Platform.OS === "ios") return null;
+    if (Platform.OS !== "android" || !Device.isDevice) return false;
+    try {
+      if (!(await this.init()) || !hc) return false;
+      const granted = await hc.getGrantedPermissions();
+      return (granted as any[]).some(
+        (p) => p.accessType === "read" && HC_CYCLE_RECORDS.includes(p.recordType),
+      );
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Bleeding days (local date + app flow 1–4) in the given range.
+   * Returns null when the data could not be read (unavailable, no permission,
+   * error) — callers must then NOT treat it as "no bleeding days".
+   */
+  async fetchMenstruationDays(range: DateRange): Promise<HealthCycleDay[] | null> {
+    if (USE_MOCK) return null;
+    if (Platform.OS === "android" && !Device.isDevice) return null;
+    try {
+      if (!(await this.init())) return null;
+
+      if (Platform.OS === "ios") {
+        if (!ahk || typeof (ahk as any).getMenstrualFlowSamples !== "function") return null;
+        const samples = await hk<{ startDate: string; value: number }[]>((cb) =>
+          (ahk as any).getMenstrualFlowSamples(
+            { startDate: range.startTime, endDate: range.endTime },
+            cb,
+          ),
+        );
+        const days: HealthCycleDay[] = [];
+        for (const s of samples ?? []) {
+          const flow = mapHealthKitFlow(Number(s.value));
+          if (flow != null) days.push({ date: localISODate(new Date(s.startDate)), flow });
+        }
+        return mergeHealthDays(days);
+      }
+
+      if (!hc || !(await this.hasMenstruationPermission())) return null;
+      const timeRangeFilter = {
+        operator: "between" as const,
+        startTime: range.startTime,
+        endTime: range.endTime,
+      };
+      const [flowRes, periodRes] = await Promise.all([
+        hc.readRecords("MenstruationFlow", { timeRangeFilter }),
+        hc.readRecords("MenstruationPeriod", { timeRangeFilter }).catch(() => ({ records: [] })),
+      ]);
+
+      const days: HealthCycleDay[] = [];
+      for (const r of (flowRes as any).records ?? []) {
+        days.push({ date: localISODate(new Date(r.time)), flow: mapHealthConnectFlow(r.flow) });
+      }
+      // Periods are intervals (endTime exclusive); days without a flow record count as "Leicht".
+      for (const r of (periodRes as any).records ?? []) {
+        const start = r.startTime ?? r.time;
+        if (!start) continue;
+        const endExclusive = new Date(r.endTime ?? start);
+        const last = r.endTime ? new Date(endExclusive.getTime() - 1) : endExclusive;
+        for (const date of expandDays(localISODate(new Date(start)), localISODate(last))) {
+          days.push({ date, flow: 2 });
+        }
+      }
+      return mergeHealthDays(days);
+    } catch (e) {
+      console.warn("[HealthManager] fetchMenstruationDays() failed:", e);
+      return null;
     }
   },
 };
