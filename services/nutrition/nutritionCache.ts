@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FoodAnalysisResponse } from '@/services/gemini/nutritionProvider';
 
-const STORAGE_KEY    = 'nutrition_image_cache_v1';
+const STORAGE_KEY    = 'nutrition_image_cache_v2'; // v2: items + health_notes
 const TTL_MS         = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 const MAX_ENTRIES    = 20;
 const HASH_SAMPLES   = 64;

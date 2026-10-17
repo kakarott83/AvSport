@@ -609,7 +609,11 @@ export function FoodScanner({
 
         {/* ── Result / Saving phase ── */}
         {(phase === 'result' || phase === 'saving') && result && (
-          <View style={s.centeredBox}>
+          <ScrollView
+            style={{ flex: 1, backgroundColor: '#121212' }}
+            contentContainerStyle={s.reviewContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={s.previewCard}>
               <Text style={s.cardLabel}>ERNÄHRUNG · VORSCHAU</Text>
 
@@ -640,6 +644,29 @@ export function FoodScanner({
                 </View>
               </View>
 
+              {result.health_notes && (
+                <View style={s.healthNote}>
+                  <MaterialIcons name="eco" size={15} color="#4caf50" style={{ marginTop: 1 }} />
+                  <Text style={s.healthNoteText}>{result.health_notes}</Text>
+                </View>
+              )}
+
+              {result.items && result.items.length > 1 && (
+                <View style={s.breakdown}>
+                  {result.items.map((it, i) => (
+                    <View key={`${it.name}-${i}`} style={s.breakdownRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.breakdownName} numberOfLines={1}>{it.name}</Text>
+                        <Text style={s.breakdownMacros}>
+                          {it.grams} g · P {it.protein} g · KH {it.carbs} g · F {it.fat} g
+                        </Text>
+                      </View>
+                      <Text style={s.breakdownKcal}>{it.calories} kcal</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <TouchableOpacity
                 style={s.cardLink}
                 onPress={handleSave}
@@ -668,7 +695,7 @@ export function FoodScanner({
                 <Text style={s.retryText}>Nochmal aufnehmen</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </ScrollView>
         )}
 
         {/* ── Close ── */}
@@ -925,6 +952,23 @@ const s = StyleSheet.create({
   legendChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 },
   legendDot:  { width: 7, height: 7, borderRadius: 4 },
   legendText: { color: '#666', fontSize: 10, fontWeight: '600' },
+  healthNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#0d1f12',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1b3a22',
+    padding: 12,
+    marginBottom: 12,
+  },
+  healthNoteText: { flex: 1, color: '#b8d8bd', fontSize: 12, lineHeight: 17 },
+  breakdown:       { borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingTop: 10, marginBottom: 4, gap: 8 },
+  breakdownRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  breakdownName:   { color: '#ddd', fontSize: 13, fontWeight: '600' },
+  breakdownMacros: { color: '#666', fontSize: 10, marginTop: 1 },
+  breakdownKcal:   { color: COLOR_CALORIES, fontSize: 12, fontWeight: '700' },
   cardLink: {
     flexDirection: 'row',
     alignItems: 'center',

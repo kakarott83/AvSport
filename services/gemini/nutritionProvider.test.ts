@@ -132,6 +132,25 @@ describe('USDA-Erfolg', () => {
     expect(r.confidence).toBe(1.0);
   });
 
+  it('liefert Nährwerte je Item mit deutschem Namen', async () => {
+    const r = await analyzeFoodImage('img');
+    expect(r.items).toEqual([
+      { name: 'Apfel', grams: 182, calories: 95,  protein: 0.5, carbs: 25.0, fat: 0.3 },
+      { name: 'Reis',  grams: 150, calories: 206, protein: 4.3, carbs: 44.5, fat: 0.4 },
+    ]);
+  });
+
+  it('übernimmt meal_name und health_notes aus der Foto-Erkennung', async () => {
+    mockRecognize.mockResolvedValue({
+      items: [ITEM_APPLE, ITEM_RICE],
+      meal_name: 'Reis mit Apfel',
+      health_notes: 'Leichte, kohlenhydratreiche Mahlzeit.',
+    });
+    const r = await analyzeFoodImage('img');
+    expect(r.name).toBe('Reis mit Apfel');
+    expect(r.health_notes).toBe('Leichte, kohlenhydratreiche Mahlzeit.');
+  });
+
   it('verbindet deutsche Item-Namen mit Komma', async () => {
     const r = await analyzeFoodImage('img');
     expect(r.name).toBe('Apfel, Reis');

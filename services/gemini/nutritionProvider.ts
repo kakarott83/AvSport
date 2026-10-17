@@ -8,14 +8,33 @@ import type { Macros }                   from '@/services/nutrition/usdaLookup';
 
 // ── Öffentliches Interface (bleibt identisch → FoodScanner.tsx unverändert) ──
 
-export interface FoodAnalysisResponse {
-  name:       string;
-  calories:   number;
-  protein:    number;
-  carbs:      number;
-  fat:        number;
-  confidence: number;
+export interface AnalyzedItem {
+  name:     string; // Deutscher Anzeigename
+  grams:    number;
+  calories: number;
+  protein:  number;
+  carbs:    number;
+  fat:      number;
 }
+
+export interface FoodAnalysisResponse {
+  name:          string;
+  calories:      number;
+  protein:       number;
+  carbs:         number;
+  fat:           number;
+  confidence:    number;
+  items:         AnalyzedItem[];
+  health_notes?: string;
+}
+
+/** Optionale Zusatzinfos aus der Foto-Erkennung. */
+export interface MealMeta {
+  meal_name?:    string;
+  health_notes?: string;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 // ── Kosten-Logging ────────────────────────────────────────────────────────────
 
@@ -83,10 +102,10 @@ export async function analyzeFoodImage(
   }
 
   // ── Schritt 1: Vision-Call → Item-Liste ───────────────────────────────────
-  const { items } = await recognizeFoodItems(base64_1, base64_2, notes);
+  const { items, meal_name, health_notes } = await recognizeFoodItems(base64_1, base64_2, notes);
 
   // ── Schritt 2: Nährwerte für die erkannte Liste ───────────────────────────
-  const result = await analyzeFoodItems(items);
+  const result = await analyzeFoodItems(items, { meal_name, health_notes });
 
   // Cache asynchron schreiben — blockiert die Antwort nicht
   void setCachedResult(base64_1, result);
@@ -99,8 +118,12 @@ export async function analyzeFoodImage(
  * genutzt. Items ohne englischen Namen (umbenannt / neu angelegt) gehen
  * direkt an den LLM-Fallback mit dem deutschen Namen.
  */
-export async function analyzeFoodItems(items: RecognizedItem[]): Promise<FoodAnalysisResponse> {
+export async function analyzeFoodItems(
+  items: RecognizedItem[],
+  meta: MealMeta = {},
+): Promise<FoodAnalysisResponse> {
   const totals: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  const analyzed: AnalyzedItem[] = [];
   let usedLLMFallback  = false;
   let resolvedCount    = 0;
 
@@ -141,6 +164,14 @@ export async function analyzeFoodItems(items: RecognizedItem[]): Promise<FoodAna
     totals.protein  += macros.protein;
     totals.carbs    += macros.carbs;
     totals.fat      += macros.fat;
+    analyzed.push({
+      name:     item.name_de || item.name,
+      grams:    Math.round(item.grams),
+      calories: Math.round(macros.calories),
+      protein:  round1(macros.protein),
+      carbs:    round1(macros.carbs),
+      fat:      round1(macros.fat),
+    });
     resolvedCount++;
   }
 
@@ -152,12 +183,14 @@ export async function analyzeFoodItems(items: RecognizedItem[]): Promise<FoodAna
   }
 
   const result: FoodAnalysisResponse = {
-    name:       items.map(i => i.name_de).join(', '),
-    calories:   Math.round(totals.calories),
-    protein:    Math.round(totals.protein  * 10) / 10,
-    carbs:      Math.round(totals.carbs    * 10) / 10,
-    fat:        Math.round(totals.fat      * 10) / 10,
-    confidence: usedLLMFallback ? 0.8 : 1.0,
+    name:         meta.meal_name || items.map(i => i.name_de).join(', '),
+    calories:     Math.round(totals.calories),
+    protein:      round1(totals.protein),
+    carbs:        round1(totals.carbs),
+    fat:          round1(totals.fat),
+    confidence:   usedLLMFallback ? 0.8 : 1.0,
+    items:        analyzed,
+    health_notes: meta.health_notes,
   };
 
   console.log(

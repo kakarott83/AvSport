@@ -8,8 +8,13 @@ export interface RecognizedItem {
 }
 
 export interface FoodRecognitionResult {
-  items: RecognizedItem[];
+  items:         RecognizedItem[];
+  meal_name?:    string; // Kurzer deutscher Mahlzeit-Name (nur Foto-Erkennung)
+  health_notes?: string; // Ein motivierender Satz zur Zusammensetzung (nur Foto-Erkennung)
 }
+
+const NO_FOOD_PHOTO =
+  'Konnte keine Lebensmittel auf dem Bild erkennen. Bitte versuche ein klareres Foto hochzuladen.';
 
 const JSON_FORMAT =
   'Return ONLY valid JSON — no markdown, no explanation, no extra text. ' +
@@ -21,14 +26,27 @@ const JSON_FORMAT =
   'For preparation use exactly one English word: ' +
   '"grilled", "boiled", "fried", "steamed", "raw", "baked", "roasted", or "mixed".';
 
+// Zusatzfelder nur für die Foto-Erkennung. Nährwerte rechnet bewusst nicht
+// Gemini, sondern die USDA-Kette in nutritionProvider.
+const PHOTO_EXTRAS =
+  ' Additionally include at the top level: ' +
+  '"meal_name": a short, concise German name for the whole meal ' +
+  '(e.g. "Gegrilltes Hähnchenbrustfilet mit Reis und Brokkoli"), and ' +
+  '"health_notes": one short, motivating German sentence about the composition of the meal ' +
+  '(e.g. "Exzellente Proteinquelle mit ausgewogenen Kohlenhydraten."). ' +
+  'If the image contains no food or recognition is impossible, return exactly ' +
+  `{"error":"${NO_FOOD_PHOTO}"} instead.`;
+
 function buildPrompt(notes?: string): string {
   let p =
-    'You are a food recognition system. Analyze the provided food image. ' +
+    'You are a precise, health-oriented food recognition system for nutrition tracking. ' +
+    'Analyze the provided food image. ' +
     'If a second image is provided, it shows a reference object (hand or cutlery) — ' +
     'use it to estimate portion sizes more accurately. ' +
-    'Identify each distinct food component on the plate. ';
+    'Identify every visible food component on the plate or in the packaging ' +
+    'and estimate realistic portion sizes in grams. ';
   if (notes?.trim()) p += `Additional user context: "${notes.trim()}". `;
-  return p + JSON_FORMAT;
+  return p + JSON_FORMAT + PHOTO_EXTRAS;
 }
 
 /**
@@ -48,7 +66,8 @@ export async function recognizeFoodFromText(description: string): Promise<FoodRe
 
   const text = await geminiRequest([{ text: prompt }]);
   if (!text) throw new Error('[FoodRecognition] Leere Antwort von Gemini');
-  return { items: parseItems(text, 'In deiner Beschreibung wurde kein Essen erkannt') };
+  const { items } = parseResult(text, 'In deiner Beschreibung wurde kein Essen erkannt');
+  return { items };
 }
 
 export async function recognizeFoodItems(
@@ -65,21 +84,30 @@ export async function recognizeFoodItems(
   const text = await geminiRequest(parts);
   if (!text) throw new Error('[FoodRecognition] Leere Antwort von Gemini');
 
-  const items = parseItems(text, 'Kein Essen auf dem Foto erkannt');
+  const result = parseResult(text, NO_FOOD_PHOTO);
   console.log(
     '[FoodRecognition] Erkannt:',
-    items.map(i => `${i.grams}g ${i.name_de} (${i.preparation})`).join(', '),
+    result.meal_name ?? '–', '|',
+    result.items.map(i => `${i.grams}g ${i.name_de} (${i.preparation})`).join(', '),
   );
-  return { items };
+  return result;
 }
 
-function parseItems(text: string, emptyMessage: string): RecognizedItem[] {
-  const parsed = JSON.parse(text) as { items?: unknown[] };
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function parseResult(text: string, emptyMessage: string): FoodRecognitionResult {
+  const parsed = JSON.parse(text) as { items?: unknown[]; error?: unknown; meal_name?: unknown; health_notes?: unknown };
+  // Gemini meldet "kein Essen" per {"error": …} — die Meldung ist für den Nutzer formuliert.
+  if (parsed.error !== undefined && parsed.error !== null) {
+    throw new Error(optionalString(parsed.error) ?? emptyMessage);
+  }
   if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
     throw new Error(emptyMessage);
   }
 
-  return (parsed.items as Record<string, unknown>[]).map(
+  const items = (parsed.items as Record<string, unknown>[]).map(
     (item, i) => {
       if (typeof item.name !== 'string' || !item.name.trim()) {
         throw new Error(`[FoodRecognition] Item ${i}: "name" fehlt`);
@@ -97,4 +125,10 @@ function parseItems(text: string, emptyMessage: string): RecognizedItem[] {
       };
     },
   );
+
+  return {
+    items,
+    meal_name:    optionalString(parsed.meal_name),
+    health_notes: optionalString(parsed.health_notes),
+  };
 }
