@@ -84,7 +84,7 @@ describe('computeCalorieGoal', () => {
       // Female, 31 y, 170 cm, 65 kg — no period logs → no luteal phase
       // BMR  = 447.593 + 9.247×65 + 3.098×170 − 4.33×31
       //      = 447.593 + 601.055 + 526.66 − 134.23 = 1 441.078
-      // TDEE = round(1 441.078 × 1.55) = round(2 233.67) = 2 234
+      // TDEE = round(round(BMR) × 1.55) = round(1 441 × 1.55) = round(2 233.55) = 2 234
       const result = computeCalorieGoal(BASE_PROFILE, [], 0);
 
       expect(result.currentGoal).toBe(2234);
@@ -219,6 +219,43 @@ describe('computeCalorieGoal', () => {
 
       expect(result.isLuteal).toBe(false);
       expect(result.bonusActive).toBe(false);
+    });
+  });
+
+  // ── Aufschlüsselung (CalorieBreakdownModal) ─────────────────────────────────
+
+  describe('breakdown', () => {
+    it('liefert alle Zwischenschritte, die sich zum Ziel aufsummieren', () => {
+      const profile: ProfileData = {
+        ...BASE_PROFILE, calorie_goal: 'lose', manual_calorie_offset: 100, auto_adjust_calories: true,
+      };
+      const { currentGoal, breakdown } = computeCalorieGoal(profile, [], 300, 150);
+
+      expect(breakdown.inputs).toEqual({ gender: 'female', age: 31, weightKg: 65, heightCm: 170 });
+      expect(breakdown.bmr).toBe(1441);
+      expect(breakdown.activityFactor).toBe(1.55);
+      expect(breakdown.tdee).toBe(2234);
+      expect(breakdown.goalAdjustment).toBe(-500);
+      expect(breakdown.manualOffset).toBe(100);
+      expect(breakdown.workoutKcal).toBe(300);
+      expect(breakdown.workoutCounted).toBe(true);
+      expect(breakdown.healthKcal).toBe(150);
+      expect(breakdown.total).toBe(2234 - 500 + 100 + 300 + 150);
+      expect(breakdown.total).toBe(currentGoal);
+    });
+
+    it('meldet Training als nicht eingerechnet, wenn auto_adjust aus ist', () => {
+      const { breakdown } = computeCalorieGoal(BASE_PROFILE, [], 350);
+      expect(breakdown.workoutKcal).toBe(350);
+      expect(breakdown.workoutCounted).toBe(false);
+      expect(breakdown.total).toBe(2234);
+    });
+
+    it('kennzeichnet den Pauschalwert bei unvollständigem Profil', () => {
+      const { breakdown } = computeCalorieGoal({ ...BASE_PROFILE, height_cm: null }, [], 0);
+      expect(breakdown.inputs).toBeNull();
+      expect(breakdown.bmr).toBeNull();
+      expect(breakdown.tdee).toBe(2500);
     });
   });
 });

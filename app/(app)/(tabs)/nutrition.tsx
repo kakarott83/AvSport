@@ -16,10 +16,12 @@ import {
 } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 
+import { CalorieBreakdownModal } from '@/components/CalorieBreakdownModal';
 import { DayLogModal } from '@/components/DayLogModal';
 import { Toast } from '@/components/Toast';
 import { FoodScanner } from '@/components/FoodScanner';
 import { useCalorieGoal } from '@/hooks/useCalorieGoal';
+import { useHealthData } from '@/hooks/useHealthData';
 import { buildWeekDays, computeDayTotals, type FoodLog, type WeekDay } from '@/lib/nutrition';
 import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { calculateWaterGoal } from '@/lib/waterGoal';
@@ -368,8 +370,11 @@ export default function NutritionScreen() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustInput, setAdjustInput] = useState('');
 
-  // Ziel-Kalorien aus dem zentralen Hook (inkl. Zyklus-Bonus)
-  const { currentGoal, bonusActive, cycleBonus } = useCalorieGoal();
+  // Ziel-Kalorien aus dem zentralen Hook (inkl. Zyklus-Bonus). Health-Aktivität
+  // wird wie auf dem Home-Screen eingerechnet, damit beide dasselbe Ziel zeigen.
+  const { healthBurnKcal } = useHealthData();
+  const { currentGoal, bonusActive, cycleBonus, breakdown } = useCalorieGoal(healthBurnKcal);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const effectiveTdee = currentGoal + dailyAdjustment;
 
@@ -466,7 +471,15 @@ export default function NutritionScreen() {
             <View style={styles.ringSummary}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{effectiveTdee}</Text>
-                <Text style={styles.summaryLabel}>Ziel kcal</Text>
+                <TouchableOpacity
+                  onPress={() => setBreakdownOpen(true)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  style={styles.goalLink}
+                >
+                  <Text style={styles.summaryLabel}>Ziel kcal</Text>
+                  <MaterialIcons name="info-outline" size={11} color="#999" />
+                </TouchableOpacity>
                 {bonusActive && (
                   <Text style={styles.lutealBonusHint}>+{cycleBonus} kcal Bonus</Text>
                 )}
@@ -608,6 +621,13 @@ export default function NutritionScreen() {
         onSaved={() => { setModalOpen(false); setToast('Mahlzeit gespeichert!'); loadData(); }}
       />
 
+      <CalorieBreakdownModal
+        visible={breakdownOpen}
+        breakdown={breakdown}
+        extraAdjustment={dailyAdjustment}
+        onClose={() => setBreakdownOpen(false)}
+      />
+
       <DayLogModal
         visible={dayLogOpen}
         onClose={() => setDayLogOpen(false)}
@@ -653,6 +673,7 @@ const styles = StyleSheet.create({
   summaryItem: { gap: 2 },
   summaryValue: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 28 },
   summaryLabel:     { color: '#999', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  goalLink:         { flexDirection: 'row', alignItems: 'center', gap: 3 },
   lutealBonusHint:  { color: '#FF9100', fontSize: 10, fontWeight: '700', marginTop: 2 },
   summaryDivider: { height: 1, backgroundColor: '#2a2a2a' },
 

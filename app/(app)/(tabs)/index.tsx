@@ -26,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 
+import { CalorieBreakdownModal } from "@/components/CalorieBreakdownModal";
 import { FoodScanner } from "@/components/FoodScanner";
 import { Toast } from "@/components/Toast";
 import { useCalorieGoal } from "@/hooks/useCalorieGoal";
@@ -388,7 +389,8 @@ const ringStyles = StyleSheet.create({
 export default function HomeScreen() {
   // ── Calorie goal (TDEE + training burn + luteal bonus) via shared hook ────────
   const { healthBurnKcal, healthSteps, healthProtein, refreshHealth } = useHealthData();
-  const { currentGoal, bonusActive } = useCalorieGoal(healthBurnKcal);
+  const { currentGoal, bonusActive, breakdown } = useCalorieGoal(healthBurnKcal);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { stepGoal } = useStepGoal();
   const water = useWaterIntake();
 
@@ -919,7 +921,15 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.nutritionInfo}>
                     <Text style={styles.kcalValue}>{displayKcal}</Text>
-                    <Text style={styles.kcalUnit}>von {currentGoal} kcal</Text>
+                    <TouchableOpacity
+                      onPress={() => setBreakdownOpen(true)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      style={styles.goalLink}
+                    >
+                      <Text style={styles.kcalUnit}>von {currentGoal} kcal</Text>
+                      <MaterialIcons name="info-outline" size={12} color="#999" />
+                    </TouchableOpacity>
                     {bonusActive && (
                       <Text style={styles.lutealBonusText}>
                         Inkl. Zyklus-Bonus 🩸
@@ -1389,6 +1399,12 @@ export default function HomeScreen() {
         <MaterialIcons name="camera-alt" size={24} color="#121212" />
       </TouchableOpacity>
 
+      <CalorieBreakdownModal
+        visible={breakdownOpen}
+        breakdown={breakdown}
+        onClose={() => setBreakdownOpen(false)}
+      />
+
       {waterToast && (
         <Toast
           message={waterToast}
@@ -1489,6 +1505,7 @@ const styles = StyleSheet.create({
   nutritionInfo: { flex: 1 },
   kcalValue: { color: "#fff", fontSize: 30, fontWeight: "800", lineHeight: 34 },
   kcalUnit: { color: "#999", fontSize: 11, marginBottom: 2 },
+  goalLink: { flexDirection: "row", alignItems: "center", gap: 3 },
   lutealBonusText: {
     color: "#FF9100",
     fontSize: 11,
