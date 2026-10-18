@@ -122,3 +122,22 @@ export function scaleMeal(
     fat:      g(meal.fat),
   };
 }
+
+/**
+ * Welche der zur Analyse geschickten Gerichte fehlen im Ergebnis? Die
+ * Nährwert-Kette überspringt Items, für die weder USDA noch KI Werte liefern.
+ * Vergleich ohne Groß-/Kleinschreibung, doppelte Namen werden mitgezählt.
+ */
+export function findUnresolvedItems(sentNames: string[], analyzedNames: string[]): string[] {
+  const remaining = new Map<string, number>();
+  for (const n of analyzedNames) {
+    const k = normalizeMealName(n);
+    remaining.set(k, (remaining.get(k) ?? 0) + 1);
+  }
+  return sentNames.filter((n) => {
+    const k = normalizeMealName(n);
+    const left = remaining.get(k) ?? 0;
+    if (left > 0) { remaining.set(k, left - 1); return false; }
+    return true;
+  });
+}

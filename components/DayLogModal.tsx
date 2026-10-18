@@ -3,6 +3,11 @@
  * eintragen, ohne Foto. Vorschläge stammen aus dem eigenen food_logs-Verlauf
  * (häufigste zuerst); pro Gericht lässt sich die Portion bzw. die kcal anpassen.
  * Zusätzlich können neue Gerichte manuell eingetragen und mitgespeichert werden.
+ *
+ * "Tag beschreiben (KI)": Freitext/Diktat → KI erkennt die Gerichte
+ * (recognizeFoodFromText) → Nutzer prüft die Liste → Nährwerte
+ * (analyzeFoodItems, USDA → KI-Fallback) → landen als eigene Gerichte in der
+ * Liste und können vor dem Speichern noch angepasst werden.
  */
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -20,9 +25,20 @@ import {
   View,
 } from 'react-native';
 
+import { useRouter } from 'expo-router';
+
 import { useTranslation } from '@/lib/i18n';
-import { buildMealSuggestions, scaleMeal, type MealHistoryEntry, type MealSuggestion } from '@/lib/nutrition';
+import {
+  buildMealSuggestions,
+  findUnresolvedItems,
+  scaleMeal,
+  type MealHistoryEntry,
+  type MealSuggestion,
+} from '@/lib/nutrition';
+import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
 import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
+import { analyzeFoodItems } from '@/services/gemini/nutritionProvider';
+import { recognizeFoodFromText, type RecognizedItem } from '@/services/nutrition/foodRecognition';
 import { supabase } from '@/services/supabaseClient';
 
 const HISTORY_DAYS  = 90;
@@ -55,6 +71,14 @@ const optionalGrams = (v: string) => {
   return isNaN(n) ? null : n;
 };
 
+/** KI-Erkennung: bearbeitbare Zeile. `name` (englisch, für USDA) wird beim Umbenennen geleert. */
+type AiItem = { key: string; name: string; name_de: string; grams: string; preparation: string };
+type AiPhase = 'closed' | 'input' | 'recognizing' | 'review' | 'calculating';
+
+let aiKeySeq = 0;
+const toAiItem = (item: RecognizedItem): AiItem =>
+  ({ key: `a${++aiKeySeq}`, ...item, grams: String(Math.round(item.grams)) });
+
 type Props = { visible: boolean; onClose: () => void; onSaved: (count: number) => void };
 
 export function DayLogModal({ visible, onClose, onSaved }: Props) {
@@ -66,6 +90,11 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const router = useRouter();
+  const [aiPhase, setAiPhase] = useState<AiPhase>('closed');
+  const [aiText, setAiText] = useState('');
+  const [aiItems, setAiItems] = useState<AiItem[]>([]);
+  const [aiNotice, setAiNotice] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -91,7 +120,77 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
     return () => { cancelled = true; };
   }, [visible]);
 
-  function reset() { setSelected({}); setCustoms([]); setQuery(''); setError(''); }
+  function reset() {
+    setSelected({}); setCustoms([]); setQuery(''); setError('');
+    setAiPhase('closed'); setAiText(''); setAiItems([]); setAiNotice('');
+  }
+
+  // ── KI: Tag beschreiben ─────────────────────────────────────────────────────
+
+  function handleAiError(e: unknown, backTo: AiPhase) {
+    if (isDailyLimitError(e)) {
+      handleClose();
+      openPaywall(router);
+      return;
+    }
+    const message = e instanceof Error ? e.message : String(e ?? '');
+    setError(t('nutrition.dayLog.ai.failed', { message }));
+    setAiPhase(backTo);
+  }
+
+  async function recognize() {
+    if (aiText.trim().length < 3) return;
+    setError(''); setAiNotice('');
+    setAiPhase('recognizing');
+    try {
+      const { items } = await recognizeFoodFromText(aiText);
+      setAiItems(items.map(toAiItem));
+      setAiPhase('review');
+    } catch (e) {
+      handleAiError(e, 'input');
+    }
+  }
+
+  function updateAiItem(key: string, patch: Partial<AiItem>) {
+    setAiItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  }
+
+  const validAiItems: RecognizedItem[] = aiItems
+    .map((it) => ({ name: it.name, name_de: it.name_de.trim(), grams: parseInt(it.grams, 10), preparation: it.preparation }))
+    .filter((it) => it.name_de && it.grams > 0);
+
+  /** Nährwerte berechnen und als eigene Gerichte in die Liste übernehmen. */
+  async function calculate() {
+    if (validAiItems.length === 0) return;
+    setError('');
+    setAiPhase('calculating');
+    try {
+      const result = await analyzeFoodItems(validAiItems);
+      const fmt = (n: number) => String(Math.round(n * 10) / 10);
+      const resolved: CustomMeal[] = result.items.map((it) => ({
+        key: `c${++customKeySeq}`,
+        name: it.name,
+        kcal: String(Math.round(it.calories)),
+        protein: fmt(it.protein),
+        carbs: fmt(it.carbs),
+        fat: fmt(it.fat),
+      }));
+      // Ohne Werte gebliebene Gerichte trotzdem übernehmen, kcal trägt der Nutzer ein
+      const unresolved = findUnresolvedItems(validAiItems.map((i) => i.name_de), result.items.map((i) => i.name));
+      const empty: CustomMeal[] = unresolved.map((name) => ({ ...newCustomMeal(), name }));
+
+      setCustoms((prev) => [...prev, ...resolved, ...empty]);
+      setAiNotice([
+        t('nutrition.dayLog.ai.added', { count: resolved.length }),
+        unresolved.length > 0 ? t('nutrition.dayLog.ai.unresolved', { names: unresolved.join(', ') }) : '',
+      ].filter(Boolean).join(' '));
+      setAiItems([]); setAiText('');
+      setAiPhase('closed');
+    } catch (e) {
+      // analyzeFoodItems wirft, wenn für kein einziges Gericht Werte gefunden wurden
+      handleAiError(e, 'review');
+    }
+  }
 
   function updateCustom(key: string, patch: Partial<CustomMeal>) {
     setCustoms((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
@@ -186,6 +285,129 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
         )}
 
         <ScrollView contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* ── KI: ganzen Tag beschreiben ── */}
+          {aiPhase === 'closed' ? (
+            // Zwei gleichwertige Einstiege: KI-Beschreibung oder manuell eintragen
+            <View style={s.entryRow}>
+              <TouchableOpacity style={[s.entryBtn, s.entryBtnAi]} onPress={() => { setError(''); setAiPhase('input'); }} activeOpacity={0.8}>
+                <MaterialIcons name="auto-awesome" size={20} color="#121212" />
+                <Text style={[s.entryText, s.entryTextAi]}>{t('nutrition.dayLog.ai.open')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.entryBtn, s.entryBtnManual]}
+                onPress={() => setCustoms((prev) => [...prev, newCustomMeal()])}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="edit-note" size={20} color="#00E5FF" />
+                <Text style={[s.entryText, s.entryTextManual]}>{t('nutrition.dayLog.addCustom')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.aiCard}>
+              {(aiPhase === 'input' || aiPhase === 'recognizing') && (
+                <>
+                  <Text style={s.aiHint}>{t('nutrition.dayLog.ai.hint')}</Text>
+                  <TextInput
+                    style={s.aiInput}
+                    value={aiText}
+                    onChangeText={setAiText}
+                    placeholder={t('nutrition.dayLog.ai.placeholder')}
+                    placeholderTextColor="#555"
+                    multiline
+                    autoFocus
+                    textAlignVertical="top"
+                    editable={aiPhase === 'input'}
+                  />
+                  <View style={s.aiActions}>
+                    <TouchableOpacity onPress={() => setAiPhase('closed')} disabled={aiPhase !== 'input'}>
+                      <Text style={s.aiCancel}>{t('nutrition.dayLog.ai.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.aiPrimary, (aiText.trim().length < 3 || aiPhase !== 'input') && s.saveBtnDisabled]}
+                      onPress={recognize}
+                      disabled={aiText.trim().length < 3 || aiPhase !== 'input'}
+                    >
+                      {aiPhase === 'recognizing' ? (
+                        <View style={s.aiBusy}>
+                          <ActivityIndicator color="#121212" size="small" />
+                          <Text style={s.aiPrimaryText}>{t('nutrition.dayLog.ai.recognizing')}</Text>
+                        </View>
+                      ) : (
+                        <Text style={s.aiPrimaryText}>{t('nutrition.dayLog.ai.recognize')}</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {(aiPhase === 'review' || aiPhase === 'calculating') && (
+                <>
+                  <Text style={s.aiTitle}>{t('nutrition.dayLog.ai.reviewTitle')}</Text>
+                  <Text style={s.aiHint}>{t('nutrition.dayLog.ai.reviewHint')}</Text>
+                  {aiItems.map((it) => (
+                    <View key={it.key} style={s.aiItemRow}>
+                      <TextInput
+                        style={[s.field, { flex: 1 }]}
+                        value={it.name_de}
+                        onChangeText={(v) => updateAiItem(it.key, { name_de: v, name: '', preparation: '' })}
+                        placeholder={t('nutrition.dayLog.ai.itemPlaceholder')}
+                        placeholderTextColor="#555"
+                        editable={aiPhase === 'review'}
+                      />
+                      <TextInput
+                        style={[s.field, s.aiGrams]}
+                        value={it.grams}
+                        onChangeText={(v) => updateAiItem(it.key, { grams: v.replace(/\D/g, '').slice(0, 4) })}
+                        placeholder="0"
+                        placeholderTextColor="#555"
+                        keyboardType="number-pad"
+                        textAlign="right"
+                        editable={aiPhase === 'review'}
+                      />
+                      <Text style={s.kcalUnit}>g</Text>
+                      <TouchableOpacity
+                        onPress={() => setAiItems((prev) => prev.filter((x) => x.key !== it.key))}
+                        disabled={aiPhase !== 'review'}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <MaterialIcons name="close" size={18} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  <TouchableOpacity
+                    style={s.addCustomBtn}
+                    onPress={() => setAiItems((prev) => [...prev, { key: `a${++aiKeySeq}`, name: '', name_de: '', grams: '', preparation: '' }])}
+                    disabled={aiPhase !== 'review'}
+                  >
+                    <MaterialIcons name="add" size={18} color="#00E5FF" />
+                    <Text style={s.addCustomText}>{t('nutrition.dayLog.ai.addItem')}</Text>
+                  </TouchableOpacity>
+                  <View style={s.aiActions}>
+                    <TouchableOpacity onPress={() => { setAiItems([]); setAiPhase('input'); }} disabled={aiPhase !== 'review'}>
+                      <Text style={s.aiCancel}>{t('nutrition.dayLog.ai.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.aiPrimary, (validAiItems.length === 0 || aiPhase !== 'review') && s.saveBtnDisabled]}
+                      onPress={calculate}
+                      disabled={validAiItems.length === 0 || aiPhase !== 'review'}
+                    >
+                      {aiPhase === 'calculating' ? (
+                        <View style={s.aiBusy}>
+                          <ActivityIndicator color="#121212" size="small" />
+                          <Text style={s.aiPrimaryText}>{t('nutrition.dayLog.ai.calculating')}</Text>
+                        </View>
+                      ) : (
+                        <Text style={s.aiPrimaryText}>{t('nutrition.dayLog.ai.calculate')}</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+
+          {aiNotice ? <Text style={s.aiNotice}>{aiNotice}</Text> : null}
+
           {customs.map((c) => (
             <View key={c.key} style={[s.row, s.rowSelected, s.customRow]}>
               <View style={s.customHead}>
@@ -195,7 +417,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
                   onChangeText={(v) => updateCustom(c.key, { name: v })}
                   placeholder={t('nutrition.dayLog.customPlaceholder')}
                   placeholderTextColor="#555"
-                  autoFocus
+                  autoFocus={!c.name}
                 />
                 <TouchableOpacity
                   onPress={() => setCustoms((prev) => prev.filter((x) => x.key !== c.key))}
@@ -224,14 +446,19 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
             </View>
           ))}
 
-          <TouchableOpacity
-            style={s.addCustomBtn}
-            onPress={() => setCustoms((prev) => [...prev, newCustomMeal()])}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="add" size={18} color="#00E5FF" />
-            <Text style={s.addCustomText}>{t('nutrition.dayLog.addCustom')}</Text>
-          </TouchableOpacity>
+          {/* Weiteres Gericht direkt unter den eigenen Einträgen */}
+          {customs.length > 0 && (
+            <TouchableOpacity
+              style={s.addCustomBtn}
+              onPress={() => setCustoms((prev) => [...prev, newCustomMeal()])}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="add" size={18} color="#00E5FF" />
+              <Text style={s.addCustomText}>{t('nutrition.dayLog.addAnother')}</Text>
+            </TouchableOpacity>
+          )}
+
+          {suggestions.length > 0 && <Text style={s.sectionLabel}>{t('nutrition.dayLog.historyTitle')}</Text>}
 
           {loading ? (
             <ActivityIndicator color="#0a7ea4" style={{ marginTop: 40 }} />
@@ -372,6 +599,32 @@ const s = StyleSheet.create({
     backgroundColor: '#2a2a2a', borderRadius: 8, borderWidth: 1, borderColor: '#333',
     paddingHorizontal: 10, paddingVertical: 8, color: '#fff', fontSize: 14,
   },
+  entryRow: { flexDirection: 'row', gap: 10 },
+  entryBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8, borderWidth: 1.5,
+  },
+  entryBtnAi: { backgroundColor: '#00E5FF', borderColor: '#00E5FF' },
+  entryBtnManual: { backgroundColor: '#0a2a30', borderColor: '#00E5FF' },
+  entryText: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  entryTextAi: { color: '#121212' },
+  entryTextManual: { color: '#00E5FF' },
+  sectionLabel: { color: '#888', fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 8 },
+  aiCard: { backgroundColor: '#1e1e1e', borderRadius: 14, borderWidth: 1, borderColor: '#00E5FF44', padding: 14, gap: 10 },
+  aiTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  aiHint: { color: '#888', fontSize: 12, lineHeight: 17 },
+  aiInput: {
+    backgroundColor: '#2a2a2a', borderRadius: 10, borderWidth: 1, borderColor: '#333',
+    padding: 12, minHeight: 110, color: '#fff', fontSize: 14,
+  },
+  aiItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  aiGrams: { width: 62 },
+  aiActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  aiCancel: { color: '#888', fontSize: 14, fontWeight: '600', paddingVertical: 8 },
+  aiPrimary: { flex: 1, backgroundColor: '#00E5FF', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
+  aiPrimaryText: { color: '#121212', fontSize: 14, fontWeight: '800' },
+  aiBusy: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  aiNotice: { color: '#4CAF50', fontSize: 12, lineHeight: 17 },
   addCustomBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
   addCustomText: { color: '#00E5FF', fontSize: 14, fontWeight: '600' },
 

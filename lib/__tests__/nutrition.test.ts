@@ -15,6 +15,7 @@ import {
   buildMealSuggestions,
   buildWeekDays,
   computeDayTotals,
+  findUnresolvedItems,
   scaleMeal,
   computeRemaining,
   type FoodLog,
@@ -234,5 +235,15 @@ describe('scaleMeal', () => {
   it('skaliert kcal ganzzahlig und Makros auf eine Dezimalstelle, null bleibt null', () => {
     expect(scaleMeal({ calories: 350, protein: 12.3, carbs: null, fat: 7 }, 1.5))
       .toEqual({ calories: 525, protein: 18.5, carbs: null, fat: 10.5 });
+  });
+});
+
+describe('findUnresolvedItems', () => {
+  it('liefert die Gerichte, die im Analyse-Ergebnis fehlen', () => {
+    expect(findUnresolvedItems(['Müsli', 'Laugenbrezel', 'Apfel'], ['müsli', 'Apfel'])).toEqual(['Laugenbrezel']);
+  });
+
+  it('zählt doppelte Namen einzeln', () => {
+    expect(findUnresolvedItems(['Käsebrot', 'Käsebrot'], ['Käsebrot'])).toEqual(['Käsebrot']);
   });
 });
