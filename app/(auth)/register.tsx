@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { PasswordInput } from "@/components/PasswordInput";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { getAuthErrorMessage } from "@/lib/authErrors";
@@ -112,26 +113,24 @@ export default function RegisterScreen() {
           />
 
           <Text style={[styles.label, styles.labelSpacing]}>{t("auth.password")}</Text>
-          <TextInput
+          <PasswordInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
             placeholder={t("auth.passwordPlaceholderMin")}
             placeholderTextColor="#555"
-            secureTextEntry
             returnKeyType="next"
           />
 
           <Text style={[styles.label, styles.labelSpacing]}>
             {t("auth.confirmPassword")}
           </Text>
-          <TextInput
+          <PasswordInput
             style={styles.input}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             placeholder="••••••••"
             placeholderTextColor="#555"
-            secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleRegister}
           />

@@ -13,6 +13,7 @@ import {
 
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Toast } from "@/components/Toast";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { isEmailNotConfirmedError } from "@/lib/emailVerification";
@@ -151,13 +152,12 @@ export default function LoginScreen() {
           />
 
           <Text style={[styles.label, styles.labelSpacing]}>{t("auth.password")}</Text>
-          <TextInput
+          <PasswordInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
             placeholder="••••••••"
             placeholderTextColor="#555"
-            secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleLogin}
           />

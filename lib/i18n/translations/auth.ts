@@ -30,6 +30,8 @@ export default defineMessages(
     continueWithGoogle: 'Mit Google fortfahren',
     or: 'oder',
     forgotPassword: 'Passwort vergessen?',
+    showPassword: 'Passwort anzeigen',
+    hidePassword: 'Passwort verbergen',
     reset: {
       title: 'Passwort zurücksetzen',
       intro: 'Gib die E-Mail-Adresse deines Kontos ein. Wir schicken dir einen Code, mit dem du ein neues Passwort festlegst.',
@@ -91,6 +93,8 @@ export default defineMessages(
     continueWithGoogle: 'Continue with Google',
     or: 'or',
     forgotPassword: 'Forgot password?',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     reset: {
       title: 'Reset password',
       intro: "Enter your account's email address. We'll send you a code to set a new password.",

@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 
+import { PasswordInput } from "@/components/PasswordInput";
 import { Toast } from "@/components/Toast";
 import { loadCredentials, saveCredentials } from "@/lib/credentialStore";
 import { useTranslation } from "@/lib/i18n";
@@ -153,25 +154,23 @@ export default function ForgotPasswordScreen() {
               )}
 
               <Text style={[styles.label, styles.labelSpacing]}>{t("auth.reset.newPassword")}</Text>
-              <TextInput
+              <PasswordInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 placeholder={t("auth.passwordPlaceholderMin")}
                 placeholderTextColor="#555"
-                secureTextEntry
                 textContentType="newPassword"
                 autoComplete="password-new"
               />
 
               <Text style={[styles.label, styles.labelSpacing]}>{t("auth.reset.confirmNewPassword")}</Text>
-              <TextInput
+              <PasswordInput
                 style={styles.input}
                 value={confirm}
                 onChangeText={setConfirm}
                 placeholder="••••••••"
                 placeholderTextColor="#555"
-                secureTextEntry
                 textContentType="newPassword"
                 returnKeyType="done"
                 onSubmitEditing={submit}
