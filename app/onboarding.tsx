@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -65,7 +66,7 @@ export default function OnboardingScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    await supabase.from('profiles').upsert(
+    const { error } = await supabase.from('profiles').upsert(
       {
         id: user.id,
         display_name: name.trim(),
@@ -80,6 +81,13 @@ export default function OnboardingScreen() {
     );
 
     setSaving(false);
+    // Ohne gespeichertes Profil (display_name) schickt app/(app)/_layout.tsx
+    // sofort zurück ins Onboarding — Fehler daher anzeigen statt weiterleiten.
+    if (error) {
+      console.error('[Onboarding] Profil speichern fehlgeschlagen:', error);
+      Alert.alert(t('onboarding.saveFailedTitle'), t('onboarding.saveFailed', { message: error.message }));
+      return;
+    }
     router.replace('/(app)/(tabs)');
   }
 

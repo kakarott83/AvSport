@@ -3,6 +3,8 @@ import { defineMessages } from '../define';
 export default defineMessages(
   {
     letsGo: "Los geht's 🚀",
+    saveFailedTitle: 'Speichern fehlgeschlagen',
+    saveFailed: 'Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut. ({{message}})',
     next: 'Weiter →',
     skip: 'Überspringen',
     welcome: 'Herzlich willkommen!',
@@ -28,6 +30,8 @@ export default defineMessages(
   },
   {
     letsGo: "Let's go 🚀",
+    saveFailedTitle: 'Saving failed',
+    saveFailed: 'Your profile could not be saved. Please try again. ({{message}})',
     next: 'Next →',
     skip: 'Skip',
     welcome: 'Welcome!',
