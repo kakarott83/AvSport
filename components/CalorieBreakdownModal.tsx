@@ -3,8 +3,8 @@
  *
  * Zeigt Schritt für Schritt, wie das tägliche Kalorienziel zustande kommt:
  * Grundumsatz (mit den eigenen Profilwerten eingesetzt) → × Aktivitätsfaktor
- * → Ziel-Anpassung, manueller Offset, Training, Health-Aktivität, Zyklus-Bonus
- * → Tagesziel. Alle Zahlen stammen aus `breakdown` (hooks/useCalorieGoal.ts),
+ * (aus dem Aktivitätslevel) → Ziel-Anpassung, manueller Offset, Training,
+ * Schritte über dem Schrittziel, Zyklus-Bonus → Tagesziel. Alle Zahlen stammen aus `breakdown` (hooks/useCalorieGoal.ts),
  * damit Anzeige und tatsächliche Berechnung nie auseinanderlaufen.
  */
 
@@ -16,9 +16,13 @@ import {
   type CalorieBreakdown,
 } from '@/hooks/useCalorieGoal';
 import { getLocale, useTranslation } from '@/lib/i18n';
+import { ACTIVITY_LEVEL_LABELS } from '@/lib/stepGoal';
 
 const fmt = (n: number, digits = 0) =>
   n.toLocaleString(getLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+/** Aktivitätsfaktor ohne überflüssige Nullen (1,2 · 1,375 · 1,55). */
+const fmtFactor = (n: number) => n.toLocaleString(getLocale(), { maximumFractionDigits: 3 });
 
 /** Gewicht mit Nachkommastelle nur, wenn eine gespeichert ist (z.B. 72,5). */
 const fmtKg = (n: number) => fmt(n, n % 1 ? 1 : 0);
@@ -88,10 +92,16 @@ export function CalorieBreakdownModal({
                 {/* ── 2. Gesamtumsatz ── */}
                 <Text style={styles.sectionTitle}>{t('calorieBreakdown.tdeeTitle')}</Text>
                 <Text style={styles.paragraph}>
-                  {t('calorieBreakdown.tdeeText', { factor: fmt(b.activityFactor, 2) })}
+                  {t('calorieBreakdown.tdeeText', {
+                    level: ACTIVITY_LEVEL_LABELS[b.activityLevel],
+                    factor: fmtFactor(b.activityFactor),
+                  })}
+                </Text>
+                <Text style={styles.paragraph}>
+                  {t('calorieBreakdown.stepNote', { goal: fmt(b.stepGoal) })}
                 </Text>
                 <View style={styles.formulaBox}>
-                  <Text style={styles.formula}>{fmt(b.bmr)} kcal × {fmt(b.activityFactor, 2)}</Text>
+                  <Text style={styles.formula}>{fmt(b.bmr)} kcal × {fmtFactor(b.activityFactor)}</Text>
                   <Text style={styles.formulaResult}>= {fmt(b.tdee)} kcal</Text>
                 </View>
               </>
@@ -125,8 +135,25 @@ export function CalorieBreakdownModal({
                   muted={!b.workoutCounted}
                 />
               )}
-              {b.healthKcal > 0 && (
-                <Row label={t('calorieBreakdown.healthActivity', { source: HEALTH_SOURCE })} hint={t('calorieBreakdown.healthHint')} value={signed(b.healthKcal)} />
+              {/* Schritte: nur der Teil über dem Schrittziel zählt extra */}
+              {b.steps == null ? (
+                <Row label={t('calorieBreakdown.stepsToday')} hint={t('calorieBreakdown.stepsOffHint')} value="–" muted />
+              ) : b.extraSteps > 0 ? (
+                <Row
+                  label={t('calorieBreakdown.stepsExtra')}
+                  hint={t('calorieBreakdown.stepsExtraHint', {
+                    steps: fmt(b.steps), goal: fmt(b.stepGoal), source: HEALTH_SOURCE,
+                    extra: fmt(b.extraSteps), perStep: fmt(b.kcalPerStep, 3),
+                  })}
+                  value={signed(b.stepKcal)}
+                />
+              ) : (
+                <Row
+                  label={t('calorieBreakdown.stepsToday')}
+                  hint={t('calorieBreakdown.stepsBelowHint', { steps: fmt(b.steps), goal: fmt(b.stepGoal), source: HEALTH_SOURCE })}
+                  value="± 0"
+                  muted
+                />
               )}
               {b.cycleBonus > 0 && (
                 <Row label={t('calorieBreakdown.cycleBonus')} hint={t('calorieBreakdown.lutealPhase')} value={signed(b.cycleBonus)} />

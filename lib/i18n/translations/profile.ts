@@ -39,11 +39,11 @@ export default defineMessages(
     },
     steps: {
       title: 'Schritt-Ziel',
-      hintBefore: 'Wähle dein Aktivitätslevel, um ein passendes Tagesziel zu berechnen. Das aktuelle Ziel liegt bei',
+      hintBefore: 'Dein Aktivitätslevel bestimmt dein Schrittziel und den Aktivitätsfaktor deines Kalorienziels. Das aktuelle Schrittziel liegt bei',
       hintAfter: 'Schritten/Tag.',
       activityLevel: 'Aktivitätslevel',
       manualGoal: 'Manuelles Ziel (0 = automatisch)',
-      manualGoalHint: 'Überschreibe die Berechnung mit einem festen Wert. 0 = Automatik bleibt aktiv.',
+      manualGoalHint: 'Überschreibe die Berechnung mit einem festen Wert. 0 = Automatik bleibt aktiv. Mit Health-Synchronisation erhöhen nur Schritte über diesem Ziel dein Kalorienziel.',
     },
     water: {
       title: 'Wasser',
@@ -173,11 +173,11 @@ export default defineMessages(
     },
     steps: {
       title: 'Step goal',
-      hintBefore: 'Choose your activity level to calculate a suitable daily goal. Your current goal is',
+      hintBefore: 'Your activity level sets your step goal and the activity factor of your calorie goal. Your current step goal is',
       hintAfter: 'steps/day.',
       activityLevel: 'Activity level',
       manualGoal: 'Manual goal (0 = automatic)',
-      manualGoalHint: 'Override the calculation with a fixed value. 0 = automatic stays active.',
+      manualGoalHint: 'Override the calculation with a fixed value. 0 = automatic stays active. With health sync, only steps beyond this goal increase your calorie goal.',
     },
     water: {
       title: 'Water',

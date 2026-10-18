@@ -61,6 +61,7 @@ const BASE_PROFILE: ProfileData = {
   cycle_tracking_enabled: true,
   cycle_length_days:      28,
   cycle_calorie_bonus:    250,
+  activity_level:         'active', // Faktor 1,55 — Schrittziel 10 000
 };
 
 // ── Fixed clock ───────────────────────────────────────────────────────────────
@@ -229,7 +230,8 @@ describe('computeCalorieGoal', () => {
       const profile: ProfileData = {
         ...BASE_PROFILE, calorie_goal: 'lose', manual_calorie_offset: 100, auto_adjust_calories: true,
       };
-      const { currentGoal, breakdown } = computeCalorieGoal(profile, [], 300, 150);
+      // 13 000 Schritte bei Ziel 10 000 → 3 000 × (65 kg × 0,0005 = 0,0325) ≈ 98 kcal
+      const { currentGoal, breakdown } = computeCalorieGoal(profile, [], 300, 13_000);
 
       expect(breakdown.inputs).toEqual({ gender: 'female', age: 31, weightKg: 65, heightCm: 170 });
       expect(breakdown.bmr).toBe(1441);
@@ -239,8 +241,10 @@ describe('computeCalorieGoal', () => {
       expect(breakdown.manualOffset).toBe(100);
       expect(breakdown.workoutKcal).toBe(300);
       expect(breakdown.workoutCounted).toBe(true);
-      expect(breakdown.healthKcal).toBe(150);
-      expect(breakdown.total).toBe(2234 - 500 + 100 + 300 + 150);
+      expect(breakdown.stepGoal).toBe(10_000);
+      expect(breakdown.extraSteps).toBe(3_000);
+      expect(breakdown.stepKcal).toBe(98);
+      expect(breakdown.total).toBe(2234 - 500 + 100 + 300 + 98);
       expect(breakdown.total).toBe(currentGoal);
     });
 
@@ -256,6 +260,58 @@ describe('computeCalorieGoal', () => {
       expect(breakdown.inputs).toBeNull();
       expect(breakdown.bmr).toBeNull();
       expect(breakdown.tdee).toBe(2500);
+    });
+  });
+
+  // ── Aktivitätslevel + Schrittziel ───────────────────────────────────────────
+
+  describe('Aktivitätslevel bestimmt den Faktor', () => {
+    it.each([
+      ['sedentary', 1.2, 1729],
+      ['light', 1.375, 1981],
+      ['active', 1.55, 2234],
+      ['very_active', 1.725, 2486],
+    ] as const)('%s → Faktor %s', (level, factor, tdee) => {
+      const { breakdown } = computeCalorieGoal({ ...BASE_PROFILE, activity_level: level }, [], 0);
+      expect(breakdown.activityFactor).toBe(factor);
+      expect(breakdown.tdee).toBe(tdee); // round(1441 × factor)
+    });
+
+    it('nutzt ohne Aktivitätslevel denselben Standard wie das Schrittziel ("light")', () => {
+      const { breakdown } = computeCalorieGoal({ ...BASE_PROFILE, activity_level: null }, [], 0);
+      expect(breakdown.activityLevel).toBe('light');
+      expect(breakdown.activityFactor).toBe(1.375);
+      expect(breakdown.stepGoal).toBe(7_000);
+    });
+  });
+
+  describe('nur Schritte über dem Schrittziel zählen extra', () => {
+    it('addiert nichts, solange das Schrittziel nicht überschritten ist', () => {
+      const { breakdown, currentGoal } = computeCalorieGoal(BASE_PROFILE, [], 0, 8_000);
+      expect(breakdown.steps).toBe(8_000);
+      expect(breakdown.extraSteps).toBe(0);
+      expect(breakdown.stepKcal).toBe(0);
+      expect(currentGoal).toBe(2234);
+    });
+
+    it('rechnet nur den Überschuss mit kcal pro Schritt aus dem Gewicht', () => {
+      const { breakdown } = computeCalorieGoal({ ...BASE_PROFILE, weight_kg: 80 }, [], 0, 14_000);
+      expect(breakdown.kcalPerStep).toBeCloseTo(0.04);
+      expect(breakdown.extraSteps).toBe(4_000);
+      expect(breakdown.stepKcal).toBe(160);
+    });
+
+    it('berücksichtigt ein manuelles Schrittziel', () => {
+      const { breakdown } = computeCalorieGoal({ ...BASE_PROFILE, manual_step_goal: 12_000 }, [], 0, 13_000);
+      expect(breakdown.stepGoal).toBe(12_000);
+      expect(breakdown.extraSteps).toBe(1_000);
+    });
+
+    it('zählt keine Schritte, wenn die Health-Synchronisation aus ist (null)', () => {
+      const { breakdown, currentGoal } = computeCalorieGoal(BASE_PROFILE, [], 0, null);
+      expect(breakdown.steps).toBeNull();
+      expect(breakdown.stepKcal).toBe(0);
+      expect(currentGoal).toBe(2234);
     });
   });
 });

@@ -3,6 +3,12 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { supabase } from '@/services/supabaseClient';
 import { t } from '@/lib/i18n';
+import {
+  calculateDailyStepGoal,
+  calculateKcalPerStep,
+  DEFAULT_ACTIVITY_LEVEL,
+  type ActivityLevel,
+} from '@/lib/stepGoal';
 
 // ── Types (exported for testing) ──────────────────────────────────────────────
 
@@ -35,6 +41,10 @@ export type ProfileData = {
   cycle_tracking_enabled: boolean | null;
   cycle_length_days: number | null;
   cycle_calorie_bonus: number | null;
+  /** Aktivitätslevel aus dem Profil — bestimmt Faktor UND Schrittziel. */
+  activity_level?: ActivityLevel | null;
+  /** Manuelles Schrittziel (überschreibt das aus dem Aktivitätslevel). */
+  manual_step_goal?: number | null;
 };
 
 export type DailyLogRow = { date: string; tags: string[] | null };
@@ -57,8 +67,20 @@ function ageFromDOB(dob: string | null): number {
   return Math.max(0, age);
 }
 
-/** Fixed activity multiplier ("moderately active") applied to the BMR. */
-export const ACTIVITY_FACTOR = 1.55;
+/**
+ * Aktivitätsfaktor (PAL) je Aktivitätslevel aus dem Profil — derselbe Wert,
+ * der auch das Schrittziel bestimmt (lib/stepGoal.ts). Die Alltagsbewegung bis
+ * zum Schrittziel steckt damit im Faktor; nur Schritte DARÜBER zählen extra.
+ */
+export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
+  sedentary:   1.2,
+  light:       1.375,
+  active:      1.55,
+  very_active: 1.725,
+};
+
+/** kcal pro Schritt, wenn kein Gewicht bekannt ist (gleicher Wert wie stepsToKcal). */
+const FALLBACK_KCAL_PER_STEP = 0.04;
 
 /** Flat TDEE used when gender, age, height or weight is missing. */
 export const FALLBACK_TDEE = 2500;
@@ -72,6 +94,7 @@ export type CalorieBreakdown = {
   inputs: { gender: 'male' | 'female'; age: number; weightKg: number; heightCm: number } | null;
   /** Revised Harris-Benedict BMR, rounded (null in fallback mode). */
   bmr: number | null;
+  activityLevel: ActivityLevel;
   activityFactor: number;
   /** BMR × activity factor, or FALLBACK_TDEE. */
   tdee: number;
@@ -82,13 +105,23 @@ export type CalorieBreakdown = {
   workoutKcal: number;
   /** Whether workoutKcal is added (profiles.auto_adjust_calories). */
   workoutCounted: boolean;
-  /** Active energy from Apple Health / Health Connect. */
-  healthKcal: number;
+  /** Heutige Schritte aus Apple Health / Health Connect; null = Synchronisation aus. */
+  steps: number | null;
+  /** Tagesziel aus Aktivitätslevel bzw. manuellem Wert. */
+  stepGoal: number;
+  /** Schritte über dem Ziel (0, wenn darunter oder ohne Synchronisation). */
+  extraSteps: number;
+  kcalPerStep: number;
+  /** extraSteps × kcalPerStep, gerundet — wird zum Ziel addiert. */
+  stepKcal: number;
   cycleBonus: number;
   total: number;
 };
 
-function calcBaseTDEE(p: ProfileData): Pick<CalorieBreakdown, 'inputs' | 'bmr' | 'tdee'> {
+function calcBaseTDEE(
+  p: ProfileData,
+  activityFactor: number,
+): Pick<CalorieBreakdown, 'inputs' | 'bmr' | 'tdee'> {
   const age = ageFromDOB(p.date_of_birth);
   if (!p.weight_kg || !p.height_cm || !age || !p.gender) {
     return { inputs: null, bmr: null, tdee: FALLBACK_TDEE };
@@ -103,7 +136,7 @@ function calcBaseTDEE(p: ProfileData): Pick<CalorieBreakdown, 'inputs' | 'bmr' |
   return {
     inputs: { gender: p.gender, age, weightKg: p.weight_kg, heightCm: p.height_cm },
     bmr: bmrRounded,
-    tdee: Math.round(bmrRounded * ACTIVITY_FACTOR),
+    tdee: Math.round(bmrRounded * activityFactor),
   };
 }
 
@@ -133,7 +166,7 @@ function isInLutealPhase(logs: DailyLogRow[], p: ProfileData): boolean {
 // ── Public return type ─────────────────────────────────────────────────────────
 
 export type CalorieGoalResult = {
-  /** Final kcal goal: TDEE + training burn (if auto-adjust) + luteal bonus */
+  /** Final kcal goal: TDEE + Ziel + Training (falls an) + Extra-Schritte + Lutealbonus */
   currentGoal: number;
   /** True when today falls inside the 14-day luteal window */
   isLuteal: boolean;
@@ -156,14 +189,16 @@ export function computeCalorieGoal(
   profile: ProfileData,
   dailyLogs: DailyLogRow[],
   burnedKcal: number,
-  healthKcal = 0,
+  /** Heutige Schritte aus Health; null = Synchronisation aus / keine Daten. */
+  healthSteps: number | null = null,
 ): Omit<CalorieGoalResult, 'loading' | 'breakdown'> & { breakdown: CalorieBreakdown } {
-  const { inputs, bmr, tdee } = calcBaseTDEE(profile);
+  const activityLevel  = profile.activity_level ?? DEFAULT_ACTIVITY_LEVEL;
+  const activityFactor = ACTIVITY_FACTORS[activityLevel] ?? ACTIVITY_FACTORS[DEFAULT_ACTIVITY_LEVEL];
+  const { inputs, bmr, tdee } = calcBaseTDEE(profile, activityFactor);
   const goalType       = profile.calorie_goal ?? 'maintain';
   const goalAdjustment = CALORIE_GOAL_ADJUSTMENT[goalType];
   const manualOffset   = profile.manual_calorie_offset ?? 0;
   // Manual workout burn only counts when the user opts in.
-  // Health-tracker burn (healthKcal) is always additive when sync is active.
   const workoutCounted = !!profile.auto_adjust_calories && burnedKcal > 0;
   const manualBurn     = workoutCounted ? burnedKcal : 0;
 
@@ -172,7 +207,15 @@ export function computeCalorieGoal(
   const bonusActive = !!profile.cycle_tracking_enabled && bonusKcal > 0 && isLuteal;
   const cycleBonus  = bonusActive ? bonusKcal : 0;
 
-  const total = tdee + goalAdjustment + manualOffset + manualBurn + healthKcal + cycleBonus;
+  // Alltagsbewegung bis zum Schrittziel ist im Aktivitätsfaktor enthalten —
+  // nur Schritte darüber kommen als Extra-kcal hinzu (keine Doppelzählung).
+  const stepGoal    = calculateDailyStepGoal(activityLevel, profile.manual_step_goal);
+  const steps       = healthSteps != null && healthSteps >= 0 ? Math.round(healthSteps) : null;
+  const extraSteps  = steps != null ? Math.max(0, steps - stepGoal) : 0;
+  const kcalPerStep = calculateKcalPerStep(profile.weight_kg) || FALLBACK_KCAL_PER_STEP;
+  const stepKcal    = Math.round(extraSteps * kcalPerStep);
+
+  const total = tdee + goalAdjustment + manualOffset + manualBurn + stepKcal + cycleBonus;
 
   return {
     currentGoal: total,
@@ -180,17 +223,22 @@ export function computeCalorieGoal(
     bonusActive,
     cycleBonus,
     breakdown: {
-      inputs, bmr, activityFactor: ACTIVITY_FACTOR, tdee,
+      inputs, bmr, activityLevel, activityFactor, tdee,
       goalType, goalAdjustment, manualOffset,
       workoutKcal: Math.max(0, burnedKcal), workoutCounted,
-      healthKcal, cycleBonus, total,
+      steps, stepGoal, extraSteps, kcalPerStep, stepKcal,
+      cycleBonus, total,
     },
   };
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
-export function useCalorieGoal(healthKcal = 0): CalorieGoalResult {
+/**
+ * @param healthSteps Heutige Schritte aus Apple Health / Health Connect;
+ *   `null`, wenn die Synchronisation aus ist (dann zählen keine Extra-Schritte).
+ */
+export function useCalorieGoal(healthSteps: number | null = null): CalorieGoalResult {
   const [profile,    setProfile]    = useState<ProfileData | null>(null);
   const [dailyLogs,  setDailyLogs]  = useState<DailyLogRow[]>([]);
   const [burnedKcal, setBurnedKcal] = useState(0);
@@ -210,7 +258,7 @@ export function useCalorieGoal(healthKcal = 0): CalorieGoalResult {
         const [profileRes, logsRes, burnedRes, cycleRes] = await Promise.all([
           supabase
             .from('profiles')
-            .select('gender, date_of_birth, height_cm, weight_kg, manual_calorie_offset, calorie_goal, auto_adjust_calories, cycle_tracking_enabled, cycle_length_days, cycle_calorie_bonus')
+            .select('gender, date_of_birth, height_cm, weight_kg, manual_calorie_offset, calorie_goal, auto_adjust_calories, cycle_tracking_enabled, cycle_length_days, cycle_calorie_bonus, activity_level, manual_step_goal')
             .eq('id', user.id)
             .single(),
           supabase
@@ -252,6 +300,6 @@ export function useCalorieGoal(healthKcal = 0): CalorieGoalResult {
     if (!profile) {
       return { currentGoal: 0, isLuteal: false, bonusActive: false, cycleBonus: 0, breakdown: null, loading };
     }
-    return { ...computeCalorieGoal(profile, dailyLogs, burnedKcal, healthKcal), loading };
-  }, [profile, dailyLogs, burnedKcal, healthKcal, loading]);
+    return { ...computeCalorieGoal(profile, dailyLogs, burnedKcal, healthSteps), loading };
+  }, [profile, dailyLogs, burnedKcal, healthSteps, loading]);
 }
