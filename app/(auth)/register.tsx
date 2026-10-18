@@ -61,13 +61,10 @@ export default function RegisterScreen() {
       }
 
       if (data.session) {
-        // Session sofort aktiv (kein E-Mail-Bestätigung) → _layout.tsx übernimmt Routing
+        // Session sofort aktiv (E-Mail-Bestätigung in Supabase aus) → _layout.tsx übernimmt Routing
       } else {
-        Alert.alert(
-          t("auth.confirmEmailTitle"),
-          t("auth.confirmEmail"),
-          [{ text: t("common.ok"), onPress: () => router.replace("/(auth)/login") }],
-        );
+        // Bestätigung nötig: Supabase hat eine Mail mit Code geschickt
+        router.replace({ pathname: "/(auth)/verify-email", params: { email: email.trim() } });
       }
     } catch (error) {
       Alert.alert(

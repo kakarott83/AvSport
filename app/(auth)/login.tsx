@@ -15,6 +15,7 @@ import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { Toast } from "@/components/Toast";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { isEmailNotConfirmedError } from "@/lib/emailVerification";
 import { useTranslation } from "@/lib/i18n";
 import {
   clearCredentials,
@@ -69,7 +70,14 @@ export default function LoginScreen() {
         password,
       });
 
-      if (error) {
+      if (error && isEmailNotConfirmedError(error)) {
+        // Konto existiert, Adresse aber noch nicht bestätigt → Code-Eingabe,
+        // dort wird sofort ein neuer Code verschickt.
+        router.push({
+          pathname: "/(auth)/verify-email",
+          params: { email: email.trim(), resend: "1" },
+        });
+      } else if (error) {
         console.error("Login Fehler:", error);
         const isNoAccount =
           error.message.toLowerCase().includes("invalid login credentials") ||
