@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 import { FeedbackFab } from '@/components/FeedbackFab';
+import { WhatsNewModal } from '@/components/WhatsNewModal';
 import { useTranslation } from '@/lib/i18n';
 import { sanitizeMealReminderSettings } from '@/lib/mealReminder';
 import { MEAL_REMINDER_TAG, syncMealReminder } from '@/services/notifications/mealReminderService';
@@ -143,6 +144,8 @@ export default function AppLayout() {
     </Stack>
     {/* Testphase: Feedback von jedem Screen aus (FEEDBACK_BUTTON_ENABLED) */}
     <FeedbackFab />
+    {/* Einmal pro Update: Neuerungen anzeigen (lib/whatsNew.ts) */}
+    <WhatsNewModal enabled={ready} />
     </View>
   );
 }
