@@ -36,6 +36,16 @@ const COLOR_WATER = '#29B6F6';
 
 const CHART_WIDTH = Dimensions.get('window').width - 80;
 
+// gifted-charts zeichnet links die Y-Achsenbeschriftung zusätzlich zu `width`
+// und verlängert Raster/Ziellinie um `endSpacing` — beides von der verfügbaren
+// Kartenbreite abziehen, sonst ragt die gestrichelte Ziellinie über die Karte.
+const Y_LABEL_W   = 32;
+const END_SPACING = 8;
+const INIT_SPACING = 8;
+const BAR_SPACING = 8;
+const PLOT_WIDTH  = CHART_WIDTH - Y_LABEL_W - END_SPACING;
+const BAR_WIDTH   = Math.max(14, Math.floor((PLOT_WIDTH - INIT_SPACING - BAR_SPACING * 6) / 7));
+
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -154,9 +164,10 @@ function WeeklyChart({ weekData, tdee }: { weekData: WeekDay[]; tdee: number }) 
       </View>
       <BarChart
         data={bars}
-        width={CHART_WIDTH}
-        barWidth={30}
-        spacing={10}
+        width={PLOT_WIDTH}
+        yAxisLabelWidth={Y_LABEL_W}
+        barWidth={BAR_WIDTH}
+        spacing={BAR_SPACING}
         roundedTop
         noOfSections={4}
         maxValue={maxVal}
@@ -169,8 +180,8 @@ function WeeklyChart({ weekData, tdee }: { weekData: WeekDay[]; tdee: number }) 
         xAxisLabelTextStyle={{ color: '#BBBBBB', fontSize: 10 }}
         backgroundColor="transparent"
         rulesColor="#1e1e1e"
-        initialSpacing={8}
-        endSpacing={8}
+        initialSpacing={INIT_SPACING}
+        endSpacing={END_SPACING}
         isAnimated
       />
     </View>
@@ -375,8 +386,9 @@ export default function NutritionScreen() {
 
   // Ziel-Kalorien aus dem zentralen Hook (inkl. Zyklus-Bonus). Health-Aktivität
   // wird wie auf dem Home-Screen eingerechnet, damit beide dasselbe Ziel zeigen.
-  const { healthBurnKcal } = useHealthData();
-  const { currentGoal, bonusActive, cycleBonus, breakdown } = useCalorieGoal(healthBurnKcal);
+  const { healthSteps, syncHealth } = useHealthData();
+  // Nur Schritte über dem Schrittziel erhöhen das Kalorienziel (siehe useCalorieGoal)
+  const { currentGoal, bonusActive, cycleBonus, breakdown } = useCalorieGoal(syncHealth ? healthSteps : null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const effectiveTdee = currentGoal + dailyAdjustment;

@@ -389,8 +389,9 @@ const ringStyles = StyleSheet.create({
 export default function HomeScreen() {
   const { language } = useTranslation();
   // ── Calorie goal (TDEE + training burn + luteal bonus) via shared hook ────────
-  const { healthBurnKcal, healthSteps, healthProtein, refreshHealth } = useHealthData();
-  const { currentGoal, bonusActive, breakdown } = useCalorieGoal(healthBurnKcal);
+  const { healthBurnKcal, healthSteps, healthProtein, syncHealth, refreshHealth } = useHealthData();
+  // Nur Schritte über dem Schrittziel erhöhen das Kalorienziel (siehe useCalorieGoal)
+  const { currentGoal, bonusActive, breakdown } = useCalorieGoal(syncHealth ? healthSteps : null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { stepGoal } = useStepGoal();
   const water = useWaterIntake();
@@ -1083,8 +1084,9 @@ export default function HomeScreen() {
               </Animated.View>
             )}
 
-            {/* ── Gewichtsverlauf ── */}
-            {chartData.length >= 2 && (
+            {/* ── Gewichtsverlauf ──
+                Immer sichtbar: sonst gäbe es ohne Gewichtswerte keinen Weg zu
+                "Körperwerte erfassen". Das Diagramm erst ab zwei Messpunkten. */}
               <Animated.View
                 entering={FadeInDown.delay(120).duration(600).springify()}
                 style={styles.card}
@@ -1100,6 +1102,11 @@ export default function HomeScreen() {
                   )}
                 </View>
 
+                {chartData.length < 2 ? (
+                  <Text style={styles.weightEmptyText}>
+                    {t(chartData.length === 0 ? "home.weightEmpty" : "home.weightOnePoint")}
+                  </Text>
+                ) : (<>
                 {/* Chart with background strips overlay */}
                 <View style={{ position: "relative" }}>
                   {/* Coloured background strips for tagged days */}
@@ -1204,6 +1211,7 @@ export default function HomeScreen() {
                     <Text style={styles.insightText}>{weightInsight}</Text>
                   </View>
                 )}
+                </>)}
 
                 <TouchableOpacity
                   style={styles.cardLink}
@@ -1218,7 +1226,6 @@ export default function HomeScreen() {
                   />
                 </TouchableOpacity>
               </Animated.View>
-            )}
 
             {/* ── Training ── */}
             <Animated.View
@@ -1527,6 +1534,7 @@ const styles = StyleSheet.create({
 
   // Chart extras
   chartLegend: { flexDirection: "row", gap: 14, marginTop: 8 },
+  weightEmptyText: { color: "#888", fontSize: 13, lineHeight: 19, marginTop: 4, marginBottom: 4 },
   insightBox: {
     backgroundColor: "#1a1a2e",
     borderRadius: 12,
