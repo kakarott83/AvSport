@@ -13,7 +13,9 @@ jest.mock('expo-router', () => ({ useFocusEffect: jest.fn() }));
 import {
   buildMarked,
   computeMonthStats,
+  computeMonthTrend,
   daysInMonth,
+  shiftMonth,
   type LogRow,
   type Tag,
 } from '@/lib/calendar';
@@ -207,5 +209,36 @@ describe('buildMarked', () => {
     ];
     const result = buildMarked(rows, tagMap, '2026-04-12');
     expect(result['2026-04-08']).toBeUndefined();
+  });
+});
+
+// ── shiftMonth / computeMonthTrend ────────────────────────────────────────────
+
+describe('shiftMonth', () => {
+  it('rechnet über Jahresgrenzen', () => {
+    expect(shiftMonth('2026-01', -1)).toBe('2025-12');
+    expect(shiftMonth('2025-11', 3)).toBe('2026-02');
+    expect(shiftMonth('2026-05', 0)).toBe('2026-05');
+  });
+});
+
+describe('computeMonthTrend', () => {
+  const row = (date: string, ...tag_ids: string[]): LogRow => ({ date, tag_ids, note: null });
+  const logs = [
+    row('2026-03-02', 'stress'),
+    row('2026-03-15', 'stress', 'no_alcohol'),
+    row('2026-05-01', 'stress'),
+    row('2025-12-31', 'stress'),
+  ];
+
+  it('zählt den Tag pro Monat, ältester Monat zuerst, inkl. Monate ohne Einträge', () => {
+    const trend = computeMonthTrend(logs, 'stress', '2026-05', 6);
+    expect(trend.map((p) => p.month)).toEqual(['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05']);
+    expect(trend.map((p) => p.count)).toEqual([1, 0, 0, 2, 0, 1]);
+    expect(trend[2].total).toBe(28);
+  });
+
+  it('ignoriert andere Tags und Monate außerhalb des Fensters', () => {
+    expect(computeMonthTrend(logs, 'no_alcohol', '2026-05', 2).map((p) => p.count)).toEqual([0, 0]);
   });
 });

@@ -18,7 +18,15 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 
 import { CycleLegend, CyclePanel, PERIOD_COLOR } from '@/components/CyclePanel';
 import { useCycle } from '@/hooks/useCycle';
-import { buildMarked, computeMonthStats, type LogRow, type MarkedDates, type Tag } from '@/lib/calendar';
+import {
+  buildMarked,
+  computeMonthStats,
+  computeMonthTrend,
+  type LogRow,
+  type MarkedDates,
+  type MonthTrendPoint,
+  type Tag,
+} from '@/lib/calendar';
 import { addDays, FERTILE_WINDOW_COLOR, type DayPhase } from '@/lib/cycle';
 import { getLocale, t, tList, useTranslation, type Language } from '@/lib/i18n';
 import { supabase } from '@/services/supabaseClient';
@@ -117,9 +125,24 @@ export default function CalendarScreen() {
     return rows;
   }, [allLogs, cycleTracking, cycle.flowByDate]);
 
+  const [statsMode, setStatsMode] = useState<'month' | 'trend'>('month');
+  const [trendTagId, setTrendTagId] = useState<string | null>(null);
+
   const monthStats = useMemo(
     () => computeMonthStats(statsLogs, currentMonth, tags.filter((t) => cycleTracking || t.id !== PERIOD_TAG_ID)),
     [statsLogs, currentMonth, tags, cycleTracking]
+  );
+
+  // Verlauf: Tags, die in den Statistiken auftauchen können, + gewählter Tag
+  const statTags = useMemo(
+    () => tags.filter((t) => cycleTracking || t.id !== PERIOD_TAG_ID),
+    [tags, cycleTracking],
+  );
+  const activeTrendTag =
+    statTags.find((t) => t.id === trendTagId) ?? monthStats[0]?.tag ?? statTags[0] ?? null;
+  const trend = useMemo(
+    () => (activeTrendTag ? computeMonthTrend(statsLogs, activeTrendTag.id, currentMonth, 6) : []),
+    [statsLogs, activeTrendTag, currentMonth],
   );
 
   // Zyklusphasen für den sichtbaren Monat (+/- eine Woche für Randzeilen)
@@ -483,19 +506,60 @@ export default function CalendarScreen() {
 
           {/* Monthly stats */}
           <View style={styles.card}>
-            <Text style={styles.statsTitle}>
-              {t('calendar.monthStats')}{' '}
-              <Text style={styles.statsMonth}>{formatMonth(currentMonth)}</Text>
-            </Text>
-
-            {monthStats.length === 0 ? (
-              <Text style={styles.statsEmpty}>{t('calendar.noTagsThisMonth')}</Text>
-            ) : (
-              <View style={styles.statsGrid}>
-                {monthStats.map(({ tag, count, total }) => (
-                  <StatTile key={tag.id} tag={tag} count={count} total={total} />
+            <View style={styles.statsHeader}>
+              <Text style={[styles.statsTitle, { flex: 1 }]}>
+                {statsMode === 'month' ? t('calendar.monthStats') : t('calendar.trendTitle')}{' '}
+                <Text style={styles.statsMonth}>{formatMonth(currentMonth)}</Text>
+              </Text>
+              <View style={styles.segment}>
+                {(['month', 'trend'] as const).map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.segmentBtn, statsMode === mode && styles.segmentBtnActive]}
+                    onPress={() => setStatsMode(mode)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.segmentText, statsMode === mode && styles.segmentTextActive]}>
+                      {mode === 'month' ? t('calendar.statsMonthTab') : t('calendar.statsTrendTab')}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {statsMode === 'month' ? (
+              monthStats.length === 0 ? (
+                <Text style={styles.statsEmpty}>{t('calendar.noTagsThisMonth')}</Text>
+              ) : (
+                <View style={styles.statsGrid}>
+                  {monthStats.map(({ tag, count, total }) => (
+                    <StatTile key={tag.id} tag={tag} count={count} total={total} />
+                  ))}
+                </View>
+              )
+            ) : (
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendChips}>
+                  {statTags.map((tag) => {
+                    const active = tag.id === activeTrendTag?.id;
+                    return (
+                      <TouchableOpacity
+                        key={tag.id}
+                        style={[
+                          styles.trendChip,
+                          active ? { backgroundColor: tag.color + '33', borderColor: tag.color } : null,
+                        ]}
+                        onPress={() => setTrendTagId(tag.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.trendChipText}>{tag.emoji} {tagLabel(tag)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {activeTrendTag && <TrendBars points={trend} color={activeTrendTag.color} />}
+                <Text style={styles.trendHint}>{t('calendar.trendHint')}</Text>
+              </>
             )}
           </View>
 
@@ -761,6 +825,45 @@ function TagChip({ tag, active, onPress, onEdit }: {
 
 // ─── Stat Tile ────────────────────────────────────────────────────────────────
 
+/** Balken: Tage pro Monat, Höhe relativ zum Monat mit den meisten Tagen. */
+function TrendBars({ points, color }: { points: MonthTrendPoint[]; color: string }) {
+  const max = Math.max(1, ...points.map((p) => p.count));
+  const sum = points.reduce((s, p) => s + p.count, 0);
+  const avg = Math.round((sum / Math.max(1, points.length)) * 10) / 10;
+  return (
+    <View>
+      <View style={trendStyles.chart}>
+        {points.map((p) => {
+          const [y, m] = p.month.split('-').map(Number);
+          const label = new Date(y, m - 1, 1).toLocaleDateString(getLocale(), { month: 'short' });
+          return (
+            <View key={p.month} style={trendStyles.col}>
+              <Text style={trendStyles.value}>{p.count}</Text>
+              <View style={trendStyles.track}>
+                <View style={[trendStyles.bar, { height: `${(p.count / max) * 100}%`, backgroundColor: color }]} />
+              </View>
+              <Text style={trendStyles.month} numberOfLines={1}>{label}</Text>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={trendStyles.avg}>
+        {sum === 0 ? t('calendar.trendEmpty') : t('calendar.trendAvg', { avg: avg.toLocaleString(getLocale()) })}
+      </Text>
+    </View>
+  );
+}
+
+const trendStyles = StyleSheet.create({
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 140, marginTop: 12 },
+  col:   { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
+  value: { color: '#ccc', fontSize: 11, fontWeight: '700', marginBottom: 4 },
+  track: { width: '70%', flex: 1, maxHeight: 96, justifyContent: 'flex-end', backgroundColor: '#1a1a1a', borderRadius: 6, overflow: 'hidden' },
+  bar:   { width: '100%', borderRadius: 6, minHeight: 2 },
+  month: { color: '#888', fontSize: 11, marginTop: 6 },
+  avg:   { color: '#999', fontSize: 12, marginTop: 10, textAlign: 'center' },
+});
+
 function StatTile({ tag, count, total }: { tag: Tag; count: number; total: number }) {
   const pct = Math.min(count / total, 1);
   return (
@@ -853,6 +956,16 @@ const styles = StyleSheet.create({
   statsMonth: { color: '#00E5FF', fontWeight: '700' },
   statsEmpty: { color: '#555', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
   statsGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  statsHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  segment: { flexDirection: 'row', backgroundColor: '#1a1a1a', borderRadius: 10, borderWidth: 1, borderColor: '#333', padding: 2 },
+  segmentBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  segmentBtnActive: { backgroundColor: '#00E5FF22' },
+  segmentText: { color: '#888', fontSize: 12, fontWeight: '700' },
+  segmentTextActive: { color: '#00E5FF' },
+  trendChips: { gap: 8, paddingTop: 12 },
+  trendChip: { borderWidth: 1, borderColor: '#333', backgroundColor: '#1a1a1a', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  trendChipText: { color: '#ddd', fontSize: 12, fontWeight: '600' },
+  trendHint: { color: '#555', fontSize: 11, marginTop: 6, textAlign: 'center' },
 
   // Modal
   modalOverlay: {

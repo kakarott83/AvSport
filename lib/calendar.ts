@@ -104,3 +104,43 @@ export function buildMarked(
   map[activeDate] = { ...(map[activeDate] ?? {}), selected: true, selectedColor: '#00E5FF' };
   return map;
 }
+
+// ── Verlauf über mehrere Monate ────────────────────────────────────────────────
+
+export type MonthTrendPoint = {
+  /** YYYY-MM */
+  month: string;
+  /** Tage im Monat, an denen der Tag gesetzt war. */
+  count: number;
+  /** Tage im Monat. */
+  total: number;
+};
+
+/** "2026-03" + n Monate (n darf negativ sein). */
+export function shiftMonth(yearMonth: string, n: number): string {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Wie oft ein Tag in den `months` Monaten bis einschließlich `endMonth`
+ * gesetzt war — chronologisch, ältester Monat zuerst.
+ */
+export function computeMonthTrend(
+  logs: LogRow[],
+  tagId: string,
+  endMonth: string,
+  months = 6,
+): MonthTrendPoint[] {
+  const counts = new Map<string, number>();
+  for (const row of logs) {
+    if (!row.tag_ids.includes(tagId)) continue;
+    const month = row.date.slice(0, 7);
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  }
+  return Array.from({ length: months }, (_, i) => {
+    const month = shiftMonth(endMonth, i - (months - 1));
+    return { month, count: counts.get(month) ?? 0, total: daysInMonth(month) };
+  });
+}
