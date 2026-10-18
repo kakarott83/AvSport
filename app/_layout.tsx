@@ -49,6 +49,10 @@ export default function RootLayout() {
     if (session === undefined || !languageReady) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    // Passwort-Reset: der Code meldet an, bevor das neue Passwort gesetzt ist —
+    // der Screen leitet nach Erfolg selbst weiter.
+    const inPasswordReset = inAuthGroup && (segments as string[])[1] === "forgot-password";
+    if (inPasswordReset) return;
 
     if (!session && !inAuthGroup) {
       router.replace("/(auth)/login");

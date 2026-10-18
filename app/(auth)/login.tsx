@@ -155,6 +155,16 @@ export default function LoginScreen() {
           />
 
           <TouchableOpacity
+            style={styles.forgotLink}
+            onPress={() =>
+              router.push({ pathname: "/(auth)/forgot-password", params: { email: email.trim() } })
+            }
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.forgotText}>{t("auth.forgotPassword")}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.checkboxRow}
             onPress={() => handleToggleSave(!savePassword)}
             activeOpacity={0.7}
@@ -259,6 +269,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     borderWidth: 1,
     borderColor: "#333",
+  },
+  forgotLink: {
+    alignSelf: "flex-end",
+    marginTop: 10,
+  },
+  forgotText: {
+    color: "#0a7ea4",
+    fontSize: 13,
+    fontWeight: "600",
   },
   checkboxRow: {
     flexDirection: "row",
