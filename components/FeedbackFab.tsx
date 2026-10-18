@@ -47,7 +47,8 @@ export function FeedbackFab() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    right: 12,
+    // Links, damit er sich nicht mit dem Kamera-Button (rechts) überlagert
+    left: 12,
     width: 40,
     height: 40,
     borderRadius: 20,
