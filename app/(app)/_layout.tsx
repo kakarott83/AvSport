@@ -42,7 +42,8 @@ export default function AppLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-    <Stack>
+    {/* iOS zeigt sonst den Routennamen "(tabs)" als Zurück-Text */}
+    <Stack screenOptions={{ headerBackTitle: t('common.back') }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
         name="body-stats"
