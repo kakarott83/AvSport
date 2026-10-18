@@ -32,7 +32,9 @@ export function AnimatedLogo({ size = 80 }: Props) {
       style={{
         width: size,
         height: size,
-        transform: [{ rotateY }],
+        // perspective muss VOR rotateY stehen — ohne sie schneidet React Native
+        // (v. a. New Architecture) bei der 3D-Drehung eine Bildhälfte ab.
+        transform: [{ perspective: 1000 }, { rotateY }],
       }}
       resizeMode="contain"
     />
