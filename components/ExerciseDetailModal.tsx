@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { ExerciseAnimation } from '@/components/ExerciseAnimation';
+import { ExercisePictogram } from '@/components/ExercisePictogram';
 import { useTranslation } from '@/lib/i18n';
 import { fetchExerciseFrames } from '@/services/exerciseDb/exerciseImage';
 
@@ -86,6 +87,13 @@ export function ExerciseDetailModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+            {/* KI-Piktogramm der Ausführung (Start → Endposition) */}
+            {visible && (
+              <View style={styles.pictogramWrap}>
+                <ExercisePictogram nameEn={exerciseNameEn} nameDe={exerciseName} />
+              </View>
+            )}
+
             {framesLoading && (
               <View style={styles.imageBox}>
                 <ActivityIndicator color="#0a7ea4" />
@@ -154,6 +162,7 @@ export function ExerciseDetailModal({
 }
 
 const styles = StyleSheet.create({
+  pictogramWrap: { marginBottom: 14 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#1a1a1a', borderTopLeftRadius: 22, borderTopRightRadius: 22,

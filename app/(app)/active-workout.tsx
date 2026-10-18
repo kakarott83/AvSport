@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
+import { ExercisePictogram } from '@/components/ExercisePictogram';
 import { estimateWorkoutKcal } from '@/lib/calorieBurn';
 import { t, useTranslation } from '@/lib/i18n';
 import { playBeep } from '@/services/audioService';
@@ -591,6 +592,17 @@ export default function ActiveWorkoutScreen() {
               {isCircuit ? t('workout.roundExercise', { round: currentRound, n: planIndex + 1 }) : t('workout.setN', { n: sets.length + 1 })}
             </Text>
 
+            {/* KI-Piktogramm der aktuellen Übung; Tippen öffnet die Details */}
+            {currentPlanEx && (
+              <TouchableOpacity
+                style={styles.pictogram}
+                onPress={() => currentPlanEx.detail_markdown && setDetailVisible(true)}
+                activeOpacity={currentPlanEx.detail_markdown ? 0.85 : 1}
+              >
+                <ExercisePictogram nameEn={currentPlanEx.name_en} nameDe={currentPlanEx.exercise_name} maxSize={240} />
+              </TouchableOpacity>
+            )}
+
             {currentPlanEx && (currentPlanEx.description || currentPlanEx.muscle_group || currentPlanEx.equipment_type) && (
               <View style={styles.exerciseIdentity}>
                 {!!(currentPlanEx.muscle_group || currentPlanEx.equipment_type) && (
@@ -760,6 +772,7 @@ export default function ActiveWorkoutScreen() {
 // ─────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  pictogram: { marginBottom: 14 },
   flex:      { flex: 1, backgroundColor: '#121212' },
   container: { flexGrow: 1, padding: 20, paddingTop: 24, paddingBottom: 48 },
 
