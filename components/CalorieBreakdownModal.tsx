@@ -15,9 +15,10 @@ import {
   FALLBACK_TDEE,
   type CalorieBreakdown,
 } from '@/hooks/useCalorieGoal';
+import { getLocale, useTranslation } from '@/lib/i18n';
 
 const fmt = (n: number, digits = 0) =>
-  n.toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  n.toLocaleString(getLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /** Gewicht mit Nachkommastelle nur, wenn eine gespeichert ist (z.B. 72,5). */
 const fmtKg = (n: number) => fmt(n, n % 1 ? 1 : 0);
@@ -49,8 +50,10 @@ export function CalorieBreakdownModal({
   extraAdjustment?: number;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   if (!breakdown) return null;
   const b = breakdown;
+  const years = t('calorieBreakdown.years');
   const isMale = b.inputs?.gender === 'male';
 
   return (
@@ -58,7 +61,7 @@ export function CalorieBreakdownModal({
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>So entsteht dein Kalorienziel</Text>
+            <Text style={styles.title}>{t('calorieBreakdown.title')}</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
@@ -66,30 +69,26 @@ export function CalorieBreakdownModal({
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
             {/* ── 1. Grundumsatz ── */}
-            <Text style={styles.sectionTitle}>1 · Grundumsatz</Text>
+            <Text style={styles.sectionTitle}>{t('calorieBreakdown.bmrTitle')}</Text>
             {b.inputs && b.bmr !== null ? (
               <>
-                <Text style={styles.paragraph}>
-                  Die Energie, die dein Körper in völliger Ruhe verbraucht. Berechnet mit der
-                  Harris-Benedict-Formel aus deinen Profildaten:
-                </Text>
+                <Text style={styles.paragraph}>{t('calorieBreakdown.bmrText')}</Text>
                 <Text style={styles.inputs}>
-                  {isMale ? 'Mann' : 'Frau'} · {b.inputs.age} Jahre · {fmtKg(b.inputs.weightKg)} kg · {fmt(b.inputs.heightCm)} cm
+                  {isMale ? t('calorieBreakdown.male') : t('calorieBreakdown.female')} · {b.inputs.age} {years} · {fmtKg(b.inputs.weightKg)} kg · {fmt(b.inputs.heightCm)} cm
                 </Text>
                 <View style={styles.formulaBox}>
                   <Text style={styles.formula}>
                     {isMale
-                      ? `88,362 + 13,397 × ${fmtKg(b.inputs.weightKg)} kg\n+ 4,799 × ${fmt(b.inputs.heightCm)} cm\n− 5,677 × ${b.inputs.age} Jahre`
-                      : `447,593 + 9,247 × ${fmtKg(b.inputs.weightKg)} kg\n+ 3,098 × ${fmt(b.inputs.heightCm)} cm\n− 4,33 × ${b.inputs.age} Jahre`}
+                      ? `${fmt(88.362, 3)} + ${fmt(13.397, 3)} × ${fmtKg(b.inputs.weightKg)} kg\n+ ${fmt(4.799, 3)} × ${fmt(b.inputs.heightCm)} cm\n− ${fmt(5.677, 3)} × ${b.inputs.age} ${years}`
+                      : `${fmt(447.593, 3)} + ${fmt(9.247, 3)} × ${fmtKg(b.inputs.weightKg)} kg\n+ ${fmt(3.098, 3)} × ${fmt(b.inputs.heightCm)} cm\n− ${fmt(4.33, 2)} × ${b.inputs.age} ${years}`}
                   </Text>
                   <Text style={styles.formulaResult}>= {fmt(b.bmr)} kcal</Text>
                 </View>
 
                 {/* ── 2. Gesamtumsatz ── */}
-                <Text style={styles.sectionTitle}>2 · Gesamtumsatz</Text>
+                <Text style={styles.sectionTitle}>{t('calorieBreakdown.tdeeTitle')}</Text>
                 <Text style={styles.paragraph}>
-                  Der Grundumsatz wird mit einem Aktivitätsfaktor für normale Alltagsbewegung
-                  multipliziert. AvoraSport rechnet mit {fmt(b.activityFactor, 2)} („mäßig aktiv“).
+                  {t('calorieBreakdown.tdeeText', { factor: fmt(b.activityFactor, 2) })}
                 </Text>
                 <View style={styles.formulaBox}>
                   <Text style={styles.formula}>{fmt(b.bmr)} kcal × {fmt(b.activityFactor, 2)}</Text>
@@ -99,54 +98,49 @@ export function CalorieBreakdownModal({
             ) : (
               <View style={styles.warnBox}>
                 <Text style={styles.warnText}>
-                  Dein Profil ist unvollständig, deshalb wird pauschal mit {fmt(FALLBACK_TDEE)} kcal
-                  gerechnet. Trage Geschlecht, Geburtsdatum, Größe und Gewicht im Profil ein, um
-                  deinen persönlichen Bedarf zu erhalten.
+                  {t('calorieBreakdown.incomplete', { kcal: fmt(FALLBACK_TDEE) })}
                 </Text>
               </View>
             )}
 
             {/* ── 3. Tagesziel ── */}
-            <Text style={styles.sectionTitle}>{b.inputs ? '3' : '2'} · Dein Tagesziel heute</Text>
+            <Text style={styles.sectionTitle}>{t('calorieBreakdown.goalTitle', { n: b.inputs ? 3 : 2 })}</Text>
             <View style={styles.table}>
-              <Row label="Gesamtumsatz" value={`${fmt(b.tdee)} kcal`} />
+              <Row label={t('calorieBreakdown.tdee')} value={`${fmt(b.tdee)} kcal`} />
               <Row
-                label={`Ziel: ${CALORIE_GOAL_LABELS[b.goalType]}`}
-                hint={b.goalType === 'lose' ? 'Moderates Defizit' : b.goalType === 'gain' ? 'Leichter Überschuss' : undefined}
+                label={t('calorieBreakdown.goal', { goal: CALORIE_GOAL_LABELS[b.goalType] })}
+                hint={b.goalType === 'lose' ? t('calorieBreakdown.deficit') : b.goalType === 'gain' ? t('calorieBreakdown.surplus') : undefined}
                 value={b.goalAdjustment === 0 ? '± 0' : signed(b.goalAdjustment)}
               />
               {b.manualOffset !== 0 && (
-                <Row label="Manuelle Anpassung" hint="Aus deinem Profil" value={signed(b.manualOffset)} />
+                <Row label={t('calorieBreakdown.manual')} hint={t('calorieBreakdown.fromProfile')} value={signed(b.manualOffset)} />
               )}
               {b.workoutKcal > 0 && (
                 <Row
-                  label="Training heute"
+                  label={t('calorieBreakdown.workoutToday')}
                   hint={b.workoutCounted
-                    ? 'Geschätzter Verbrauch deiner Workouts'
-                    : 'Nicht eingerechnet – „Kalorien automatisch anpassen“ ist im Profil aus'}
+                    ? t('calorieBreakdown.workoutCounted')
+                    : t('calorieBreakdown.workoutNotCounted')}
                   value={b.workoutCounted ? signed(b.workoutKcal) : fmt(b.workoutKcal)}
                   muted={!b.workoutCounted}
                 />
               )}
               {b.healthKcal > 0 && (
-                <Row label={`Aktivität aus ${HEALTH_SOURCE}`} hint="Heute gemessene Aktivitätskalorien" value={signed(b.healthKcal)} />
+                <Row label={t('calorieBreakdown.healthActivity', { source: HEALTH_SOURCE })} hint={t('calorieBreakdown.healthHint')} value={signed(b.healthKcal)} />
               )}
               {b.cycleBonus > 0 && (
-                <Row label="Zyklus-Bonus" hint="Lutealphase" value={signed(b.cycleBonus)} />
+                <Row label={t('calorieBreakdown.cycleBonus')} hint={t('calorieBreakdown.lutealPhase')} value={signed(b.cycleBonus)} />
               )}
               {extraAdjustment !== 0 && (
-                <Row label="Anpassung nur für heute" value={signed(extraAdjustment)} />
+                <Row label={t('calorieBreakdown.todayOnly')} value={signed(extraAdjustment)} />
               )}
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Tagesziel</Text>
+                <Text style={styles.totalLabel}>{t('calorieBreakdown.dailyGoal')}</Text>
                 <Text style={styles.totalValue}>{fmt(b.total + extraAdjustment)} kcal</Text>
               </View>
             </View>
 
-            <Text style={styles.footnote}>
-              Alle Werte sind Schätzungen. Der tatsächliche Bedarf kann individuell um mehrere
-              hundert kcal abweichen.
-            </Text>
+            <Text style={styles.footnote}>{t('calorieBreakdown.footnote')}</Text>
           </ScrollView>
         </View>
       </View>

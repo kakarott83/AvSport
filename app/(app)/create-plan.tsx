@@ -16,6 +16,7 @@ import {
 
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { Toast } from '@/components/Toast';
+import { t, tList, useTranslation } from '@/lib/i18n';
 import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
@@ -120,7 +121,7 @@ function ExerciseNamePicker({ value, onChange, masterList }: PickerProps) {
         onChangeText={handleChangeText}
         onFocus={() => query.trim().length >= 1 && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Übungsname suchen oder eingeben…"
+        placeholder={t('planEditor.searchPlaceholder')}
         placeholderTextColor="#555"
         returnKeyType="next"
       />
@@ -168,6 +169,7 @@ const pickerStyles = StyleSheet.create({
 export default function CreatePlanScreen() {
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const isEdit = !!planId;
+  const { t } = useTranslation();
 
   const [planName, setPlanName] = useState('');
   const [exercises, setExercises] = useState<ExerciseRow[]>([newRow()]);
@@ -274,12 +276,12 @@ export default function CreatePlanScreen() {
 
   async function handleSave() {
     if (!planName.trim()) {
-      Alert.alert('Pflichtfeld', 'Bitte einen Plannamen eingeben.');
+      Alert.alert(t('planEditor.requiredTitle'), t('planEditor.nameRequired'));
       return;
     }
     const filled = exercises.filter((e) => e.name.trim());
     if (filled.length === 0) {
-      Alert.alert('Pflichtfeld', 'Mindestens eine Übung angeben.');
+      Alert.alert(t('planEditor.requiredTitle'), t('planEditor.exerciseRequired'));
       return;
     }
 
@@ -306,7 +308,7 @@ export default function CreatePlanScreen() {
         .eq('id', planId);
 
       if (error) {
-        Alert.alert('Fehler beim Aktualisieren', error.message);
+        Alert.alert(t('planEditor.updateFailed'), error.message);
         setSaving(false);
         return;
       }
@@ -319,7 +321,7 @@ export default function CreatePlanScreen() {
         .single();
 
       if (error || !newPlan) {
-        Alert.alert('Fehler beim Erstellen', error?.message ?? 'Unbekannter Fehler');
+        Alert.alert(t('planEditor.createFailed'), error?.message ?? t('planEditor.unknownError'));
         setSaving(false);
         return;
       }
@@ -356,11 +358,11 @@ export default function CreatePlanScreen() {
     setSaving(false);
 
     if (exError) {
-      Alert.alert('Fehler beim Speichern der Übungen', `${exError.message}\n\nCode: ${exError.code ?? '—'}`);
+      Alert.alert(t('planEditor.exercisesSaveFailed'), `${exError.message}\n\nCode: ${exError.code ?? '—'}`);
       return;
     }
 
-    setToastMsg(`"${planName.trim()}" wurde gespeichert!`);
+    setToastMsg(t('planEditor.saved', { name: planName.trim() }));
     setTimeout(() => router.back(), 1600);
   }
 
@@ -382,26 +384,26 @@ export default function CreatePlanScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.heading}>
-          {isEdit ? 'Plan bearbeiten' : 'Neuen Plan erstellen'}
+          {isEdit ? t('planEditor.editTitle') : t('planEditor.newTitle')}
         </Text>
 
         {/* ── Planname ── */}
-        <Text style={styles.label}>Planname</Text>
+        <Text style={styles.label}>{t('planEditor.planName')}</Text>
         <TextInput
           style={styles.input}
           value={planName}
           onChangeText={setPlanName}
-          placeholder="z.B. Push-Tag, Oberkörper …"
+          placeholder={t('planEditor.planNamePlaceholder')}
           placeholderTextColor="#555"
           returnKeyType="next"
         />
 
         {/* ── Wochentage ── */}
-        <Text style={styles.label}>Trainingstage</Text>
+        <Text style={styles.label}>{t('planEditor.trainingDays')}</Text>
         <View style={styles.dayRow}>
-          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label, i) => {
-            // DB: 0=Sun … 6=Sat → Mo=1 … So=0
-            const day = i === 6 ? 0 : i + 1;
+          {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+            // DB: 0=Sun … 6=Sat; Anzeige Mo … So
+            const label = tList('common.weekdaysShort')[day];
             const active = scheduledDays.includes(day);
             return (
               <TouchableOpacity
@@ -422,10 +424,8 @@ export default function CreatePlanScreen() {
         <View style={styles.circuitToggleCard}>
           <View style={styles.circuitToggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.circuitToggleTitle}>Zirkeltraining</Text>
-              <Text style={styles.circuitToggleHint}>
-                Alle Übungen werden in Runden absolviert, ohne feste Sätze pro Übung.
-              </Text>
+              <Text style={styles.circuitToggleTitle}>{t('planEditor.circuit')}</Text>
+              <Text style={styles.circuitToggleHint}>{t('planEditor.circuitHint')}</Text>
             </View>
             <Switch
               value={isCircuit}
@@ -439,9 +439,9 @@ export default function CreatePlanScreen() {
         {/* ── Zirkel-Einstellungen (nur wenn is_circuit aktiv) ── */}
         {isCircuit && (
           <View style={styles.circuitSettingsCard}>
-            <Text style={styles.circuitSettingsTitle}>Zirkel-Einstellungen</Text>
+            <Text style={styles.circuitSettingsTitle}>{t('planEditor.circuitSettings')}</Text>
 
-            <Text style={styles.sublabel}>Anzahl der Runden</Text>
+            <Text style={styles.sublabel}>{t('planEditor.rounds')}</Text>
             <TextInput
               style={styles.input}
               value={circuitRounds}
@@ -453,7 +453,7 @@ export default function CreatePlanScreen() {
 
             <View style={styles.row}>
               <View style={styles.half}>
-                <Text style={styles.sublabel}>Pause zw. Übungen (Sek.)</Text>
+                <Text style={styles.sublabel}>{t('planEditor.restExercises')}</Text>
                 <TextInput
                   style={styles.input}
                   value={restBetweenExercises}
@@ -464,7 +464,7 @@ export default function CreatePlanScreen() {
                 />
               </View>
               <View style={styles.half}>
-                <Text style={styles.sublabel}>Pause zw. Runden (Sek.)</Text>
+                <Text style={styles.sublabel}>{t('planEditor.restRounds')}</Text>
                 <TextInput
                   style={styles.input}
                   value={restBetweenRounds}
@@ -479,12 +479,12 @@ export default function CreatePlanScreen() {
         )}
 
         {/* ── Übungen ── */}
-        <Text style={[styles.label, styles.sectionGap]}>Übungen</Text>
+        <Text style={[styles.label, styles.sectionGap]}>{t('planEditor.exercises')}</Text>
 
         {exercises.map((ex, index) => (
           <View key={ex.localId} style={styles.exerciseCard}>
             <View style={styles.exerciseHeader}>
-              <Text style={styles.exerciseIndex}>{index + 1}. Übung</Text>
+              <Text style={styles.exerciseIndex}>{t('planEditor.exerciseIndex', { n: index + 1 })}</Text>
               <View style={styles.exerciseHeaderActions}>
                 {!!ex.detail_markdown && (
                   <TouchableOpacity
@@ -516,7 +516,7 @@ export default function CreatePlanScreen() {
               {/* Sätze-Feld nur im Nicht-Zirkel-Modus */}
               {!isCircuit && (
                 <View style={styles.third}>
-                  <Text style={styles.sublabel}>Sätze</Text>
+                  <Text style={styles.sublabel}>{t('planEditor.sets')}</Text>
                   <TextInput
                     style={styles.input}
                     value={ex.targetSets}
@@ -528,7 +528,7 @@ export default function CreatePlanScreen() {
                 </View>
               )}
               <View style={isCircuit ? styles.half : styles.third}>
-                <Text style={styles.sublabel}>Wdh.</Text>
+                <Text style={styles.sublabel}>{t('planEditor.reps')}</Text>
                 <TextInput
                   style={styles.input}
                   value={ex.targetReps}
@@ -539,7 +539,7 @@ export default function CreatePlanScreen() {
                 />
               </View>
               <View style={isCircuit ? styles.half : styles.third}>
-                <Text style={styles.sublabel}>Dauer (s)</Text>
+                <Text style={styles.sublabel}>{t('planEditor.duration')}</Text>
                 <TextInput
                   style={[styles.input, ex.targetDuration ? styles.inputHighlight : null]}
                   value={ex.targetDuration}
@@ -553,7 +553,7 @@ export default function CreatePlanScreen() {
 
             <View style={[styles.row, { marginTop: 2 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.sublabel}>Gewicht (kg)</Text>
+                <Text style={styles.sublabel}>{t('planEditor.weight')}</Text>
                 <TextInput
                   style={styles.input}
                   value={ex.targetWeight}
@@ -565,20 +565,20 @@ export default function CreatePlanScreen() {
               </View>
               {ex.targetDuration ? (
                 <View style={{ flex: 2, justifyContent: 'flex-end', paddingBottom: 10 }}>
-                  <Text style={styles.durationHint}>⏱ Countdown: {ex.targetDuration}s</Text>
+                  <Text style={styles.durationHint}>{t('planEditor.countdown', { s: ex.targetDuration })}</Text>
                 </View>
               ) : <View style={{ flex: 2 }} />}
             </View>
 
             {/* ── Beschreibung ── */}
             <Text style={styles.sublabel}>
-              Beschreibung{(ex.short || ex.detail_markdown) ? ' · von der KI, anpassbar' : ' (optional)'}
+              {t('planEditor.description')}{(ex.short || ex.detail_markdown) ? t('planEditor.descriptionAi') : t('planEditor.descriptionOptional')}
             </Text>
             <TextInput
               style={[styles.input, styles.descriptionInput]}
               value={ex.description ?? ''}
               onChangeText={(v) => updateRow(ex.localId, 'description', v)}
-              placeholder="Wie wird die Übung ausgeführt? Kurz in eigenen Worten…"
+              placeholder={t('planEditor.descriptionPlaceholder')}
               placeholderTextColor="#555"
               multiline
               textAlignVertical="top"
@@ -590,7 +590,7 @@ export default function CreatePlanScreen() {
           style={styles.addExButton}
           onPress={() => setExercises((prev) => [...prev, newRow()])}
         >
-          <Text style={styles.addExText}>+ Übung hinzufügen</Text>
+          <Text style={styles.addExText}>{t('planEditor.addExercise')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -602,12 +602,12 @@ export default function CreatePlanScreen() {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Plan speichern</Text>
+            <Text style={styles.saveButtonText}>{t('planEditor.savePlan')}</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Abbrechen</Text>
+          <Text style={styles.cancelText}>{t('common.cancel')}</Text>
         </TouchableOpacity>
       </ScrollView>
 

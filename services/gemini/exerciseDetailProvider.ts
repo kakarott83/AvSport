@@ -10,6 +10,7 @@
  * fehlschlagen.
  */
 
+import { getLanguage, t } from '@/lib/i18n';
 import { geminiRequest } from './client';
 import type { GeneratedDay, GeneratedExercise } from '@/types/workout';
 
@@ -53,6 +54,10 @@ function buildPrompt(items: FlatExercise[]): string {
     })),
   };
 
+  const isEn = getLanguage() === 'en';
+  const outLang = isEn ? 'Englisch' : 'Deutsch';
+  const bullets = isEn ? 'Posture, Common mistake' : 'Haltung, Häufiger Fehler';
+
   return `Du bist ein präziser Fitness-Textgenerator. Eingabe: JSON { "exercises": [ { "id":string, "name":string, "sets"?:number, "reps"?:number, "equipment"?:string, "primary_muscle"?:string } ] }.
 
 Aufgabe: Für jede Übung liefere nur JSON gemäß diesem Schema (keine erläuternden Texte, keine Kommentare, nur gültiges JSON):
@@ -63,7 +68,7 @@ Aufgabe: Für jede Übung liefere nur JSON gemäß diesem Schema (keine erläute
       "id": string,
       "name_en": string,              // gängiger englischer Übungsname, z. B. "Barbell Squat", "Push-Up", "Romanian Deadlift"
       "short": string,                // Einzeiler, max. 120 Zeichen
-      "detail_markdown": string,      // Markdown, genau 1 kurzer Absatz (Wirkung + Technik) + Liste mit genau 2 Stichpunkten: Haltung, Häufiger Fehler
+      "detail_markdown": string,      // Markdown, genau 1 kurzer Absatz (Wirkung + Technik) + Liste mit genau 2 Stichpunkten: ${bullets}
       "instructions": [string],       // 3–4 Schritte, kurze Sätze (6–10 Wörter)
       "modifications": { "beginner": string, "advanced": string },
       "safety": string,               // kurze Warnung (1 Satz)
@@ -73,10 +78,10 @@ Aufgabe: Für jede Übung liefere nur JSON gemäß diesem Schema (keine erläute
 }
 
 Regeln:
-- Alle Textfelder außer "name_en": Deutsch, knapp und ohne Füllwörter.
+- Alle Textfelder außer "name_en": ${outLang}, knapp und ohne Füllwörter.
 - "name_en": nur der englische Übungsname, so wie er in einer Übungsdatenbank stünde (kein Satz, keine Erklärung).
 - "short" ≤ 120 Zeichen.
-- "detail_markdown": 1 Absatz mit 2 Sätzen (Satz 1 = Wirkung, Satz 2 = Technik); danach genau 2 Bullet-Points (Haltung, Häufiger Fehler).
+- "detail_markdown": 1 Absatz mit 2 Sätzen (Satz 1 = Wirkung, Satz 2 = Technik); danach genau 2 Bullet-Points (${bullets}).
 - "instructions": geordnet, 3–4 Items, klar und knapp.
 - "tips": genau 2 Items.
 - Keine zusätzlichen Felder außerhalb des Schemas.
@@ -155,33 +160,29 @@ function parseResponse(text: string): Map<string, ExerciseDetail> {
 
 function buildFallbackDetail(exercise: GeneratedExercise): ExerciseDetail {
   const name   = exercise.exercise_name;
-  const muscle = exercise.muscle_group || 'die Zielmuskulatur';
-  const equip  = exercise.equipment_type || 'Körpergewicht';
+  const muscle = exercise.muscle_group || t('exercise.fallback.defaultMuscle');
+  const equip  = exercise.equipment_type || t('exercise.fallback.defaultEquipment');
   const dosage = exercise.target_duration
-    ? `${exercise.sets} × ${exercise.target_duration} Sekunden`
-    : `${exercise.sets} × ${exercise.reps} Wiederholungen`;
+    ? t('exercise.fallback.dosageSeconds', { sets: exercise.sets, seconds: exercise.target_duration })
+    : t('exercise.fallback.dosageReps', { sets: exercise.sets, reps: exercise.reps });
 
   return {
     name_en: '',
-    short: `${name} kräftigt ${muscle} — ${dosage}, ${equip}.`.slice(0, 120),
-    detail_markdown:
-      `${name} trainiert vorrangig ${muscle}. ` +
-      `Bewegung kontrolliert und in vollem Bewegungsumfang ausführen, ohne Schwung.\n\n` +
-      `- **Haltung**: Rumpf stabil anspannen, Wirbelsäule neutral halten.\n` +
-      `- **Häufiger Fehler**: Zu schnelles Tempo oder unvollständiger Bewegungsumfang.`,
+    short: t('exercise.fallback.short', { name, muscle, dosage, equipment: equip }).slice(0, 120),
+    detail_markdown: t('exercise.fallback.detail', { name, muscle }),
     instructions: [
-      'Startposition einnehmen und Rumpf stabilisieren.',
-      `${dosage} langsam und kontrolliert ausführen.`,
-      'Kurz in der Endposition halten, dann zurückführen.',
+      t('exercise.fallback.step1'),
+      t('exercise.fallback.step2', { dosage }),
+      t('exercise.fallback.step3'),
     ],
     modifications: {
-      beginner: 'Weniger Wiederholungen oder ohne Zusatzgewicht ausführen.',
-      advanced: 'Tempo verlangsamen oder Zusatzgewicht/Wiederholungen erhöhen.',
+      beginner: t('exercise.fallback.beginner'),
+      advanced: t('exercise.fallback.advanced'),
     },
-    safety: 'Bei Schmerzen oder Unsicherheit die Übung abbrechen und Technik überprüfen.',
+    safety: t('exercise.fallback.safety'),
     tips: [
-      'Auf gleichmäßige, ruhige Atmung achten.',
-      'Lieber sauber und langsam als schnell und unsauber ausführen.',
+      t('exercise.fallback.tip1'),
+      t('exercise.fallback.tip2'),
     ],
   };
 }
@@ -200,7 +201,7 @@ export async function enrichDaysWithDetails(days: GeneratedDay[]): Promise<Gener
 
   let details = new Map<string, ExerciseDetail>();
   try {
-    const text = await geminiRequest([{ text: buildPrompt(flat) }]);
+    const text = await geminiRequest([{ text: buildPrompt(flat) }], "exercise_detail");
     if (text) details = parseResponse(text);
   } catch (err) {
     console.warn('[ExerciseDetail] Anreicherung fehlgeschlagen, Fallback wird genutzt:', err);

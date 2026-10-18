@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 
+import { useTranslation } from '@/lib/i18n';
 import { buildMealSuggestions, scaleMeal, type MealHistoryEntry, type MealSuggestion } from '@/lib/nutrition';
 import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
@@ -39,10 +40,10 @@ type Selection = { factor: number; kcalText: string };
 type CustomMeal = { key: string; name: string; kcal: string; protein: string; carbs: string; fat: string };
 
 const CUSTOM_FIELDS = [
-  { field: 'kcal',    label: 'kcal *', keyboard: 'number-pad'  },
-  { field: 'protein', label: 'P (g)',  keyboard: 'decimal-pad' },
-  { field: 'carbs',   label: 'KH (g)', keyboard: 'decimal-pad' },
-  { field: 'fat',     label: 'F (g)',  keyboard: 'decimal-pad' },
+  { field: 'kcal',    label: 'nutrition.dayLog.fieldKcal',    keyboard: 'number-pad'  },
+  { field: 'protein', label: 'nutrition.dayLog.fieldProtein', keyboard: 'decimal-pad' },
+  { field: 'carbs',   label: 'nutrition.dayLog.fieldCarbs',   keyboard: 'decimal-pad' },
+  { field: 'fat',     label: 'nutrition.dayLog.fieldFat',     keyboard: 'decimal-pad' },
 ] as const;
 
 let customKeySeq = 0;
@@ -57,6 +58,7 @@ const optionalGrams = (v: string) => {
 type Props = { visible: boolean; onClose: () => void; onSaved: (count: number) => void };
 
 export function DayLogModal({ visible, onClose, onSaved }: Props) {
+  const { t } = useTranslation();
   const [suggestions, setSuggestions] = useState<MealSuggestion[]>([]);
   const [selected, setSelected] = useState<Record<string, Selection>>({});
   const [customs, setCustoms] = useState<CustomMeal[]>([]);
@@ -82,7 +84,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
         .order('created_at', { ascending: false })
         .limit(HISTORY_LIMIT);
       if (cancelled) return;
-      if (dbErr) setError(`Verlauf konnte nicht geladen werden: ${dbErr.message}`);
+      if (dbErr) setError(t('nutrition.dayLog.historyFailed', { message: dbErr.message }));
       setSuggestions(buildMealSuggestions((data ?? []) as MealHistoryEntry[]));
       setLoading(false);
     })();
@@ -136,7 +138,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
     setError('');
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); setError('Nicht eingeloggt.'); return; }
+    if (!user) { setSaving(false); setError(t('nutrition.dayLog.notLoggedIn')); return; }
 
     const rows = [
       ...chosen.map((m) => ({ user_id: user.id, meal_name: m.name, ...scaleMeal(m, selected[m.key].factor) })),
@@ -151,7 +153,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
     ];
     const { error: dbErr } = await supabase.from('food_logs').insert(rows);
     setSaving(false);
-    if (dbErr) { setError(`Speichern fehlgeschlagen: ${dbErr.message}`); return; }
+    if (dbErr) { setError(t('nutrition.dayLog.saveFailed', { message: dbErr.message })); return; }
 
     reset();
     onSaved(rows.length);
@@ -162,8 +164,8 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
       <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.header}>
           <View style={{ flex: 1 }}>
-            <Text style={s.title}>Tag erfassen</Text>
-            <Text style={s.subtitle}>Wähle aus deinem Verlauf oder trag Gerichte selbst ein.</Text>
+            <Text style={s.title}>{t('nutrition.dayLog.title')}</Text>
+            <Text style={s.subtitle}>{t('nutrition.dayLog.subtitle')}</Text>
           </View>
           <TouchableOpacity onPress={handleClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <MaterialIcons name="close" size={24} color="#888" />
@@ -177,7 +179,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
               style={s.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="Gericht suchen"
+              placeholder={t('nutrition.dayLog.search')}
               placeholderTextColor="#555"
             />
           </View>
@@ -191,7 +193,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
                   style={[s.field, { flex: 1 }]}
                   value={c.name}
                   onChangeText={(v) => updateCustom(c.key, { name: v })}
-                  placeholder="Gericht, z. B. Käsebrot"
+                  placeholder={t('nutrition.dayLog.customPlaceholder')}
                   placeholderTextColor="#555"
                   autoFocus
                 />
@@ -205,7 +207,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
               <View style={s.customFields}>
                 {CUSTOM_FIELDS.map(({ field, label, keyboard }) => (
                   <View key={field} style={{ flex: 1 }}>
-                    <Text style={s.fieldLabel}>{label}</Text>
+                    <Text style={s.fieldLabel}>{t(label)}</Text>
                     <TextInput
                       style={s.field}
                       value={c[field]}
@@ -228,7 +230,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
             activeOpacity={0.7}
           >
             <MaterialIcons name="add" size={18} color="#00E5FF" />
-            <Text style={s.addCustomText}>Eigenes Gericht eintragen</Text>
+            <Text style={s.addCustomText}>{t('nutrition.dayLog.addCustom')}</Text>
           </TouchableOpacity>
 
           {loading ? (
@@ -236,12 +238,10 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
           ) : suggestions.length === 0 ? (
             <View style={s.empty}>
               <MaterialIcons name="history" size={40} color="#2a2a2a" />
-              <Text style={s.emptyText}>
-                Noch keine Gerichte im Verlauf. Trag sie oben selbst ein oder erfasse sie per Foto — danach erscheinen sie hier als Vorschlag.
-              </Text>
+              <Text style={s.emptyText}>{t('nutrition.dayLog.emptyHistory')}</Text>
             </View>
           ) : visibleMeals.length === 0 ? (
-            <Text style={s.emptyText}>Kein Gericht gefunden.</Text>
+            <Text style={s.emptyText}>{t('nutrition.dayLog.noMatch')}</Text>
           ) : (
             visibleMeals.map((meal) => {
               const sel = selected[meal.key];
@@ -257,7 +257,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={s.mealName} numberOfLines={2}>{meal.name}</Text>
                       <Text style={s.mealMeta}>
-                        {meal.calories} kcal · {meal.count}× erfasst
+                        {t('nutrition.dayLog.loggedCount', { kcal: meal.calories, count: meal.count })}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -279,7 +279,7 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
                           <TextInput
                             style={s.kcalInput}
                             value={sel.kcalText}
-                            onChangeText={(t) => setKcal(meal, t)}
+                            onChangeText={(v) => setKcal(meal, v)}
                             keyboardType="number-pad"
                             textAlign="right"
                           />
@@ -288,10 +288,10 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
                       </View>
                       <Text style={s.macros}>
                         {[
-                          scaled.protein != null && `P ${scaled.protein} g`,
-                          scaled.carbs != null && `KH ${scaled.carbs} g`,
-                          scaled.fat != null && `F ${scaled.fat} g`,
-                        ].filter(Boolean).join(' · ') || 'Keine Makros hinterlegt'}
+                          scaled.protein != null && t('nutrition.dayLog.macroP', { g: scaled.protein }),
+                          scaled.carbs != null && t('nutrition.dayLog.macroCarbs', { g: scaled.carbs }),
+                          scaled.fat != null && t('nutrition.dayLog.macroF', { g: scaled.fat }),
+                        ].filter(Boolean).join(' · ') || t('nutrition.dayLog.noMacros')}
                       </Text>
                     </View>
                   )}
@@ -314,8 +314,8 @@ export function DayLogModal({ visible, onClose, onSaved }: Props) {
             ) : (
               <Text style={s.saveBtnText}>
                 {count === 0
-                  ? 'Gerichte auswählen oder eintragen'
-                  : `${count} ${count === 1 ? 'Gericht' : 'Gerichte'} speichern · ${totalKcal} kcal`}
+                  ? t('nutrition.dayLog.selectOrEnter')
+                  : t('nutrition.dayLog.saveCount', { count, kcal: totalKcal })}
               </Text>
             )}
           </TouchableOpacity>

@@ -11,7 +11,10 @@ import type { AiPlanInput } from '@/types/workout';
 // ─── Supabase-Mock (verhindert "supabaseUrl is required" beim Import) ─────────
 jest.mock('@/services/supabaseClient', () => ({
   supabase: {
-    auth: { getUser: jest.fn().mockResolvedValue({ data: { user: { id: 'test-user' } } }) },
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user: { id: 'test-user' } } }),
+      getSession: jest.fn(),
+    },
     from:  jest.fn().mockReturnValue({ insert: jest.fn().mockResolvedValue({ error: null }) }),
   },
 }));
@@ -31,22 +34,17 @@ function makeDay(day_index: number) {
   };
 }
 
-function makeGeminiResponse(title: string, is_circuit: boolean, dayCount = 3) {
+function makeProxyResponse(title: string, is_circuit: boolean, dayCount = 3) {
   return {
     ok: true,
     json: async () => ({
-      candidates: [{
-        content: {
-          parts: [{
-            text: JSON.stringify({
-              title,
-              is_circuit,
-              progression_notes: 'Steigere wöchentlich Gewicht oder Wiederholungen.',
-              days: Array.from({ length: dayCount }, (_, i) => makeDay(i + 1)),
-            }),
-          }],
-        },
-      }],
+      ok: true,
+      text: JSON.stringify({
+        title,
+        is_circuit,
+        progression_notes: 'Steigere wöchentlich Gewicht oder Wiederholungen.',
+        days: Array.from({ length: dayCount }, (_, i) => makeDay(i + 1)),
+      }),
     }),
   };
 }
@@ -56,16 +54,20 @@ function makeFailResponse(status = 500) {
 }
 
 beforeAll(() => {
-  // Env-Var muss gesetzt sein, sonst wirft callGemini vor dem fetch-Aufruf
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY = 'test-key';
+  // Env-Var muss gesetzt sein, sonst wirft geminiRequest vor dem fetch-Aufruf
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
 });
 
 afterAll(() => {
-  delete process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  delete process.env.EXPO_PUBLIC_SUPABASE_URL;
 });
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // KI-Aufrufe laufen über den ai-proxy und brauchen eine Session.
+  (jest.requireMock('@/services/supabaseClient').supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'test-jwt' } },
+  });
 });
 
 // ─── Hilfsfunktion ────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ function allExercises(plan: Awaited<ReturnType<typeof generateAiPlan>>) {
 describe('generateAiPlan — API-Erfolg', () => {
   beforeEach(() => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue(
-      makeGeminiResponse('Starker Beine-Plan', false),
+      makeProxyResponse('Starker Beine-Plan', false),
     );
   });
 
@@ -155,7 +157,7 @@ describe('generateAiPlan — API-Erfolg', () => {
 
   it('übernimmt is_circuit aus der KI-Antwort', async () => {
     (globalThis.fetch as jest.Mock).mockResolvedValue(
-      makeGeminiResponse('Zirkel-Plan', true),
+      makeProxyResponse('Zirkel-Plan', true),
     );
     const plan = await generateAiPlan(BASE_INPUT);
     expect(plan.is_circuit).toBe(true);
@@ -184,7 +186,7 @@ describe('generateAiPlan — Fallback', () => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        candidates: [{ content: { parts: [{ text: 'kein json hier' }] } }],
+        ok: true, text: 'kein json hier',
       }),
     });
     const plan = await generateAiPlan(BASE_INPUT);
@@ -196,11 +198,7 @@ describe('generateAiPlan — Fallback', () => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        candidates: [{
-          content: {
-            parts: [{ text: JSON.stringify({ title: 'Leer', is_circuit: false, days: [] }) }],
-          },
-        }],
+        ok: true, text: JSON.stringify({ title: 'Leer', is_circuit: false, days: [] }),
       }),
     });
     const plan = await generateAiPlan(BASE_INPUT);
@@ -221,7 +219,7 @@ describe('generateAiPlan — Fallback', () => {
 describe('generateAiPlan — scheduled_days Mapping', () => {
   beforeEach(() => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue(
-      makeGeminiResponse('Plan', false),
+      makeProxyResponse('Plan', false),
     );
   });
 
@@ -244,7 +242,7 @@ describe('generateAiPlan — scheduled_days Mapping', () => {
 describe('generateAiPlan — workout_plans Struktur', () => {
   beforeEach(() => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue(
-      makeGeminiResponse('Test Plan', false),
+      makeProxyResponse('Test Plan', false),
     );
   });
 

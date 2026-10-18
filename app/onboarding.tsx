@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { DatePickerInput } from '@/components/DatePickerInput';
+import { LanguageSwitch } from '@/components/LanguageSwitch';
 import {
   CALORIE_GOAL_ADJUSTMENT,
   CALORIE_GOAL_LABELS,
@@ -24,12 +25,14 @@ import {
   ActivityLevel,
   DEFAULT_ACTIVITY_LEVEL,
 } from '@/lib/stepGoal';
+import { useTranslation } from '@/lib/i18n';
 import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
 const TOTAL_STEPS = 6;
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | null>(null);
@@ -94,6 +97,8 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.container}>
+        {step === 1 && <LanguageSwitch style={{ marginBottom: 16 }} />}
+
         {/* Progress dots */}
         <View style={styles.dots}>
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
@@ -137,14 +142,14 @@ export default function OnboardingScreen() {
             {saving
               ? <ActivityIndicator color="#121212" />
               : <Text style={styles.nextBtnText}>
-                  {isLast ? 'Los geht\'s 🚀' : 'Weiter →'}
+                  {isLast ? t('onboarding.letsGo') : t('onboarding.next')}
                 </Text>
             }
           </TouchableOpacity>
 
           {isOptional && (
             <TouchableOpacity onPress={next} activeOpacity={0.6} style={styles.skipBtn}>
-              <Text style={styles.skipText}>Überspringen</Text>
+              <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -156,16 +161,17 @@ export default function OnboardingScreen() {
 // ─── Step 1: Name ────────────────────────────────────────────────────────────
 
 function StepName({ name, onChange }: { name: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>👋</Text>
-      <Text style={styles.heading}>Herzlich willkommen!</Text>
-      <Text style={styles.sub}>Wie soll ich dich nennen?</Text>
+      <Text style={styles.heading}>{t('onboarding.welcome')}</Text>
+      <Text style={styles.sub}>{t('onboarding.whatName')}</Text>
       <TextInput
         style={styles.input}
         value={name}
         onChangeText={onChange}
-        placeholder="Dein Name"
+        placeholder={t('onboarding.namePlaceholder')}
         placeholderTextColor="#555"
         autoFocus
         returnKeyType="done"
@@ -185,11 +191,12 @@ function StepGender({
   gender: 'male' | 'female' | null;
   onChange: (v: 'male' | 'female' | null) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>🙋</Text>
-      <Text style={styles.heading}>Hey {name}!</Text>
-      <Text style={styles.sub}>Was ist dein biologisches Geschlecht?</Text>
+      <Text style={styles.heading}>{t('onboarding.hey', { name })}</Text>
+      <Text style={styles.sub}>{t('onboarding.genderQuestion')}</Text>
       <View style={styles.chipRow}>
         {(['male', 'female'] as const).map((g) => (
           <TouchableOpacity
@@ -199,7 +206,7 @@ function StepGender({
             activeOpacity={0.8}
           >
             <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>
-              {g === 'male' ? '♂ Männlich' : '♀ Weiblich'}
+              {g === 'male' ? t('onboarding.male') : t('onboarding.female')}
             </Text>
           </TouchableOpacity>
         ))}
@@ -211,17 +218,16 @@ function StepGender({
 // ─── Step 3: Date of birth ───────────────────────────────────────────────────
 
 function StepDob({ dob, onChange }: { dob: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>🎂</Text>
-      <Text style={styles.heading}>Wann bist du geboren?</Text>
-      <Text style={styles.sub}>
-        Damit berechne ich deinen Kalorienbedarf genauer.
-      </Text>
+      <Text style={styles.heading}>{t('onboarding.dobQuestion')}</Text>
+      <Text style={styles.sub}>{t('onboarding.dobSub')}</Text>
       <DatePickerInput
         value={dob}
         onChange={onChange}
-        label="Geburtsdatum wählen"
+        label={t('profile.general.pickDateOfBirth')}
         showQuickDates={false}
       />
     </View>
@@ -241,16 +247,15 @@ function StepBody({
   onHeight: (v: string) => void;
   onWeight: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>📏</Text>
-      <Text style={styles.heading}>Körperdaten</Text>
-      <Text style={styles.sub}>
-        Größe und Gewicht helfen mir, dein Kalorienziel zu berechnen.
-      </Text>
+      <Text style={styles.heading}>{t('onboarding.bodyTitle')}</Text>
+      <Text style={styles.sub}>{t('onboarding.bodySub')}</Text>
       <View style={styles.rowFields}>
         <View style={styles.rowField}>
-          <Text style={styles.fieldLabel}>Größe (cm)</Text>
+          <Text style={styles.fieldLabel}>{t('profile.body.height')}</Text>
           <TextInput
             style={styles.input}
             value={height}
@@ -261,7 +266,7 @@ function StepBody({
           />
         </View>
         <View style={styles.rowField}>
-          <Text style={styles.fieldLabel}>Gewicht (kg)</Text>
+          <Text style={styles.fieldLabel}>{t('profile.body.weight')}</Text>
           <TextInput
             style={styles.input}
             value={weight}
@@ -278,12 +283,6 @@ function StepBody({
 
 // ─── Step 5: Calorie goal ────────────────────────────────────────────────────
 
-const GOAL_HINTS: Record<CalorieGoalType, string> = {
-  lose:     'Moderates Defizit für stetigen Fettabbau',
-  maintain: 'Gewicht halten und fit bleiben',
-  gain:     'Leichter Überschuss für Muskelaufbau',
-};
-
 function StepGoal({
   goal,
   onChange,
@@ -291,13 +290,12 @@ function StepGoal({
   goal: CalorieGoalType;
   onChange: (v: CalorieGoalType) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>🎯</Text>
-      <Text style={styles.heading}>Was ist dein Ziel?</Text>
-      <Text style={styles.sub}>
-        Danach richte ich dein tägliches Kalorienziel aus. Du kannst es später im Profil ändern.
-      </Text>
+      <Text style={styles.heading}>{t('onboarding.goalQuestion')}</Text>
+      <Text style={styles.sub}>{t('onboarding.goalSub')}</Text>
       <View style={styles.activityGrid}>
         {CALORIE_GOAL_TYPES.map((g) => {
           const adj = CALORIE_GOAL_ADJUSTMENT[g];
@@ -311,7 +309,7 @@ function StepGoal({
               <Text style={[styles.activityChipText, goal === g && styles.chipTextActive]}>
                 {CALORIE_GOAL_LABELS[g]} · {adj > 0 ? '+' : adj < 0 ? '−' : '±'}{Math.abs(adj)} kcal
               </Text>
-              <Text style={styles.goalHint}>{GOAL_HINTS[g]}</Text>
+              <Text style={styles.goalHint}>{t(`onboarding.goalHints.${g}`)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -329,13 +327,12 @@ function StepActivity({
   activityLevel: ActivityLevel;
   onChange: (v: ActivityLevel) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View>
       <Text style={styles.emoji}>⚡</Text>
-      <Text style={styles.heading}>Wie aktiv bist du?</Text>
-      <Text style={styles.sub}>
-        Dein Aktivitätslevel bestimmt dein tägliches Schrittziel.
-      </Text>
+      <Text style={styles.heading}>{t('onboarding.activityQuestion')}</Text>
+      <Text style={styles.sub}>{t('onboarding.activitySub')}</Text>
       <View style={styles.activityGrid}>
         {ACTIVITY_LEVELS.map((level) => (
           <TouchableOpacity

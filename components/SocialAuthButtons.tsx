@@ -17,6 +17,7 @@ import {
   signInWithGoogle,
   type SocialAuthResult,
 } from '@/lib/socialAuth';
+import { useTranslation } from '@/lib/i18n';
 
 type Provider = 'google' | 'apple';
 
@@ -27,6 +28,7 @@ export function SocialAuthButtons({
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [busy, setBusy] = useState<Provider | null>(null);
+  const { t } = useTranslation();
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +65,7 @@ export function SocialAuthButtons({
             <View style={styles.googleGlyph}>
               <Text style={styles.googleG}>G</Text>
             </View>
-            <Text style={styles.googleText}>Mit Google fortfahren</Text>
+            <Text style={styles.googleText}>{t('auth.continueWithGoogle')}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -82,7 +84,7 @@ export function SocialAuthButtons({
 
       <View style={styles.dividerRow}>
         <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>oder</Text>
+        <Text style={styles.dividerText}>{t('auth.or')}</Text>
         <View style={styles.dividerLine} />
       </View>
     </View>

@@ -22,6 +22,7 @@ import Purchases, {
   type PurchasesOffering,
   type PurchasesPackage,
 } from 'react-native-purchases';
+import { t } from '@/lib/i18n';
 
 /** Entitlement-Bezeichner aus dem RevenueCat-Dashboard. */
 export const PREMIUM_ENTITLEMENT = 'premium';
@@ -29,7 +30,7 @@ export const PREMIUM_ENTITLEMENT = 'premium';
 /** Wird geworfen, wenn der Nutzer den Kauf abgebrochen hat (kein echter Fehler). */
 export class PurchaseCancelledError extends Error {
   constructor() {
-    super('Kauf abgebrochen.');
+    super(t('paywall.purchaseCancelled'));
     this.name = 'PurchaseCancelledError';
   }
 }
@@ -165,9 +166,9 @@ export async function getCurrentOffering(): Promise<PurchasesOffering | null> {
 export function describePackage(pkg: PurchasesPackage): { title: string; sub: string } {
   switch (pkg.packageType) {
     case 'ANNUAL':
-      return { title: 'Jährlich', sub: `${pkg.product.priceString} / Jahr` };
+      return { title: t('paywall.annual'), sub: t('paywall.perYear', { price: pkg.product.priceString }) };
     case 'MONTHLY':
-      return { title: 'Monatlich', sub: `${pkg.product.priceString} / Monat` };
+      return { title: t('paywall.monthly'), sub: t('paywall.perMonth', { price: pkg.product.priceString }) };
     default:
       return { title: pkg.product.title || pkg.identifier, sub: pkg.product.priceString };
   }

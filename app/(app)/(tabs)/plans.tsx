@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { AiPlanGeneratorModal } from '@/components/AiPlanGeneratorModal';
+import { useTranslation } from '@/lib/i18n';
 import { resolveDayIndexForDate } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
 
@@ -25,6 +26,7 @@ type WorkoutPlan = {
 export default function PlansScreen() {
   const { selectMode } = useLocalSearchParams<{ selectMode?: string }>();
   const isSelectMode = selectMode === 'true';
+  const { t } = useTranslation();
 
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,10 +65,10 @@ export default function PlansScreen() {
   useFocusEffect(useCallback(() => { loadPlans(); }, []));
 
   async function deletePlan(id: string) {
-    Alert.alert('Plan löschen', 'Wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('plans.deleteTitle'), t('plans.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           await supabase.from('plan_exercises').delete().eq('plan_id', id);
@@ -102,17 +104,17 @@ export default function PlansScreen() {
     if (ids.length === 0) return;
 
     Alert.alert(
-      `${ids.length} ${ids.length === 1 ? 'Plan' : 'Pläne'} löschen`,
-      'Wirklich löschen? Das kann nicht rückgängig gemacht werden.',
+      t('plans.deleteManyTitle', { count: ids.length }),
+      t('plans.deleteManyConfirm'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             // plan_exercises/plan_days hängen per ON DELETE CASCADE an workout_plans.
             const { error } = await supabase.from('workout_plans').delete().in('id', ids);
-            if (error) { Alert.alert('Fehler', error.message); return; }
+            if (error) { Alert.alert(t('common.error'), error.message); return; }
             setPlans((prev) => prev.filter((p) => !selectedIds.has(p.id)));
             setSelectedIds(new Set());
             setBulkMode(false);
@@ -169,10 +171,10 @@ export default function PlansScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>
           {isSelectMode
-            ? 'Plan wählen'
+            ? t('plans.choosePlan')
             : bulkMode
-              ? `${selectedIds.size} ausgewählt`
-              : 'Trainingspläne'}
+              ? t('plans.selectedCount', { count: selectedIds.size })
+              : t('plans.title')}
         </Text>
       </View>
 
@@ -180,26 +182,26 @@ export default function PlansScreen() {
         <View style={styles.headerActions}>
           {bulkMode ? (
             <TouchableOpacity style={styles.cancelButton} onPress={toggleBulkMode}>
-              <Text style={styles.cancelButtonText}>Fertig</Text>
+              <Text style={styles.cancelButtonText}>{t('common.done')}</Text>
             </TouchableOpacity>
           ) : (
             <>
               {plans.length > 0 && (
                 <TouchableOpacity style={styles.selectButton} onPress={toggleBulkMode}>
-                  <Text style={styles.selectButtonText}>Auswählen</Text>
+                  <Text style={styles.selectButtonText}>{t('plans.select')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 style={styles.aiButton}
                 onPress={() => setAiModalOpen(true)}
               >
-                <Text style={styles.aiButtonText}>✨ KI-Plan</Text>
+                <Text style={styles.aiButtonText}>{t('plans.aiPlan')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={() => router.push('/create-plan')}
               >
-                <Text style={styles.addButtonText}>+ Neu</Text>
+                <Text style={styles.addButtonText}>{t('plans.new')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -209,7 +211,7 @@ export default function PlansScreen() {
       {bulkMode && (
         <TouchableOpacity style={styles.selectAllRow} onPress={toggleSelectAll}>
           <Text style={styles.selectAllText}>
-            {selectedIds.size === plans.length ? 'Alle abwählen' : 'Alle auswählen'}
+            {selectedIds.size === plans.length ? t('plans.deselectAll') : t('plans.selectAll')}
           </Text>
         </TouchableOpacity>
       )}
@@ -218,20 +220,20 @@ export default function PlansScreen() {
         <ActivityIndicator color="#0a7ea4" style={{ marginTop: 40 }} />
       ) : plans.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Noch keine Pläne vorhanden.</Text>
+          <Text style={styles.emptyText}>{t('plans.empty')}</Text>
           {!isSelectMode && (
             <>
               <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => router.push('/create-plan')}
               >
-                <Text style={styles.createButtonText}>Ersten Plan erstellen</Text>
+                <Text style={styles.createButtonText}>{t('plans.createFirst')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.createButtonAi}
                 onPress={() => setAiModalOpen(true)}
               >
-                <Text style={styles.createButtonText}>✨ Plan mit KI erstellen</Text>
+                <Text style={styles.createButtonText}>{t('plans.createWithAi')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -258,8 +260,8 @@ export default function PlansScreen() {
                   <Text style={styles.planName}>{item.title}</Text>
                   <Text style={styles.planMeta}>
                     {item.day_count > 1
-                      ? `${item.day_count} Tage · ${item.exercise_count} Übungen gesamt`
-                      : `${item.exercise_count} Übung${item.exercise_count !== 1 ? 'en' : ''}`}
+                      ? t('plans.metaDays', { days: item.day_count, count: item.exercise_count })
+                      : t('plans.metaExercises', { count: item.exercise_count })}
                   </Text>
                 </View>
                 {isSelectMode ? (
@@ -289,8 +291,8 @@ export default function PlansScreen() {
           >
             <Text style={styles.bulkDeleteText}>
               {selectedIds.size > 0
-                ? `${selectedIds.size} ${selectedIds.size === 1 ? 'Plan' : 'Pläne'} löschen`
-                : 'Pläne auswählen'}
+                ? t('plans.deleteSelected', { count: selectedIds.size })
+                : t('plans.selectPlans')}
             </Text>
           </TouchableOpacity>
         </View>

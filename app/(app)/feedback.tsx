@@ -20,8 +20,10 @@ import {
 
 import { Toast } from '@/components/Toast';
 import { FEEDBACK_MAX_LENGTH, sendFeedback } from '@/lib/feedback';
+import { useTranslation } from '@/lib/i18n';
 
 export default function FeedbackScreen() {
+  const { t } = useTranslation();
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -36,7 +38,7 @@ export default function FeedbackScreen() {
     setSending(false);
 
     if (res.ok) {
-      setToast({ text: 'Danke für dein Feedback!', type: 'success' });
+      setToast({ text: t('feedback.thanks'), type: 'success' });
       setTimeout(() => router.back(), 1500);
     } else {
       setToast({ text: res.message, type: 'error' });
@@ -49,28 +51,25 @@ export default function FeedbackScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.intro}>
-          Was gefällt dir, was fehlt, was nervt? Jede Rückmeldung hilft uns weiter.
-          Bei Fehlern gerne beschreiben, was du gemacht hast.
-        </Text>
+        <Text style={styles.intro}>{t('feedback.intro')}</Text>
 
-        <Text style={styles.label}>Betreff (optional)</Text>
+        <Text style={styles.label}>{t('feedback.subject')}</Text>
         <TextInput
           style={styles.input}
           value={subject}
           onChangeText={setSubject}
-          placeholder="z. B. Idee, Bug, Lob…"
+          placeholder={t('feedback.subjectPlaceholder')}
           placeholderTextColor="#555"
           maxLength={200}
           returnKeyType="next"
         />
 
-        <Text style={[styles.label, { marginTop: 18 }]}>Dein Feedback</Text>
+        <Text style={[styles.label, { marginTop: 18 }]}>{t('feedback.message')}</Text>
         <TextInput
           style={[styles.input, styles.messageInput]}
           value={message}
           onChangeText={setMessage}
-          placeholder="Schreib uns…"
+          placeholder={t('feedback.messagePlaceholder')}
           placeholderTextColor="#555"
           multiline
           textAlignVertical="top"
@@ -87,13 +86,11 @@ export default function FeedbackScreen() {
           {sending ? (
             <ActivityIndicator color="#121212" />
           ) : (
-            <Text style={styles.buttonText}>Absenden</Text>
+            <Text style={styles.buttonText}>{t('feedback.send')}</Text>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.hint}>
-          Deine E-Mail-Adresse wird mitgesendet, damit wir dir antworten können.
-        </Text>
+        <Text style={styles.hint}>{t('feedback.emailHint')}</Text>
       </ScrollView>
 
       {toast && (

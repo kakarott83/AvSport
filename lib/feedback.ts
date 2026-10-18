@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/services/supabaseClient';
+import { t } from '@/lib/i18n';
 
 export type FeedbackResult =
   | { ok: true; emailed: boolean }
@@ -29,9 +30,9 @@ export async function sendFeedback(input: {
   message: string;
 }): Promise<FeedbackResult> {
   const message = input.message.trim();
-  if (!message) return { ok: false, message: 'Bitte gib dein Feedback ein.' };
+  if (!message) return { ok: false, message: t('domain.feedback.empty') };
   if (message.length > FEEDBACK_MAX_LENGTH) {
-    return { ok: false, message: `Feedback ist zu lang (max. ${FEEDBACK_MAX_LENGTH} Zeichen).` };
+    return { ok: false, message: t('domain.feedback.tooLong', { max: FEEDBACK_MAX_LENGTH }) };
   }
 
   const { data, error } = await supabase.functions.invoke('send-feedback', {
@@ -44,13 +45,13 @@ export async function sendFeedback(input: {
   });
 
   if (error) {
-    return { ok: false, message: 'Senden fehlgeschlagen. Bitte prüfe deine Internetverbindung.' };
+    return { ok: false, message: t('domain.feedback.network') };
   }
   if (data && typeof data === 'object' && 'ok' in data && data.ok) {
     return { ok: true, emailed: !!(data as { emailed?: boolean }).emailed };
   }
   return {
     ok: false,
-    message: (data as { error?: string })?.error ?? 'Senden fehlgeschlagen.',
+    message: (data as { error?: string })?.error ?? t('domain.feedback.failed'),
   };
 }

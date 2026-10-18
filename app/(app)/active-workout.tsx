@@ -14,6 +14,7 @@ import {
 
 import { ExerciseDetailModal } from '@/components/ExerciseDetailModal';
 import { estimateWorkoutKcal } from '@/lib/calorieBurn';
+import { t, useTranslation } from '@/lib/i18n';
 import { playBeep } from '@/services/audioService';
 import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
@@ -153,7 +154,7 @@ function CountdownRing({
         alignItems: 'center', justifyContent: 'center',
       }}>
         <Text style={[styles.ringTime, { color: arcColor }]}>{formatTime(remaining)}</Text>
-        <Text style={styles.ringSub}>{done ? '✓ Fertig!' : 'verbleibend'}</Text>
+        <Text style={styles.ringSub}>{done ? t('workout.ringDone') : t('workout.ringRemaining')}</Text>
       </View>
     </Animated.View>
   );
@@ -166,6 +167,7 @@ function CountdownRing({
 export default function ActiveWorkoutScreen() {
   const { planId, planName, dayId } = useLocalSearchParams<{ planId?: string; planName?: string; dayId?: string }>();
   const hasPlan = !!planId;
+  const { t } = useTranslation();
 
   // ── Plan-Daten ──
   const [planExercises, setPlanExercises] = useState<PlanExercise[]>([]);
@@ -373,9 +375,9 @@ export default function ActiveWorkoutScreen() {
 
   async function handleSaveSet() {
     setInputError('');
-    if (!exercise.trim()) { setInputError('Bitte einen Übungsnamen eingeben.'); return; }
+    if (!exercise.trim()) { setInputError(t('workout.nameRequired')); return; }
     const isDurationEx = countdownFrom > 0;
-    if (!isDurationEx && !reps.trim()) { setInputError('Bitte die Wiederholungen eingeben.'); return; }
+    if (!isDurationEx && !reps.trim()) { setInputError(t('workout.repsRequired')); return; }
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -400,7 +402,7 @@ export default function ActiveWorkoutScreen() {
     });
 
     setSaving(false);
-    if (error) { setInputError(`Speichern fehlgeschlagen: ${error.message}`); return; }
+    if (error) { setInputError(t('workout.saveFailed', { message: error.message })); return; }
 
     burnMarkRef.current = totalElapsed;
     setSessionKcal((k) => k + segmentKcal);
@@ -493,24 +495,24 @@ export default function ActiveWorkoutScreen() {
               {restPhase ? (
                 <Text style={styles.planBannerSub}>
                   {restPhase === 'round'
-                    ? `Rundenpause · Runde ${currentRound}/${totalRounds} startet gleich`
-                    : `Pause · nächste Übung: ${planExercises[planIndex]?.exercise_name ?? ''}`}
+                    ? t('workout.roundRest', { round: currentRound, total: totalRounds })
+                    : t('workout.restNext', { name: planExercises[planIndex]?.exercise_name ?? '' })}
                 </Text>
               ) : isCircuit ? (
                 <Text style={styles.planBannerSub}>
                   {allCircuitDone
-                    ? 'Zirkel abgeschlossen! 🎉'
-                    : `Runde ${currentRound}/${totalRounds} · Übung ${planIndex + 1}/${planExercises.length}`}
+                    ? t('workout.circuitDone')
+                    : t('workout.roundProgress', { round: currentRound, total: totalRounds, n: planIndex + 1, count: planExercises.length })}
                 </Text>
               ) : (
                 <Text style={styles.planBannerSub}>
-                  {`Übung ${planIndex + 1} von ${planExercises.length}`}
+                  {t('workout.exerciseProgress', { n: planIndex + 1, count: planExercises.length })}
                   {currentPlanEx
-                    ? ` · Satz ${setsThisExercise + 1}/${currentPlanEx.sets}` +
+                    ? t('workout.setProgress', { n: setsThisExercise + 1, total: currentPlanEx.sets }) +
                       (currentPlanEx.target_duration
                         ? ` · ${currentPlanEx.target_duration}s`
                         : currentPlanEx.reps
-                        ? ` · ${currentPlanEx.reps} Wdh.`
+                        ? t('workout.repsSuffix', { reps: currentPlanEx.reps })
                         : '')
                     : ''}
                 </Text>
@@ -518,12 +520,12 @@ export default function ActiveWorkoutScreen() {
             </View>
             {!isCircuit && planIndex + 1 < planExercises.length && restPhase === null && (
               <TouchableOpacity style={styles.nextExBtn} onPress={handleNextExercise}>
-                <Text style={styles.nextExText}>Weiter →</Text>
+                <Text style={styles.nextExText}>{t('workout.next')}</Text>
               </TouchableOpacity>
             )}
             {restPhase && (
               <TouchableOpacity style={styles.skipRestBtn} onPress={skipRest}>
-                <Text style={styles.skipRestText}>Überspringen</Text>
+                <Text style={styles.skipRestText}>{t('workout.skip')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -532,14 +534,14 @@ export default function ActiveWorkoutScreen() {
         {/* ── Warm-up (nur vor dem ersten Satz) ── */}
         {dayInfo?.warmup && planIndex === 0 && sets.length === 0 && !restPhase && !isFinished && (
           <View style={styles.noteCard}>
-            <Text style={styles.noteCardLabel}>🔥 Warm-up</Text>
+            <Text style={styles.noteCardLabel}>{t('workout.warmup')}</Text>
             <Text style={styles.noteCardText}>{dayInfo.warmup}</Text>
           </View>
         )}
 
         {/* ── Gesamt-Timer ── */}
         <View style={styles.totalTimerRow}>
-          <Text style={styles.totalTimerLabel}>Gesamt-Zeit</Text>
+          <Text style={styles.totalTimerLabel}>{t('workout.totalTime')}</Text>
           <Text style={styles.totalTimerValue}>
             {formatTime(totalElapsed)}
             {sessionKcal > 0 ? ` · ~${sessionKcal} kcal` : ''}
@@ -556,7 +558,7 @@ export default function ActiveWorkoutScreen() {
               accentColor={restPhase === 'round' ? '#ff9800' : '#4caf50'}
             />
             <Text style={styles.restLabel}>
-              {restPhase === 'round' ? 'Pause zwischen Runden' : 'Pause zwischen Übungen'}
+              {restPhase === 'round' ? t('workout.restBetweenRounds') : t('workout.restBetweenExercises')}
             </Text>
           </View>
         ) : isCountdownMode ? (
@@ -568,16 +570,16 @@ export default function ActiveWorkoutScreen() {
               done={countdownDone}
             />
             {countdownDone && (
-              <Text style={styles.countdownDoneHint}>Zeit abgelaufen – Satz beenden!</Text>
+              <Text style={styles.countdownDoneHint}>{t('workout.timeUp')}</Text>
             )}
           </View>
         ) : (
           /* Normaler Satz-Timer */
           <View style={styles.setTimerCard}>
-            <Text style={styles.setTimerLabel}>Satz-Timer</Text>
+            <Text style={styles.setTimerLabel}>{t('workout.setTimer')}</Text>
             <Text style={styles.setTimerValue}>{formatTime(elapsed)}</Text>
             <Text style={styles.setTimerSub}>
-              {sets.length === 0 ? 'Erster Satz läuft' : `Pause nach Satz ${sets.length}`}
+              {sets.length === 0 ? t('workout.firstSetRunning') : t('workout.restAfterSet', { n: sets.length })}
             </Text>
           </View>
         )}
@@ -586,7 +588,7 @@ export default function ActiveWorkoutScreen() {
         {!restPhase && !allCircuitDone && !isFinished && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              {isCircuit ? `Runde ${currentRound} · Übung ${planIndex + 1}` : `Satz ${sets.length + 1}`}
+              {isCircuit ? t('workout.roundExercise', { round: currentRound, n: planIndex + 1 }) : t('workout.setN', { n: sets.length + 1 })}
             </Text>
 
             {currentPlanEx && (currentPlanEx.description || currentPlanEx.muscle_group || currentPlanEx.equipment_type) && (
@@ -613,23 +615,23 @@ export default function ActiveWorkoutScreen() {
               </View>
             )}
 
-            <Text style={styles.label}>Übungsname</Text>
+            <Text style={styles.label}>{t('workout.exerciseName')}</Text>
             <TextInput
               style={styles.input}
               value={exercise}
               onChangeText={setExercise}
-              placeholder="z.B. Bankdrücken"
+              placeholder={t('workout.exercisePlaceholder')}
               placeholderTextColor="#555"
               returnKeyType="next"
             />
 
             <View style={styles.row}>
               <View style={styles.halfField}>
-                <Text style={styles.label}>Gewicht (kg)</Text>
+                <Text style={styles.label}>{t('workout.weight')}</Text>
                 <TextInput
                   style={styles.input}
                   value={weight}
-                  onChangeText={(t) => setWeight(sanitizeDecimalInput(t))}
+                  onChangeText={(v) => setWeight(sanitizeDecimalInput(v))}
                   placeholder="0"
                   placeholderTextColor="#555"
                   keyboardType="decimal-pad"
@@ -637,7 +639,7 @@ export default function ActiveWorkoutScreen() {
                 />
               </View>
               <View style={styles.halfField}>
-                <Text style={styles.label}>{isCountdownMode ? 'Wdh. (opt.)' : 'Wdh.'}</Text>
+                <Text style={styles.label}>{isCountdownMode ? t('workout.repsOptional') : t('workout.reps')}</Text>
                 <TextInput
                   style={styles.input}
                   value={reps}
@@ -664,7 +666,7 @@ export default function ActiveWorkoutScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.saveButtonText}>
-                {saving ? 'Wird gespeichert…' : 'Satz beenden'}
+                {saving ? t('workout.saving') : t('workout.finishSet')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -674,9 +676,9 @@ export default function ActiveWorkoutScreen() {
         {allCircuitDone && !isFinished && (
           <View style={styles.circuitDoneCard}>
             <Text style={styles.circuitDoneEmoji}>🎉</Text>
-            <Text style={styles.circuitDoneTitle}>Zirkel abgeschlossen!</Text>
+            <Text style={styles.circuitDoneTitle}>{t('workout.circuitDoneTitle')}</Text>
             <Text style={styles.circuitDoneSub}>
-              {totalRounds} {totalRounds === 1 ? 'Runde' : 'Runden'} · {planExercises.length} Übungen
+              {t('workout.circuitDoneSub', { count: totalRounds, exercises: planExercises.length })}
             </Text>
           </View>
         )}
@@ -684,21 +686,21 @@ export default function ActiveWorkoutScreen() {
         {/* ── Summary ── */}
         {isFinished && (
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Workout beendet! 🏁</Text>
+            <Text style={styles.summaryTitle}>{t('workout.finished')}</Text>
             <View style={styles.summaryStats}>
               <View style={styles.summaryStat}>
                 <Text style={styles.summaryStatValue}>{formatTime(totalElapsed)}</Text>
-                <Text style={styles.summaryStatLabel}>Dauer</Text>
+                <Text style={styles.summaryStatLabel}>{t('workout.duration')}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryStat}>
                 <Text style={styles.summaryStatValue}>{sessionKcal}</Text>
-                <Text style={styles.summaryStatLabel}>kcal verbrannt</Text>
+                <Text style={styles.summaryStatLabel}>{t('workout.kcalBurned')}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryStat}>
                 <Text style={styles.summaryStatValue}>{sets.length}</Text>
-                <Text style={styles.summaryStatLabel}>Sätze gesamt</Text>
+                <Text style={styles.summaryStatLabel}>{t('workout.totalSets')}</Text>
               </View>
             </View>
           </View>
@@ -707,7 +709,7 @@ export default function ActiveWorkoutScreen() {
         {/* ── Cool-down ── */}
         {isFinished && dayInfo?.cooldown && (
           <View style={styles.noteCard}>
-            <Text style={styles.noteCardLabel}>🧊 Cool-down</Text>
+            <Text style={styles.noteCardLabel}>{t('workout.cooldown')}</Text>
             <Text style={styles.noteCardText}>{dayInfo.cooldown}</Text>
           </View>
         )}
@@ -715,7 +717,7 @@ export default function ActiveWorkoutScreen() {
         {/* ── Protokoll ── */}
         {sets.length > 0 && (
           <View style={styles.logSection}>
-            <Text style={styles.logTitle}>Protokoll dieser Session</Text>
+            <Text style={styles.logTitle}>{t('workout.log')}</Text>
             {sets.map((set, index) => (
               <View key={set.id} style={styles.logRow}>
                 <View style={styles.logLeft}>
@@ -739,7 +741,7 @@ export default function ActiveWorkoutScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.finishButtonText, allCircuitDone && styles.finishButtonTextDone]}>
-            {allCircuitDone ? '🏁  Training abschließen' : 'Training beenden'}
+            {allCircuitDone ? t('workout.completeTraining') : t('workout.endTraining')}
           </Text>
         </TouchableOpacity>
       </ScrollView>

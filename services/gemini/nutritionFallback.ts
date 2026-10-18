@@ -20,7 +20,7 @@ export async function lookupNutrientsViaLLM(
     'Format: {"calories":number,"protein":number,"carbs":number,"fat":number}. ' +
     'All values must be for the given total portion size (not per 100g).';
 
-  const text = await geminiRequest([{ text: prompt }]);
+  const text = await geminiRequest([{ text: prompt }], "nutrition_fallback");
   if (!text) throw new Error(`[NutritionFallback] Leere Antwort für "${name}"`);
 
   const raw = JSON.parse(text) as Partial<Macros>;

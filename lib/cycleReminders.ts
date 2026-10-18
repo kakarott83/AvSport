@@ -17,6 +17,7 @@ import {
   FERTILE_WINDOW_RADIUS_DAYS,
   type UpcomingEvent,
 } from '@/lib/cycle';
+import { t } from '@/lib/i18n';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -76,8 +77,8 @@ export function planCycleReminders(input: {
         kind: 'period',
         fireDate,
         eventDate: input.nextPeriod.date,
-        title: 'Deine Periode steht bevor',
-        body: 'Voraussichtlich beginnt deine Periode morgen. Denk an deine Vorbereitung. 🩸',
+        title: t('domain.cycleNotification.periodTitle'),
+        body: t('domain.cycleNotification.periodBody'),
       });
     }
   }
@@ -90,8 +91,8 @@ export function planCycleReminders(input: {
         kind: 'fertile',
         fireDate,
         eventDate: windowStart,
-        title: 'Fruchtbares Fenster beginnt bald',
-        body: 'Ab morgen beginnt dein fruchtbares Fenster rund um den Eisprung. 🌱',
+        title: t('domain.cycleNotification.fertileTitle'),
+        body: t('domain.cycleNotification.fertileBody'),
       });
     }
   }
@@ -105,8 +106,8 @@ export function describeCycleReminders(
 ): string {
   const s = sanitizeCycleReminderSettings(settings);
   const parts: string[] = [];
-  if (s.periodEnabled) parts.push('Perioden-Start');
-  if (s.fertileEnabled) parts.push('fruchtbares Fenster');
-  if (parts.length === 0) return 'Keine Zyklus-Erinnerungen aktiv.';
-  return `Erinnerung 1 Tag vorher: ${parts.join(' & ')}.`;
+  if (s.periodEnabled) parts.push(t('domain.cycleNotification.summaryPeriod'));
+  if (s.fertileEnabled) parts.push(t('domain.cycleNotification.summaryFertile'));
+  if (parts.length === 0) return t('domain.cycleNotification.summaryNone');
+  return t('domain.cycleNotification.summary', { parts: parts.join(' & ') });
 }

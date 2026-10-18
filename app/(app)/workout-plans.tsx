@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 
+import { useTranslation } from '@/lib/i18n';
 import { resolveDayIndexForDate } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
 
@@ -22,6 +23,7 @@ type WorkoutPlan = {
 };
 
 export default function WorkoutPlansScreen() {
+  const { t } = useTranslation();
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,10 +57,10 @@ export default function WorkoutPlansScreen() {
   useFocusEffect(useCallback(() => { loadPlans(); }, []));
 
   async function handleDelete(id: string, title: string) {
-    Alert.alert(`"${title}" löschen?`, 'Alle Übungen werden mit entfernt.', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('plans.deleteNamed', { title }), t('plans.deleteNamedHint'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           // ON DELETE CASCADE übernimmt plan_exercises, aber zur Sicherheit:
@@ -104,12 +106,12 @@ export default function WorkoutPlansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.pageTitle}>Trainingspläne</Text>
+        <Text style={styles.pageTitle}>{t('plans.title')}</Text>
         <TouchableOpacity
           style={styles.newButton}
           onPress={() => router.push('/create-plan')}
         >
-          <Text style={styles.newButtonText}>+ Neu</Text>
+          <Text style={styles.newButtonText}>{t('plans.new')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -117,15 +119,13 @@ export default function WorkoutPlansScreen() {
         <ActivityIndicator color="#0a7ea4" style={{ marginTop: 48 }} />
       ) : plans.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Keine Pläne vorhanden</Text>
-          <Text style={styles.emptySubtitle}>
-            Erstelle deinen ersten Trainingsplan.
-          </Text>
+          <Text style={styles.emptyTitle}>{t('plans.noPlans')}</Text>
+          <Text style={styles.emptySubtitle}>{t('plans.createFirstHint')}</Text>
           <TouchableOpacity
             style={styles.createBtn}
             onPress={() => router.push('/create-plan')}
           >
-            <Text style={styles.createBtnText}>Plan erstellen</Text>
+            <Text style={styles.createBtnText}>{t('plans.createPlan')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -142,8 +142,8 @@ export default function WorkoutPlansScreen() {
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   <Text style={styles.cardMeta}>
                     {item.day_count > 1
-                      ? `${item.day_count} Tage · ${item.exercise_count} Übungen gesamt`
-                      : `${item.exercise_count} Übung${item.exercise_count !== 1 ? 'en' : ''}`}
+                      ? t('plans.metaDays', { days: item.day_count, count: item.exercise_count })
+                      : t('plans.metaExercises', { count: item.exercise_count })}
                   </Text>
                 </View>
                 {/* Bearbeiten */}
@@ -163,14 +163,14 @@ export default function WorkoutPlansScreen() {
                   onPress={() => handleStartTraining(item)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.startButtonText}>▶  Training starten</Text>
+                  <Text style={styles.startButtonText}>{t('plans.startTraining')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.deleteButton}
                   onPress={() => handleDelete(item.id, item.title)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.deleteButtonText}>Löschen</Text>
+                  <Text style={styles.deleteButtonText}>{t('common.delete')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

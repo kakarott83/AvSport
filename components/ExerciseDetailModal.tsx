@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { ExerciseAnimation } from '@/components/ExerciseAnimation';
+import { useTranslation } from '@/lib/i18n';
 import { fetchExerciseFrames } from '@/services/exerciseDb/exerciseImage';
 
 export type ExerciseDetailData = {
@@ -44,6 +45,7 @@ export function ExerciseDetailModal({
 }) {
   const exerciseName = exercise?.exercise_name ?? null;
   const exerciseNameEn = exercise?.name_en ?? null;
+  const { t } = useTranslation();
   const [frames, setFrames] = useState<string[]>([]);
   const [framesLoading, setFramesLoading] = useState(false);
 
@@ -115,7 +117,7 @@ export function ExerciseDetailModal({
 
             {!!exercise.instructions?.length && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Ausführung</Text>
+                <Text style={styles.sectionTitle}>{t('exercise.modal.execution')}</Text>
                 {exercise.instructions.map((step, i) => (
                   <Text key={i} style={styles.stepText}>{i + 1}. {step}</Text>
                 ))}
@@ -124,9 +126,9 @@ export function ExerciseDetailModal({
 
             {!!exercise.modifications && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Anpassungen</Text>
-                <Text style={styles.modText}>Anfänger: {exercise.modifications.beginner}</Text>
-                <Text style={styles.modText}>Fortgeschritten: {exercise.modifications.advanced}</Text>
+                <Text style={styles.sectionTitle}>{t('exercise.modal.modifications')}</Text>
+                <Text style={styles.modText}>{t('exercise.modal.beginner')}: {exercise.modifications.beginner}</Text>
+                <Text style={styles.modText}>{t('exercise.modal.advanced')}: {exercise.modifications.advanced}</Text>
               </View>
             )}
 
@@ -138,7 +140,7 @@ export function ExerciseDetailModal({
 
             {!!exercise.tips?.length && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Tipps</Text>
+                <Text style={styles.sectionTitle}>{t('exercise.modal.tips')}</Text>
                 {exercise.tips.map((tip, i) => (
                   <Text key={i} style={styles.tipText}>•  {tip}</Text>
                 ))}

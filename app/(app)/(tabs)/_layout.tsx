@@ -5,10 +5,12 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/lib/i18n';
 
 // Zyklus/Periode ist seit dem Zusammenführen Teil des Kalender-Tabs.
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { t } = useTranslation();
 
   return (
     <Tabs
@@ -21,14 +23,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t('nav.tabs.home'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="plans"
         options={{
-          title: 'Pläne',
+          title: t('nav.tabs.plans'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle" color={color} />,
         }}
       />
@@ -41,21 +43,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Kalender',
+          title: t('nav.tabs.calendar'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
         }}
       />
       <Tabs.Screen
         name="nutrition"
         options={{
-          title: 'Ernährung',
+          title: t('nav.tabs.nutrition'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="fork.knife" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: t('nav.tabs.profile'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
         }}
       />

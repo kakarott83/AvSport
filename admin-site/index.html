@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
   <title>AvoraSport Admin</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <div id="login-screen" class="screen">
+  <!-- ── Login ─────────────────────────────────────────────────────────── -->
+  <div id="login-screen" class="screen center-screen" hidden>
     <form id="login-form" class="login-card">
       <h1>AvoraSport <span class="accent">Admin</span></h1>
       <p class="muted">Login mit deinem AvoraSport-Account (Admin-Freischaltung erforderlich).</p>
@@ -19,6 +22,26 @@
     </form>
   </div>
 
+  <!-- ── Zwei-Faktor ───────────────────────────────────────────────────── -->
+  <div id="mfa-screen" class="screen center-screen" hidden>
+    <form id="mfa-form" class="login-card">
+      <h1>Zwei-Faktor-<span class="accent">Anmeldung</span></h1>
+      <div id="mfa-enroll" hidden>
+        <p class="muted">Einmalig einrichten: Scanne den QR-Code mit einer Authenticator-App
+          (z. B. Google Authenticator, 1Password, Authy) und gib den 6-stelligen Code ein.</p>
+        <img id="mfa-qr" class="mfa-qr" alt="QR-Code für die Authenticator-App" />
+        <p class="muted">Oder manuell: <code id="mfa-secret"></code></p>
+      </div>
+      <p id="mfa-verify-hint" class="muted" hidden>Gib den 6-stelligen Code aus deiner Authenticator-App ein.</p>
+      <input type="text" id="mfa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             placeholder="123456" required autocomplete="one-time-code" />
+      <button type="submit" id="mfa-btn">Bestätigen</button>
+      <button type="button" id="mfa-cancel" class="btn-secondary">Abbrechen</button>
+      <p id="mfa-error" class="error" hidden></p>
+    </form>
+  </div>
+
+  <!-- ── App ───────────────────────────────────────────────────────────── -->
   <div id="app-screen" class="screen" hidden>
     <header>
       <h1>AvoraSport <span class="accent">Admin</span></h1>
@@ -29,14 +52,45 @@
     </header>
 
     <nav class="tabs">
-      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn active" data-tab="usage">Nutzer &amp; Limits</button>
+      <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="defaults">Standard-Limits</button>
       <button class="tab-btn" data-tab="feedback">Feedback</button>
-      <button class="tab-btn" data-tab="users">User</button>
+      <button class="tab-btn" data-tab="audit">Protokoll</button>
     </nav>
 
     <main>
-      <section id="tab-dashboard" class="tab-panel active">
+      <section id="tab-usage" class="tab-panel active">
+        <div id="usage-kpis" class="grid"></div>
+        <div class="toolbar">
+          <input type="search" id="usage-search" placeholder="E-Mail oder User-ID suchen…" />
+          <select id="usage-filter" aria-label="Filter">
+            <option value="all">Alle Nutzer</option>
+            <option value="free">Free</option>
+            <option value="premium">Premium</option>
+            <option value="at_limit">Am Limit</option>
+            <option value="blocked">Gesperrt</option>
+            <option value="override">Mit eigenen Limits</option>
+            <option value="active_today">Heute KI genutzt</option>
+          </select>
+          <select id="usage-sort" aria-label="Sortierung">
+            <option value="used_today">Sortiert: Anfragen heute</option>
+            <option value="used_month">Sortiert: Anfragen Monat</option>
+            <option value="cost_month">Sortiert: Kosten Monat</option>
+            <option value="last_request">Sortiert: Zuletzt KI genutzt</option>
+            <option value="signed_up">Sortiert: Neueste Nutzer</option>
+          </select>
+          <button id="usage-refresh" class="btn-secondary">Aktualisieren</button>
+        </div>
+        <div id="usage-content" class="loading">Lade…</div>
+      </section>
+
+      <section id="tab-dashboard" class="tab-panel">
         <div id="dashboard-content" class="loading">Lade…</div>
+      </section>
+
+      <section id="tab-defaults" class="tab-panel">
+        <div id="defaults-content" class="loading">Lade…</div>
       </section>
 
       <section id="tab-feedback" class="tab-panel">
@@ -46,13 +100,27 @@
         <div id="feedback-content" class="loading">Lade…</div>
       </section>
 
-      <section id="tab-users" class="tab-panel">
-        <div id="users-content" class="loading">Lade…</div>
+      <section id="tab-audit" class="tab-panel">
+        <div id="audit-content" class="loading">Lade…</div>
       </section>
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- ── User-Detail ───────────────────────────────────────────────────── -->
+  <dialog id="user-dialog" class="drawer">
+    <div class="drawer-head">
+      <div>
+        <h2 id="detail-title" class="detail-title">User</h2>
+        <p id="detail-sub" class="muted"></p>
+      </div>
+      <button id="detail-close" class="btn-secondary" aria-label="Schließen">Schließen</button>
+    </div>
+    <div id="detail-content" class="loading">Lade…</div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/supabase-js-2.110.0.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

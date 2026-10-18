@@ -19,6 +19,8 @@
  * profile values are used as a fallback.
  */
 
+import { t } from '@/lib/i18n';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,7 +65,7 @@ export type Regularity = 'unknown' | 'low' | 'medium' | 'high';
 /**
  * Purely calendar-derived estimate of the pregnancy probability for a day.
  * This is the (unreliable) "Kalendermethode" — never a contraceptive method.
- * See RECHNERISCHE_SICHERHEIT_HINWEIS for the wording shown to the user.
+ * See rechnerischeSicherheitHinweis() for the wording shown to the user.
  */
 export type ConceptionRisk = 'low' | 'elevated' | 'high';
 
@@ -150,10 +152,10 @@ export const CYCLE_PHASE_META: Record<
   PhaseKind,
   { label: string; emoji: string; color: string }
 > = {
-  menstruation: { label: 'Menstruation',  emoji: '🩸', color: '#FF5252' },
-  follicular:   { label: 'Follikelphase', emoji: '🌱', color: '#4CAF50' },
-  ovulation:    { label: 'Eisprung',      emoji: '🥚', color: '#FF9100' },
-  luteal:       { label: 'Lutealphase',   emoji: '🌙', color: '#AB47BC' },
+  menstruation: { get label() { return t('cycle.phase.menstruation'); }, emoji: '🩸', color: '#FF5252' },
+  follicular:   { get label() { return t('cycle.phase.follicular'); },   emoji: '🌱', color: '#4CAF50' },
+  ovulation:    { get label() { return t('cycle.phase.ovulation'); },    emoji: '🥚', color: '#FF9100' },
+  luteal:       { get label() { return t('cycle.phase.luteal'); },       emoji: '🌙', color: '#AB47BC' },
 };
 
 /** Outline colour for fertile-window days that are not the ovulation day. */
@@ -164,28 +166,26 @@ export const CONCEPTION_RISK_META: Record<
   { label: string; color: string; hint: string }
 > = {
   low: {
-    label: 'rechnerisch geringes Risiko',
+    get label() { return t('cycle.risk.lowLabel'); },
     color: '#4CAF50',
-    hint: 'Außerhalb des berechneten fruchtbaren Fensters – rein rechnerisch.',
+    get hint() { return t('cycle.risk.lowHint'); },
   },
   elevated: {
-    label: 'erhöhtes Risiko',
+    get label() { return t('cycle.risk.elevatedLabel'); },
     color: '#FF9100',
-    hint: 'Nahe am fruchtbaren Fenster oder Zyklus zu unregelmäßig für eine Aussage.',
+    get hint() { return t('cycle.risk.elevatedHint'); },
   },
   high: {
-    label: 'hohe Wahrscheinlichkeit',
+    get label() { return t('cycle.risk.highLabel'); },
     color: '#FF5252',
-    hint: 'Fruchtbares Fenster rund um den Eisprung.',
+    get hint() { return t('cycle.risk.highHint'); },
   },
 };
 
 /** Standard disclaimer shown wherever the conception risk / fertile window appears. */
-export const RECHNERISCHE_SICHERHEIT_HINWEIS =
-  'Dies ist keine Verhütungsmethode. Die Angaben beruhen ausschließlich auf ' +
-  'einer Kalenderberechnung aus deinen bisherigen Zyklusdaten und bieten nur ' +
-  'eine rechnerische, keine tatsächliche Sicherheit. Der Eisprung kann sich ' +
-  'verschieben. Verlasse dich zur Verhütung nicht darauf.';
+export function rechnerischeSicherheitHinweis(): string {
+  return t('cycle.disclaimer');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date helpers — all UTC, all on 'YYYY-MM-DD' strings (no timezone drift)
@@ -505,21 +505,21 @@ export function getCycleOverview(
 /** e.g. "Lutealphase · Tag 22 von 29". */
 export function describeDayPhase(day: DayPhase): string {
   const meta = CYCLE_PHASE_META[day.phase];
-  return `${meta.emoji} ${meta.label} · Tag ${day.cycleDay} von ${day.cycleLength}`;
+  return `${meta.emoji} ${meta.label} · ${t('cycle.dayOf', { day: day.cycleDay, length: day.cycleLength })}`;
 }
 
 /** e.g. "in 5 Tagen", "morgen", "heute", "vor 2 Tagen". */
 export function describeInDays(inDays: number): string {
-  if (inDays === 0) return 'heute';
-  if (inDays === 1) return 'morgen';
-  if (inDays === -1) return 'gestern';
-  if (inDays > 1) return `in ${inDays} Tagen`;
-  return `vor ${Math.abs(inDays)} Tagen`;
+  if (inDays === 0) return t('cycle.relative.today');
+  if (inDays === 1) return t('cycle.relative.tomorrow');
+  if (inDays === -1) return t('cycle.relative.yesterday');
+  if (inDays > 1) return t('cycle.relative.inDays', { count: inDays });
+  return t('cycle.relative.daysAgo', { count: Math.abs(inDays) });
 }
 
 export const REGULARITY_LABEL: Record<Regularity, string> = {
-  unknown: 'noch nicht genug Daten',
-  low: 'unregelmäßig',
-  medium: 'leicht schwankend',
-  high: 'regelmäßig',
+  get unknown() { return t('cycle.regularity.unknown'); },
+  get low() { return t('cycle.regularity.low'); },
+  get medium() { return t('cycle.regularity.medium'); },
+  get high() { return t('cycle.regularity.high'); },
 };

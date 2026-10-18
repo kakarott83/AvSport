@@ -13,6 +13,7 @@ import { StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FEEDBACK_BUTTON_ENABLED } from '@/lib/feedback';
+import { useTranslation } from '@/lib/i18n';
 
 /** Screens, auf denen der Button stören würde. */
 const HIDDEN_ON = ['/feedback', '/paywall', '/active-workout'];
@@ -23,6 +24,7 @@ let hiddenForSession = false;
 export function FeedbackFab() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [hidden, setHidden] = useState(hiddenForSession);
 
   if (!FEEDBACK_BUTTON_ENABLED || hidden || HIDDEN_ON.some((p) => pathname.startsWith(p))) return null;
@@ -34,8 +36,8 @@ export function FeedbackFab() {
       onLongPress={() => { hiddenForSession = true; setHidden(true); }}
       activeOpacity={0.8}
       accessibilityRole="button"
-      accessibilityLabel="Feedback geben"
-      accessibilityHint="Lange drücken blendet den Button bis zum nächsten App-Start aus"
+      accessibilityLabel={t('profile.menu.feedback')}
+      accessibilityHint={t('feedback.fabHint')}
     >
       <MaterialIcons name="chat-bubble-outline" size={18} color="#00E5FF" />
     </TouchableOpacity>

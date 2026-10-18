@@ -9,7 +9,10 @@ import type { GeneratedDay, GeneratedExercise } from '@/types/workout';
 
 jest.mock('@/services/supabaseClient', () => ({
   supabase: {
-    auth: { getUser: jest.fn().mockResolvedValue({ data: { user: { id: 'test-user' } } }) },
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user: { id: 'test-user' } } }),
+      getSession: jest.fn(),
+    },
     from: jest.fn().mockReturnValue({ insert: jest.fn().mockResolvedValue({ error: null }) }),
   },
 }));
@@ -57,21 +60,25 @@ function mockFetchOnce(json: unknown) {
   (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue({
     ok: true,
     json: async () => ({
-      candidates: [{ content: { parts: [{ text: JSON.stringify(json) }] } }],
+      ok: true, text: JSON.stringify(json),
     }),
   });
 }
 
 beforeAll(() => {
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY = 'test-key';
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
 });
 
 afterAll(() => {
-  delete process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  delete process.env.EXPO_PUBLIC_SUPABASE_URL;
 });
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // KI-Aufrufe laufen über den ai-proxy und brauchen eine Session.
+  (jest.requireMock('@/services/supabaseClient').supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'test-jwt' } },
+  });
 });
 
 describe('enrichDaysWithDetails — KI-Erfolg', () => {
@@ -156,7 +163,7 @@ describe('enrichDaysWithDetails — Vollständiger Fallback', () => {
   it('generiert lokale Details bei ungültigem JSON', async () => {
     (globalThis.fetch as jest.Mock) = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: 'kein json' }] } }] }),
+      json: async () => ({ ok: true, text: 'kein json' }),
     });
 
     const days = await enrichDaysWithDetails(makeDays());

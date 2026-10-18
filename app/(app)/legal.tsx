@@ -6,127 +6,67 @@
  * stellt klar, dass die Berechnungen nur eine rechnerische, keine tatsächliche
  * Sicherheit bieten (keine Verhütungsmethode).
  *
+ * Texte: lib/i18n/translations/legal.ts (Deutsch ist maßgeblich, Englisch ist
+ * eine Übersetzung).
+ *
  * TODO(Betreiber): Die Platzhalter im Abschnitt "Impressum" mit den echten
  * Anbieter-Angaben nach § 5 DDG / § 18 MStV ersetzen.
  */
 
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { RECHNERISCHE_SICHERHEIT_HINWEIS } from '@/lib/cycle';
+import { rechnerischeSicherheitHinweis } from '@/lib/cycle';
+import { useTranslation } from '@/lib/i18n';
 
 export default function LegalScreen() {
+  const { t } = useTranslation();
+  const translationNote = t('legal.translationNote');
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
+      {translationNote ? <Text style={styles.hint}>{translationNote}</Text> : null}
+
       {/* ── Impressum ── */}
-      <Section title="Impressum">
-        <Text style={styles.body}>Angaben gemäß § 5 DDG:</Text>
-        <Text style={styles.placeholder}>
-          [Name des Anbieters]{'\n'}
-          [Straße und Hausnummer]{'\n'}
-          [PLZ und Ort]{'\n'}
-          [Land]
-        </Text>
-        <Text style={styles.body}>Kontakt:</Text>
-        <Text style={styles.placeholder}>
-          E-Mail: [kontakt@example.com]{'\n'}
-          Telefon: [optional]
-        </Text>
-        <Text style={styles.hint}>
-          Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV: [Name, Anschrift].
-        </Text>
+      <Section title={t('legal.imprint.title')}>
+        <Text style={styles.body}>{t('legal.imprint.info')}</Text>
+        <Text style={styles.placeholder}>{t('legal.imprint.address')}</Text>
+        <Text style={styles.body}>{t('legal.imprint.contact')}</Text>
+        <Text style={styles.placeholder}>{t('legal.imprint.contactDetails')}</Text>
+        <Text style={styles.hint}>{t('legal.imprint.responsible')}</Text>
       </Section>
 
       {/* ── Nutzungsbedingungen: errechnete Werte / Gewährleistung / Haftung ── */}
-      <Section title="Nutzungsbedingungen (AGB)">
-        <Text style={styles.subTitle}>1. Errechnete Werte</Text>
-        <Text style={styles.body}>
-          Alle in AvoraSport angezeigten Werte werden automatisch errechnet oder
-          geschätzt; es handelt sich nicht um Messwerte. Dazu gehören insbesondere:
-        </Text>
-        <Text style={styles.body}>
-          • Zyklusphasen, Periodenprognosen, fruchtbares Fenster, Eisprung und die
-          Einschätzung des Empfängnisrisikos{'\n'}
-          • Kalorien- und Nährwerte von Mahlzeiten (KI-Erkennung aus Fotos und
-          Beschreibungen sowie Lebensmitteldatenbanken){'\n'}
-          • Kalorienziel, Wasserziel und Kalorienverbrauch aus Training und Schritten{'\n'}
-          • KI-erstellte Trainingspläne und Übungsbeschreibungen
-        </Text>
-        <Text style={styles.body}>
-          Die Berechnungen beruhen auf Durchschnittswerten, deinen eigenen Angaben
-          und Daten Dritter (z. B. Apple Health, Health Connect, USDA FoodData
-          Central). Sie können erheblich von den tatsächlichen Werten abweichen.
-        </Text>
+      <Section title={t('legal.terms.title')}>
+        <Text style={styles.subTitle}>{t('legal.terms.calculatedTitle')}</Text>
+        <Text style={styles.body}>{t('legal.terms.calculatedIntro')}</Text>
+        <Text style={styles.body}>{t('legal.terms.calculatedList')}</Text>
+        <Text style={styles.body}>{t('legal.terms.calculatedBasis')}</Text>
 
-        <Text style={styles.subTitle}>2. Keine Gewähr</Text>
-        <Text style={styles.body}>
-          Der Anbieter übernimmt keine Gewähr für die Richtigkeit, Vollständigkeit
-          und Aktualität der errechneten Werte. Entscheidungen über Gesundheit,
-          Ernährung, Training, Verhütung oder Kinderwunsch solltest du nicht allein
-          auf diese Werte stützen.
-        </Text>
+        <Text style={styles.subTitle}>{t('legal.terms.warrantyTitle')}</Text>
+        <Text style={styles.body}>{t('legal.terms.warranty')}</Text>
 
-        <Text style={styles.subTitle}>3. Haftung</Text>
-        <Text style={styles.body}>
-          Der Anbieter haftet unbeschränkt bei Vorsatz und grober Fahrlässigkeit,
-          bei Verletzung des Lebens, des Körpers oder der Gesundheit sowie nach dem
-          Produkthaftungsgesetz. Bei leicht fahrlässiger Verletzung wesentlicher
-          Vertragspflichten ist die Haftung auf den vorhersehbaren, vertragstypischen
-          Schaden begrenzt. Im Übrigen ist die Haftung für Schäden, die auf der
-          Verwendung errechneter Werte beruhen, ausgeschlossen.
-        </Text>
-        <Text style={styles.hint}>Stand: Oktober 2026</Text>
+        <Text style={styles.subTitle}>{t('legal.terms.liabilityTitle')}</Text>
+        <Text style={styles.body}>{t('legal.terms.liability')}</Text>
+        <Text style={styles.hint}>{t('legal.terms.asOf')}</Text>
       </Section>
 
       {/* ── Gesundheitshinweis Zyklus-Tracking ── */}
-      <Section title="Hinweis zum Zyklus- und Perioden-Tracking">
-        <Text style={styles.body}>{RECHNERISCHE_SICHERHEIT_HINWEIS}</Text>
-        <Text style={styles.body}>
-          Die angezeigten Phasen (Menstruation, Follikelphase, Eisprung,
-          Lutealphase), das fruchtbare Fenster und die Einschätzung
-          {' '}{'„'}rechnerisch geringes Risiko{'“'} beruhen auf der sogenannten
-          Kalendermethode. Der
-          errechnete Eisprung 14 Tage nach Beginn der Blutung ist ein Mittelwert;
-          der tatsächliche Eisprung kann um mehrere Tage abweichen – besonders bei
-          unregelmäßigem Zyklus, nach Absetzen hormoneller Verhütung, bei Stress,
-          Krankheit, Reisen, Stillzeit oder in den Wechseljahren.
-        </Text>
-        <Text style={styles.body}>
-          Eine Tageskennzeichnung als {'„'}unbedenklich{'“'} bedeutet
-          ausschließlich eine rechnerisch geringere Wahrscheinlichkeit – nicht
-          Sicherheit. Zur
-          Verhütung oder bei Kinderwunsch ersetzt die App keine ärztliche
-          Beratung und keine anerkannte Verhütungs- bzw. Zyklusmethode.
-        </Text>
+      <Section title={t('legal.cycle.title')}>
+        <Text style={styles.body}>{rechnerischeSicherheitHinweis()}</Text>
+        <Text style={styles.body}>{t('legal.cycle.method')}</Text>
+        <Text style={styles.body}>{t('legal.cycle.safeDays')}</Text>
       </Section>
 
       {/* ── Abonnement ── */}
-      <Section title="AvoraSport Premium (Abonnement)">
-        <Text style={styles.body}>
-          AvoraSport Premium wird als automatisch verlängerndes Abonnement angeboten
-          (monatlich oder jährlich). Der konkrete Preis wird vor dem Kauf im
-          App Store bzw. Google Play angezeigt.
-        </Text>
-        <Text style={styles.body}>
-          Die Zahlung wird bei Kaufbestätigung über deinen App-Store-Account abgebucht.
-          Das Abo verlängert sich automatisch um den gewählten Zeitraum, sofern es nicht
-          spätestens 24 Stunden vor Ablauf der laufenden Periode gekündigt wird. Die
-          Verwaltung und Kündigung des Abos erfolgt in den Account-Einstellungen des
-          jeweiligen Stores.
-        </Text>
-        <Text style={styles.body}>
-          Es gelten die Standard-Nutzungsbedingungen für Apple-Media-Dienste (EULA)
-          bzw. die Google-Play-Nutzungsbedingungen sowie die Datenschutzhinweise dieser App.
-        </Text>
+      <Section title={t('legal.subscription.title')}>
+        <Text style={styles.body}>{t('legal.subscription.offer')}</Text>
+        <Text style={styles.body}>{t('legal.subscription.billing')}</Text>
+        <Text style={styles.body}>{t('legal.subscription.terms')}</Text>
       </Section>
 
       {/* ── Allgemein ── */}
-      <Section title="Allgemeiner Hinweis">
-        <Text style={styles.body}>
-          AvoraSport dient der persönlichen Information rund um Training,
-          Ernährung und Zyklus. Die Inhalte stellen keine medizinische Beratung,
-          Diagnose oder Therapieempfehlung dar. Bei gesundheitlichen Fragen wende
-          dich an eine Ärztin oder einen Arzt.
-        </Text>
+      <Section title={t('legal.general.title')}>
+        <Text style={styles.body}>{t('legal.general.body')}</Text>
       </Section>
     </ScrollView>
   );

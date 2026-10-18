@@ -41,6 +41,7 @@ import {
   calculateDailyStepGoal,
   DEFAULT_ACTIVITY_LEVEL,
 } from '@/lib/stepGoal';
+import { formatNumber, LANGUAGE_NAMES, LANGUAGES, useTranslation, type Language } from '@/lib/i18n';
 import { calculateWaterGoal } from '@/lib/waterGoal';
 import { describeReminderSchedule, sanitizeWaterReminderSettings } from '@/lib/waterReminders';
 import { syncWaterReminders } from '@/services/notifications/waterReminderService';
@@ -108,6 +109,7 @@ const EMPTY: ProfileForm = {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { t, language, setLanguage } = useTranslation();
   const [form, setForm]       = useState<ProfileForm>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -193,40 +195,39 @@ export default function ProfileScreen() {
         const availability = await checkAvailability();
         if (!availability.available) {
           Alert.alert(
-            'Apple Health nicht verfügbar',
+            t('profile.health.appleUnavailableTitle'),
             availability.reason === 'module_not_found'
-              ? 'Diese App-Version unterstützt Apple Health noch nicht. Bitte aktualisiere die App.'
-              : 'Apple Health ist auf diesem Gerät nicht verfügbar.',
+              ? t('profile.health.appleModuleMissing')
+              : t('profile.health.appleUnavailable'),
           );
           return;
         }
         const granted = await requestPermissions();
         if (!granted) {
           Alert.alert(
-            'Berechtigung fehlt',
-            'Bitte erlaube AvoraSport den Zugriff auf Schritte und Aktivitätskalorien unter ' +
-            'Einstellungen › Health › Datenzugriff & Geräte › AvoraSport.',
+            t('profile.health.permissionMissingTitle'),
+            t('profile.health.applePermissionMissing'),
           );
           return;
         }
       } catch (e) {
         console.error('[profile] handleToggleHealth (iOS) error:', e);
-        Alert.alert('Fehler', 'Apple Health konnte nicht verbunden werden. Bitte versuche es erneut.');
+        Alert.alert(t('common.error'), t('profile.health.appleConnectFailed'));
         return;
       }
     } else if (enabled) {
       if (!Device.isDevice) {
         Alert.alert(
-          'Simulator erkannt',
-          'Health Connect kann nur auf einem echten Android-Gerät aktiviert werden.',
+          t('profile.health.simulatorTitle'),
+          t('profile.health.simulator'),
         );
         return;
       }
 
       if (!isNativeReady) {
         Alert.alert(
-          'Bitte einen Moment',
-          'Health Connect wird gerade initialisiert. Bitte versuche es in wenigen Sekunden erneut.',
+          t('profile.health.waitTitle'),
+          t('profile.health.wait'),
         );
         return;
       }
@@ -237,16 +238,15 @@ export default function ProfileScreen() {
         if (!availability.available) {
           if (availability.reason === 'sdk_unavailable') {
             Alert.alert(
-              'Health Connect nicht installiert',
-              'Für diese Funktion wird die kostenlose App „Health Connect" von Google benötigt. ' +
-              'Bitte installiere sie über den Google Play Store und versuche es erneut.',
+              t('profile.health.notInstalledTitle'),
+              t('profile.health.notInstalled'),
             );
           } else if (availability.reason === 'sdk_update_required') {
-            Alert.alert('Health Connect veraltet', 'Bitte aktualisiere die Health Connect App im Google Play Store.');
+            Alert.alert(t('profile.health.outdatedTitle'), t('profile.health.outdated'));
           } else if (availability.reason === 'not_android') {
-            Alert.alert('Nicht unterstützt', 'Health Connect ist nur auf Android verfügbar.');
+            Alert.alert(t('profile.health.notSupportedTitle'), t('profile.health.notSupported'));
           } else {
-            Alert.alert('Fehler', 'Health Connect konnte nicht gestartet werden. Bitte versuche es erneut.');
+            Alert.alert(t('common.error'), t('profile.health.startFailed'));
           }
           return;
         }
@@ -254,11 +254,11 @@ export default function ProfileScreen() {
         const granted = await requestPermissions();
         if (!granted) {
           Alert.alert(
-            'Berechtigung verweigert',
-            'Bitte erlaube den Zugriff auf Schritt- und Kaloriendaten in den Health Connect Einstellungen.',
+            t('profile.health.deniedTitle'),
+            t('profile.health.denied'),
             [
-              { text: 'Abbrechen', style: 'cancel' },
-              { text: 'Health Connect öffnen', onPress: () => openHealthConnectSettings() },
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('profile.health.openHealthConnect'), onPress: () => openHealthConnectSettings() },
             ],
           );
           return;
@@ -267,17 +267,16 @@ export default function ProfileScreen() {
         const fitConnected = await checkGoogleFitConnected();
         if (!fitConnected) {
           Alert.alert(
-            'Google Fit erforderlich',
-            'AvoraSport liest Schritt- und Aktivitätsdaten ausschließlich über Google Fit. ' +
-            'Bitte installiere Google Fit und verbinde es mit Health Connect, damit deine Daten synchronisiert werden können.',
+            t('profile.health.googleFitTitle'),
+            t('profile.health.googleFit'),
             [
-              { text: 'Verstanden' },
+              { text: t('common.understood') },
             ],
           );
         }
       } catch (e) {
         console.error('[profile] handleToggleHealth error:', e);
-        Alert.alert('Fehler', 'Health Connect konnte nicht aktiviert werden. Bitte versuche es erneut.');
+        Alert.alert(t('common.error'), t('profile.health.enableFailed'));
         return;
       }
     }
@@ -294,8 +293,8 @@ export default function ProfileScreen() {
       console.error('[profile] sync_health update failed:', dbError.message);
       patch('sync_health', !enabled);
       Alert.alert(
-        'Speichern fehlgeschlagen',
-        'Die Einstellung konnte nicht gespeichert werden. Bitte prüfe deine Internetverbindung und versuche es erneut.',
+        t('profile.health.saveFailedTitle'),
+        t('profile.health.saveFailed'),
       );
       return;
     }
@@ -326,6 +325,13 @@ export default function ProfileScreen() {
         intervalHours: f.water_reminder_interval_hours,
       }),
     });
+  }
+
+  function onLanguageChange(lang: Language) {
+    if (lang === language) return;
+    setLanguage(lang);
+    // Geplante Benachrichtigungen enthalten fertigen Text → in neuer Sprache neu planen.
+    resyncWaterReminders(form);
   }
 
   function onWaterReminderToggle(enabled: boolean) {
@@ -406,7 +412,7 @@ export default function ProfileScreen() {
     setSaving(false);
     if (dbErr) { setError(dbErr.message); return; }
     resyncWaterReminders(form);
-    setToast('Profil gespeichert!');
+    setToast(t('profile.saved'));
   }
 
   async function handleLogout() {
@@ -427,9 +433,9 @@ export default function ProfileScreen() {
     try {
       const ok = await restorePurchases();
       await refreshPremium();
-      setToast(ok ? 'Premium wiederhergestellt!' : 'Kein aktives Abo gefunden.');
+      setToast(ok ? t('profile.premium.restored') : t('profile.premium.noSubscription'));
     } catch {
-      setToast('Wiederherstellung fehlgeschlagen.');
+      setToast(t('profile.premium.restoreFailed'));
     } finally {
       setRestoring(false);
     }
@@ -456,20 +462,39 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
 
+        {/* ── Sprache ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('profile.language.title')}</Text>
+          <Text style={styles.hint}>{t('profile.language.hint')}</Text>
+          <View style={[styles.chipRow, { marginBottom: 0 }]}>
+            {LANGUAGES.map((lang) => (
+              <TouchableOpacity
+                key={lang}
+                style={[styles.chip, language === lang && styles.chipActive]}
+                onPress={() => onLanguageChange(lang)}
+                activeOpacity={0.8}>
+                <Text style={[styles.chipText, language === lang && styles.chipTextActive]}>
+                  {LANGUAGE_NAMES[lang]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* ── Allgemein ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Allgemein</Text>
+          <Text style={styles.cardTitle}>{t('profile.general.title')}</Text>
 
-          <Text style={styles.label}>Anzeigename</Text>
+          <Text style={styles.label}>{t('profile.general.displayName')}</Text>
           <TextInput
             style={styles.input}
             value={form.display_name}
             onChangeText={(v) => patch('display_name', v)}
-            placeholder="Wie soll ich dich nennen?"
+            placeholder={t('profile.general.displayNamePlaceholder')}
             placeholderTextColor="#555"
           />
 
-          <Text style={styles.label}>Geschlecht</Text>
+          <Text style={styles.label}>{t('profile.general.gender')}</Text>
           <View style={styles.chipRow}>
             {(['male', 'female'] as const).map((g) => (
               <TouchableOpacity
@@ -478,27 +503,27 @@ export default function ProfileScreen() {
                 onPress={() => patch('gender', g)}
                 activeOpacity={0.8}>
                 <Text style={[styles.chipText, form.gender === g && styles.chipTextActive]}>
-                  {g === 'male' ? 'Männlich' : 'Weiblich'}
+                  {g === 'male' ? t('profile.general.male') : t('profile.general.female')}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text style={styles.label}>Geburtsdatum</Text>
+          <Text style={styles.label}>{t('profile.general.dateOfBirth')}</Text>
           <DatePickerInput
             value={form.date_of_birth}
             onChange={(v) => patch('date_of_birth', v)}
-            label="Geburtsdatum wählen"
+            label={t('profile.general.pickDateOfBirth')}
             showQuickDates={false}
           />
         </View>
 
         {/* ── Körperdaten ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Körperdaten</Text>
+          <Text style={styles.cardTitle}>{t('profile.body.title')}</Text>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <Text style={styles.label}>Größe (cm)</Text>
+              <Text style={styles.label}>{t('profile.body.height')}</Text>
               <TextInput
                 style={styles.input}
                 value={form.height_cm}
@@ -509,12 +534,12 @@ export default function ProfileScreen() {
               />
             </View>
             <View style={styles.rowField}>
-              <Text style={styles.label}>Gewicht (kg)</Text>
+              <Text style={styles.label}>{t('profile.body.weight')}</Text>
               <TextInput
                 style={styles.input}
                 value={form.weight_kg}
                 onChangeText={(v) => patch('weight_kg', sanitizeDecimalInput(v))}
-                placeholder="75,0"
+                placeholder={t('profile.body.weightPlaceholder')}
                 placeholderTextColor="#555"
                 keyboardType="decimal-pad"
               />
@@ -524,11 +549,9 @@ export default function ProfileScreen() {
 
         {/* ── Kalorien-Ziel ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Kalorien-Ziel</Text>
-          <Text style={styles.hint}>
-            Wähle dein Ziel – der Tagesbedarf wird automatisch angepasst.
-          </Text>
-          <Text style={styles.label}>Mein Ziel</Text>
+          <Text style={styles.cardTitle}>{t('profile.calorieGoal.title')}</Text>
+          <Text style={styles.hint}>{t('profile.calorieGoal.hint')}</Text>
+          <Text style={styles.label}>{t('profile.calorieGoal.myGoal')}</Text>
           <View style={styles.chipRow}>
             {CALORIE_GOAL_TYPES.map((goal) => (
               <TouchableOpacity
@@ -546,10 +569,8 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.label}>Zusätzlicher Offset (kcal/Tag)</Text>
-          <Text style={styles.hint}>
-            Optionale Feinjustierung zusätzlich zum Ziel, z.B. -100 oder +150.
-          </Text>
+          <Text style={styles.label}>{t('profile.calorieGoal.offset')}</Text>
+          <Text style={styles.hint}>{t('profile.calorieGoal.offsetHint')}</Text>
           <TextInput
             style={styles.input}
             value={form.manual_calorie_offset}
@@ -562,28 +583,24 @@ export default function ProfileScreen() {
 
         {/* ── Ziele & Performance ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Ziele & Performance</Text>
+          <Text style={styles.cardTitle}>{t('profile.performance.title')}</Text>
 
-          <Text style={styles.label}>Protein-Ziel (g pro kg Körpergewicht)</Text>
-          <Text style={styles.hint}>
-            Empfohlen: 1.6–2.2 g/kg beim Muskelaufbau, 1.2–1.6 g/kg beim Abnehmen.
-          </Text>
+          <Text style={styles.label}>{t('profile.performance.protein')}</Text>
+          <Text style={styles.hint}>{t('profile.performance.proteinHint')}</Text>
           <TextInput
             style={styles.input}
             value={form.protein_per_kg}
             onChangeText={(v) => patch('protein_per_kg', sanitizeDecimalInput(v))}
-            placeholder="2,0"
+            placeholder={t('profile.performance.proteinPlaceholder')}
             placeholderTextColor="#555"
             keyboardType="decimal-pad"
           />
 
-          <Text style={styles.label}>Trainings-Kalorien einrechnen</Text>
-          <Text style={styles.hint}>
-            Wenn aktiv, werden heute verbrannte Trainings-kcal zum Tageslimit addiert.
-          </Text>
+          <Text style={styles.label}>{t('profile.performance.trainingCalories')}</Text>
+          <Text style={styles.hint}>{t('profile.performance.trainingCaloriesHint')}</Text>
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>
-              {form.auto_adjust_calories ? 'Aktiviert' : 'Deaktiviert'}
+              {form.auto_adjust_calories ? t('common.enabled') : t('common.disabled')}
             </Text>
             <Switch
               value={form.auto_adjust_calories}
@@ -596,17 +613,16 @@ export default function ProfileScreen() {
 
         {/* ── Schritt-Ziel ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Schritt-Ziel</Text>
+          <Text style={styles.cardTitle}>{t('profile.steps.title')}</Text>
           <Text style={styles.hint}>
-            Wähle dein Aktivitätslevel, um ein passendes Tagesziel zu berechnen.
-            Das aktuelle Ziel liegt bei{' '}
+            {t('profile.steps.hintBefore')}{' '}
             <Text style={{ color: '#FF9100', fontWeight: '700' }}>
-              {calculateDailyStepGoal(form.activity_level, form.manual_step_goal > 0 ? form.manual_step_goal : null).toLocaleString('de-DE')}
+              {formatNumber(calculateDailyStepGoal(form.activity_level, form.manual_step_goal > 0 ? form.manual_step_goal : null))}
             </Text>{' '}
-            Schritten/Tag.
+            {t('profile.steps.hintAfter')}
           </Text>
 
-          <Text style={styles.label}>Aktivitätslevel</Text>
+          <Text style={styles.label}>{t('profile.steps.activityLevel')}</Text>
           <View style={styles.chipRow}>
             {ACTIVITY_LEVELS.map((level) => (
               <TouchableOpacity
@@ -621,13 +637,11 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <Text style={styles.label}>Manuelles Ziel (0 = automatisch)</Text>
-          <Text style={styles.hint}>
-            Überschreibe die Berechnung mit einem festen Wert. 0 = Automatik bleibt aktiv.
-          </Text>
+          <Text style={styles.label}>{t('profile.steps.manualGoal')}</Text>
+          <Text style={styles.hint}>{t('profile.steps.manualGoalHint')}</Text>
           <Stepper
             value={form.manual_step_goal}
-            unit="Schritte"
+            unit={t('common.units.steps')}
             step={STEPPER_BOUNDS.manual_step_goal.step}
             min={STEPPER_BOUNDS.manual_step_goal.min}
             max={STEPPER_BOUNDS.manual_step_goal.max}
@@ -639,19 +653,17 @@ export default function ProfileScreen() {
 
         {/* ── Wasser ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Wasser</Text>
+          <Text style={styles.cardTitle}>{t('profile.water.title')}</Text>
           <Text style={styles.hint}>
-            Dein Tagesbedarf wird aus Gewicht und Aktivitätslevel geschätzt. Er liegt aktuell bei{' '}
+            {t('profile.water.hintBefore')}{' '}
             <Text style={{ color: '#29B6F6', fontWeight: '700' }}>
-              {waterGoal.goalMl.toLocaleString('de-DE')} ml
+              {formatNumber(waterGoal.goalMl)} ml
             </Text>{' '}
-            {waterGoal.source === 'user' ? '(manuell festgelegt).' : '(automatisch berechnet).'}
+            {waterGoal.source === 'user' ? t('profile.water.sourceUser') : t('profile.water.sourceAuto')}
           </Text>
 
-          <Text style={styles.label}>Manuelles Ziel (0 = automatisch)</Text>
-          <Text style={styles.hint}>
-            Überschreibe die Schätzung mit einem festen Wert. 0 = Automatik bleibt aktiv.
-          </Text>
+          <Text style={styles.label}>{t('profile.steps.manualGoal')}</Text>
+          <Text style={styles.hint}>{t('profile.water.manualGoalHint')}</Text>
           <Stepper
             value={form.water_goal_ml}
             unit="ml"
@@ -667,14 +679,14 @@ export default function ProfileScreen() {
 
           <View style={[styles.toggleRow, { marginBottom: form.water_reminder_enabled ? 20 : 0 }]}>
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.toggleLabel}>💧 Trink-Erinnerungen</Text>
+              <Text style={styles.toggleLabel}>{t('profile.water.reminders')}</Text>
               <Text style={styles.toggleSub}>
                 {form.water_reminder_enabled ? describeReminderSchedule({
                   enabled: true,
                   startHour: form.water_reminder_start_hour,
                   endHour: form.water_reminder_end_hour,
                   intervalHours: form.water_reminder_interval_hours,
-                }) : 'Inaktiv'}
+                }) : t('common.inactive')}
               </Text>
             </View>
             <Switch
@@ -687,10 +699,10 @@ export default function ProfileScreen() {
 
           {form.water_reminder_enabled && (
             <>
-              <Text style={styles.label}>Erste Erinnerung (Uhrzeit)</Text>
+              <Text style={styles.label}>{t('profile.water.firstReminder')}</Text>
               <Stepper
                 value={form.water_reminder_start_hour}
-                unit="Uhr"
+                unit={t('common.units.oClock')}
                 min={STEPPER_BOUNDS.water_reminder_start_hour.min}
                 max={STEPPER_BOUNDS.water_reminder_start_hour.max}
                 onDecrement={() => stepperChange('water_reminder_start_hour', -1, STEPPER_BOUNDS.water_reminder_start_hour.min, STEPPER_BOUNDS.water_reminder_start_hour.max)}
@@ -700,10 +712,10 @@ export default function ProfileScreen() {
 
               <View style={styles.separator} />
 
-              <Text style={styles.label}>Letzte Erinnerung (Uhrzeit)</Text>
+              <Text style={styles.label}>{t('profile.water.lastReminder')}</Text>
               <Stepper
                 value={form.water_reminder_end_hour}
-                unit="Uhr"
+                unit={t('common.units.oClock')}
                 min={STEPPER_BOUNDS.water_reminder_end_hour.min}
                 max={STEPPER_BOUNDS.water_reminder_end_hour.max}
                 onDecrement={() => stepperChange('water_reminder_end_hour', -1, STEPPER_BOUNDS.water_reminder_end_hour.min, STEPPER_BOUNDS.water_reminder_end_hour.max)}
@@ -713,11 +725,11 @@ export default function ProfileScreen() {
 
               <View style={styles.separator} />
 
-              <Text style={styles.label}>Intervall</Text>
-              <Text style={styles.hint}>Wie oft möchtest du im Zeitfenster erinnert werden?</Text>
+              <Text style={styles.label}>{t('profile.water.interval')}</Text>
+              <Text style={styles.hint}>{t('profile.water.intervalHint')}</Text>
               <Stepper
                 value={form.water_reminder_interval_hours}
-                unit="Std."
+                unit={t('common.units.hoursShort')}
                 min={STEPPER_BOUNDS.water_reminder_interval_hours.min}
                 max={STEPPER_BOUNDS.water_reminder_interval_hours.max}
                 onDecrement={() => stepperChange('water_reminder_interval_hours', -1, STEPPER_BOUNDS.water_reminder_interval_hours.min, STEPPER_BOUNDS.water_reminder_interval_hours.max)}
@@ -731,16 +743,13 @@ export default function ProfileScreen() {
         {/* ── Zyklus-Tracking (nur bei Geschlecht "weiblich") ── */}
         {form.gender === 'female' && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Zyklus-Tracking</Text>
-          <Text style={styles.hint}>
-            Aktiviere die Zyklusverfolgung, um Gewichtsschwankungen im Dashboard mit deiner Periode zu korrelieren.
-            Blutungstage erfasst und Phasen zeigt der Tab {'„'}Periode{'“'}.
-          </Text>
+          <Text style={styles.cardTitle}>{t('profile.cycle.title')}</Text>
+          <Text style={styles.hint}>{t('profile.cycle.hint')}</Text>
 
           <View style={[styles.toggleRow, { marginBottom: form.cycle_tracking_enabled ? 20 : 0 }]}>
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.toggleLabel}>🩸 Zyklus-Tracking</Text>
-              <Text style={styles.toggleSub}>{form.cycle_tracking_enabled ? 'Aktiv' : 'Inaktiv'}</Text>
+              <Text style={styles.toggleLabel}>{t('profile.cycle.toggle')}</Text>
+              <Text style={styles.toggleSub}>{form.cycle_tracking_enabled ? t('common.active') : t('common.inactive')}</Text>
             </View>
             <Switch
               value={form.cycle_tracking_enabled}
@@ -752,11 +761,11 @@ export default function ProfileScreen() {
 
           {form.cycle_tracking_enabled && (
             <>
-              <Text style={styles.label}>Zykluslänge</Text>
-              <Text style={styles.hint}>Durchschnittliche Länge deines Zyklus in Tagen.</Text>
+              <Text style={styles.label}>{t('profile.cycle.cycleLength')}</Text>
+              <Text style={styles.hint}>{t('profile.cycle.cycleLengthHint')}</Text>
               <Stepper
                 value={form.cycle_length_days}
-                unit="Tage"
+                unit={t('common.units.days')}
                 min={STEPPER_BOUNDS.cycle_length_days.min}
                 max={STEPPER_BOUNDS.cycle_length_days.max}
                 onDecrement={() => stepperChange('cycle_length_days', -STEPPER_BOUNDS.cycle_length_days.step, STEPPER_BOUNDS.cycle_length_days.min, STEPPER_BOUNDS.cycle_length_days.max)}
@@ -765,11 +774,11 @@ export default function ProfileScreen() {
 
               <View style={styles.separator} />
 
-              <Text style={styles.label}>Periodendauer</Text>
-              <Text style={styles.hint}>Wie viele Tage dauert deine Periode typischerweise?</Text>
+              <Text style={styles.label}>{t('profile.cycle.periodDuration')}</Text>
+              <Text style={styles.hint}>{t('profile.cycle.periodDurationHint')}</Text>
               <Stepper
                 value={form.period_duration_days}
-                unit="Tage"
+                unit={t('common.units.days')}
                 min={STEPPER_BOUNDS.period_duration_days.min}
                 max={STEPPER_BOUNDS.period_duration_days.max}
                 onDecrement={() => stepperChange('period_duration_days', -STEPPER_BOUNDS.period_duration_days.step, STEPPER_BOUNDS.period_duration_days.min, STEPPER_BOUNDS.period_duration_days.max)}
@@ -778,10 +787,8 @@ export default function ProfileScreen() {
 
               <View style={styles.separator} />
 
-              <Text style={styles.label}>Kalorien-Bonus während Periode</Text>
-              <Text style={styles.hint}>
-                Optionaler Kalorienzuschlag während der Periode (z.B. 100–200 kcal für Cravings). 0 = kein Bonus.
-              </Text>
+              <Text style={styles.label}>{t('profile.cycle.calorieBonus')}</Text>
+              <Text style={styles.hint}>{t('profile.cycle.calorieBonusHint')}</Text>
               <Stepper
                 value={form.cycle_calorie_bonus}
                 unit="kcal"
@@ -795,11 +802,11 @@ export default function ProfileScreen() {
 
               <View style={styles.separator} />
 
-              <Text style={styles.label}>Erinnerungen</Text>
+              <Text style={styles.label}>{t('profile.cycle.reminders')}</Text>
               <View style={styles.toggleRow}>
                 <View style={styles.toggleLabelGroup}>
-                  <Text style={styles.toggleLabel}>🩸 Perioden-Start</Text>
-                  <Text style={styles.toggleSub}>1 Tag vor der erwarteten Periode</Text>
+                  <Text style={styles.toggleLabel}>{t('profile.cycle.periodStart')}</Text>
+                  <Text style={styles.toggleSub}>{t('profile.cycle.periodStartSub')}</Text>
                 </View>
                 <Switch
                   value={form.cycle_period_reminder}
@@ -810,8 +817,8 @@ export default function ProfileScreen() {
               </View>
               <View style={[styles.toggleRow, { marginTop: 10 }]}>
                 <View style={styles.toggleLabelGroup}>
-                  <Text style={styles.toggleLabel}>🌱 Fruchtbares Fenster</Text>
-                  <Text style={styles.toggleSub}>1 Tag vor Beginn des fruchtbaren Fensters</Text>
+                  <Text style={styles.toggleLabel}>{t('profile.cycle.fertileWindow')}</Text>
+                  <Text style={styles.toggleSub}>{t('profile.cycle.fertileWindowSub')}</Text>
                 </View>
                 <Switch
                   value={form.cycle_fertile_reminder}
@@ -822,7 +829,7 @@ export default function ProfileScreen() {
               </View>
 
               <TouchableOpacity style={styles.cycleLinkRow} onPress={() => router.push('/(app)/(tabs)/calendar')} activeOpacity={0.7}>
-                <Text style={styles.cycleLinkText}>Zum Zykluskalender</Text>
+                <Text style={styles.cycleLinkText}>{t('profile.cycle.toCalendar')}</Text>
                 <MaterialIcons name="chevron-right" size={20} color="#00E5FF" />
               </TouchableOpacity>
             </>
@@ -833,21 +840,21 @@ export default function ProfileScreen() {
         {/* ── Geräte & Synchronisation ── */}
         {Platform.OS !== 'web' && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Geräte & Synchronisation</Text>
+            <Text style={styles.cardTitle}>{t('profile.devices.title')}</Text>
             <Text style={styles.hint}>
               {Platform.OS === 'ios'
-                ? 'Schritte und Aktivitätskalorien aus Apple Health werden täglich eingelesen und zum Kalorienziel addiert.'
-                : 'Schritte und Aktivitätskalorien aus Health Connect werden täglich eingelesen und zum Kalorienziel addiert.'}
+                ? t('profile.devices.hintIos')
+                : t('profile.devices.hintAndroid')}
             </Text>
             <View style={styles.toggleRow}>
               <View style={styles.toggleLabelGroup}>
                 <Text style={styles.toggleLabel}>
-                  {Platform.OS === 'ios' ? '🍎 Fitness-Daten teilen' : '🏃 Fitness-Daten teilen'}
+                  {Platform.OS === 'ios' ? '🍎 ' : '🏃 '}{t('profile.devices.share')}
                 </Text>
                 <Text style={styles.toggleSub}>
                   {form.sync_health
-                    ? Platform.OS === 'ios' ? 'Apple Health verbunden' : 'Health Connect verbunden'
-                    : 'Nicht verbunden'}
+                    ? Platform.OS === 'ios' ? t('profile.devices.connectedIos') : t('profile.devices.connectedAndroid')
+                    : t('profile.devices.notConnected')}
                 </Text>
               </View>
               <Switch
@@ -872,7 +879,7 @@ export default function ProfileScreen() {
             ? <ActivityIndicator color="#121212" />
             : <>
                 <MaterialIcons name="check" size={18} color="#121212" />
-                <Text style={styles.saveBtnText}>Speichern</Text>
+                <Text style={styles.saveBtnText}>{t('common.save')}</Text>
               </>
           }
         </TouchableOpacity>
@@ -883,13 +890,13 @@ export default function ProfileScreen() {
           activeOpacity={0.7}>
           <MaterialIcons name={isPremium ? 'workspace-premium' : 'bolt'} size={18} color="#00E5FF" />
           <View style={{ flex: 1 }}>
-            <Text style={styles.menuRowText}>AvoraSport Premium</Text>
+            <Text style={styles.menuRowText}>{t('profile.premium.title')}</Text>
             <Text style={styles.menuRowSub}>
               {isPremium
                 ? planLabel
-                  ? `Aktiv · ${planLabel}`
-                  : 'Aktiv · Abo verwalten'
-                : 'Kostenlos · KI-Tageslimit aufheben'}
+                  ? t('profile.premium.activePlan', { plan: planLabel })
+                  : t('profile.premium.activeManage')
+                : t('profile.premium.free')}
             </Text>
           </View>
           <MaterialIcons name="chevron-right" size={20} color="#555" />
@@ -903,7 +910,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}>
             <MaterialIcons name="restore" size={18} color="#888" />
             <Text style={[styles.menuRowText, { color: '#aaa' }]}>
-              {restoring ? 'Wird geprüft…' : 'Käufe wiederherstellen'}
+              {restoring ? t('profile.premium.checking') : t('profile.premium.restore')}
             </Text>
           </TouchableOpacity>
         )}
@@ -913,7 +920,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/features')}
           activeOpacity={0.7}>
           <MaterialIcons name="lightbulb-outline" size={18} color="#00E5FF" />
-          <Text style={styles.menuRowText}>Funktionen &amp; Tipps</Text>
+          <Text style={styles.menuRowText}>{t('profile.menu.features')}</Text>
           <MaterialIcons name="chevron-right" size={20} color="#555" />
         </TouchableOpacity>
 
@@ -922,7 +929,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/feedback')}
           activeOpacity={0.7}>
           <MaterialIcons name="chat-bubble-outline" size={18} color="#00E5FF" />
-          <Text style={styles.menuRowText}>Feedback geben</Text>
+          <Text style={styles.menuRowText}>{t('profile.menu.feedback')}</Text>
           <MaterialIcons name="chevron-right" size={20} color="#555" />
         </TouchableOpacity>
 
@@ -931,14 +938,14 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           activeOpacity={0.7}>
           <MaterialIcons name="logout" size={16} color="#666" />
-          <Text style={styles.logoutBtnText}>Abmelden</Text>
+          <Text style={styles.logoutBtnText}>{t('profile.menu.logout')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.legalLink}
           onPress={() => router.push('/legal')}
           activeOpacity={0.7}>
-          <Text style={styles.legalLinkText}>Rechtliches &amp; Impressum</Text>
+          <Text style={styles.legalLinkText}>{t('profile.menu.legal')}</Text>
         </TouchableOpacity>
 
       </ScrollView>

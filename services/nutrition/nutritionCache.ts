@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getLanguage, type Language } from '@/lib/i18n';
 import type { FoodAnalysisResponse } from '@/services/gemini/nutritionProvider';
 
 const STORAGE_KEY    = 'nutrition_image_cache_v2'; // v2: items + health_notes
@@ -11,6 +12,8 @@ interface CacheEntry {
   hash:      string;
   timestamp: number;
   result:    FoodAnalysisResponse;
+  /** Sprache der Anzeigetexte im Ergebnis; ältere Einträge ohne Feld sind deutsch. */
+  lang?:     Language;
 }
 
 // ── Hash-Berechnung ───────────────────────────────────────────────────────────
@@ -67,7 +70,8 @@ export async function getCachedResult(
   const entries = await loadEntries();
 
   // Abgelaufene Einträge herausfiltern, dann nach Ähnlichkeit suchen
-  const alive = entries.filter(e => now - e.timestamp < TTL_MS);
+  const lang  = getLanguage();
+  const alive = entries.filter(e => now - e.timestamp < TTL_MS && (e.lang ?? 'de') === lang);
   for (const entry of alive) {
     const dist = hamming(hash, entry.hash);
     if (dist <= HASH_THRESHOLD) {
@@ -92,7 +96,7 @@ export async function setCachedResult(
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, MAX_ENTRIES - 1);
 
-  entries.unshift({ hash, timestamp: now, result });
+  entries.unshift({ hash, timestamp: now, result, lang: getLanguage() });
   await saveEntries(entries);
   console.log('[NutritionCache] Ergebnis gecacht');
 }

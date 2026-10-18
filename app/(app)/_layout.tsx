@@ -4,10 +4,12 @@ import { View } from 'react-native';
 
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 import { FeedbackFab } from '@/components/FeedbackFab';
+import { useTranslation } from '@/lib/i18n';
 import { supabase } from '@/services/supabaseClient';
 
 export default function AppLayout() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="body-stats"
         options={{
-          title: 'Körperwerte',
+          title: t('nav.screens.bodyStats'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -54,7 +56,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="active-workout"
         options={{
-          title: 'Training',
+          title: t('nav.screens.activeWorkout'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -63,7 +65,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="create-plan"
         options={{
-          title: 'Trainingsplan',
+          title: t('nav.screens.createPlan'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -72,7 +74,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="workout-plans"
         options={{
-          title: 'Trainingspläne',
+          title: t('nav.screens.workoutPlans'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -81,7 +83,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="legal"
         options={{
-          title: 'Rechtliches',
+          title: t('nav.screens.legal'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -90,7 +92,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="features"
         options={{
-          title: 'Funktionen & Tipps',
+          title: t('nav.screens.features'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -99,7 +101,7 @@ export default function AppLayout() {
       <Stack.Screen
         name="feedback"
         options={{
-          title: 'Feedback',
+          title: t('nav.screens.feedback'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,
@@ -109,7 +111,7 @@ export default function AppLayout() {
         name="paywall"
         options={{
           presentation: 'modal',
-          title: 'AvoraSport Premium',
+          title: t('nav.screens.paywall'),
           headerStyle: { backgroundColor: '#121212' },
           headerTintColor: '#fff',
           headerShadowVisible: false,

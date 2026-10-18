@@ -12,3 +12,6 @@ const { NativeModules } = require('react-native');
 if (NativeModules.RNPurchases == null) {
   NativeModules.RNPurchases = {};
 }
+
+// Tests prüfen die deutschen Texte — unabhängig von der Systemsprache der Maschine.
+require('./lib/i18n').setLanguage('de', { persist: false });

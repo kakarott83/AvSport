@@ -20,25 +20,26 @@ import {
   CYCLE_PHASE_META,
   describeInDays,
   FERTILE_WINDOW_COLOR,
-  RECHNERISCHE_SICHERHEIT_HINWEIS,
+  rechnerischeSicherheitHinweis,
   REGULARITY_LABEL,
   type DayPhase,
 } from '@/lib/cycle';
+import { getLocale, useTranslation } from '@/lib/i18n';
 
 export const PERIOD_COLOR = '#FF5252';
 
 const FLOW_LEVELS = [
-  { value: 1, label: 'Schmier' },
-  { value: 2, label: 'Leicht' },
-  { value: 3, label: 'Mittel' },
-  { value: 4, label: 'Stark' },
+  { value: 1, label: 'cycle.flow.spotting' },
+  { value: 2, label: 'cycle.flow.light' },
+  { value: 3, label: 'cycle.flow.medium' },
+  { value: 4, label: 'cycle.flow.heavy' },
 ] as const;
 
 const HEALTH_NAME = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 
 function formatDate(iso: string) {
   const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'short' });
+  return new Date(y, m - 1, d).toLocaleDateString(getLocale(), { weekday: 'short', day: '2-digit', month: 'short' });
 }
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export function CyclePanel({
     profileCycleLength, profilePeriodLength, logFlow, removeFlow, applyAverages,
   } = cycle;
   const [linking, setLinking] = useState(false);
+  const { t } = useTranslation();
 
   const spans = useMemo(() => buildCycleSpans(events).slice().reverse().slice(0, 6), [events]);
   const { stats, nextPeriod, nextOvulation } = overview;
@@ -74,12 +76,11 @@ export function CyclePanel({
 
   const onApplyAverages = () => {
     Alert.alert(
-      'Durchschnitt übernehmen?',
-      `Zykluslänge ${stats.avgCycleLength} Tage · Periodendauer ${stats.avgPeriodLength} Tage\n\n` +
-        'Die manuellen Werte in deinem Profil werden damit überschrieben.',
+      t('cycle.applyAveragesTitle'),
+      t('cycle.applyAveragesText', { cycle: stats.avgCycleLength, period: stats.avgPeriodLength }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Übernehmen', onPress: () => void applyAverages() },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('cycle.apply'), onPress: () => void applyAverages() },
       ],
     );
   };
@@ -90,10 +91,10 @@ export function CyclePanel({
     setLinking(false);
     if (!ok) {
       Alert.alert(
-        `${HEALTH_NAME} nicht verbunden`,
+        t('cycle.healthNotLinked', { source: HEALTH_NAME }),
         Platform.OS === 'ios'
-          ? 'Bitte erlaube AvoraSport in Apple Health das Lesen von „Menstruation“ (Einstellungen › Health › Datenzugriff & Geräte).'
-          : 'Bitte erlaube AvoraSport in Health Connect das Lesen von „Menstruation“.',
+          ? t('cycle.healthNotLinkedIos')
+          : t('cycle.healthNotLinkedAndroid'),
       );
     }
   };
@@ -110,7 +111,7 @@ export function CyclePanel({
     <>
       {/* ── Status für den gewählten Tag ── */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Zyklus · {formatDate(selectedDate)}{selectedDate === today ? ' · heute' : ''}</Text>
+        <Text style={styles.cardTitle}>{t('cycle.title', { date: formatDate(selectedDate) })}{selectedDate === today ? t('cycle.todaySuffix') : ''}</Text>
 
         {hasHistory ? (
           <>
@@ -120,27 +121,27 @@ export function CyclePanel({
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.phaseLabel, { color: CYCLE_PHASE_META[selectedPhase.phase].color }]}>
                     {CYCLE_PHASE_META[selectedPhase.phase].label}
-                    {selectedPhase.fertileWindow ? ' · fruchtbar' : ''}
+                    {selectedPhase.fertileWindow ? t('cycle.fertileSuffix') : ''}
                   </Text>
                   <Text style={styles.phaseSub}>
-                    Tag {selectedPhase.cycleDay} von {selectedPhase.cycleLength}
-                    {selectedPhase.predicted ? ' · Prognose' : ''}
+                    {t('cycle.dayOf', { day: selectedPhase.cycleDay, length: selectedPhase.cycleLength })}
+                    {selectedPhase.predicted ? t('cycle.predictedSuffix') : ''}
                   </Text>
                 </View>
               </View>
             ) : (
-              <Text style={styles.phaseSub}>Für diesen Tag liegt noch keine Phase vor.</Text>
+              <Text style={styles.phaseSub}>{t('cycle.noPhase')}</Text>
             )}
 
             <View style={styles.metricsRow}>
               <Metric
-                label="Nächste Periode"
+                label={t('cycle.nextPeriod')}
                 value={nextPeriod ? describeInDays(nextPeriod.inDays) : '–'}
                 sub={nextPeriod ? formatDate(nextPeriod.date) : undefined}
                 color={PERIOD_COLOR}
               />
               <Metric
-                label="Eisprung"
+                label={t('cycle.ovulation')}
                 value={nextOvulation ? describeInDays(nextOvulation.inDays) : '–'}
                 sub={nextOvulation ? formatDate(nextOvulation.date) : undefined}
                 color={CYCLE_PHASE_META.ovulation.color}
@@ -152,7 +153,7 @@ export function CyclePanel({
                 <View style={styles.riskRow}>
                   <View style={[styles.riskDot, { backgroundColor: CONCEPTION_RISK_META[selectedPhase.conceptionRisk].color }]} />
                   <Text style={styles.riskLabel}>
-                    Sex am {selectedDate === today ? 'heutigen Tag' : 'gewählten Tag'}:{' '}
+                    {selectedDate === today ? t('cycle.sexOnToday') : t('cycle.sexOnSelected')}{' '}
                     <Text style={{ color: CONCEPTION_RISK_META[selectedPhase.conceptionRisk].color, fontWeight: '800' }}>
                       {CONCEPTION_RISK_META[selectedPhase.conceptionRisk].label}
                     </Text>
@@ -160,24 +161,23 @@ export function CyclePanel({
                 </View>
                 <Text style={styles.riskHint}>{CONCEPTION_RISK_META[selectedPhase.conceptionRisk].hint}</Text>
                 <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7}>
-                  <Text style={styles.riskDisclaimer}>Keine Verhütungsmethode – nur rechnerische Sicherheit. Details ›</Text>
+                  <Text style={styles.riskDisclaimer}>{t('cycle.riskDisclaimer')}</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             <Text style={styles.regularityText}>
               {stats.cyclesTracked > 0
-                ? `Ø ${stats.avgCycleLength} Tage · ${REGULARITY_LABEL[stats.regularity]} · ${stats.cyclesTracked} Zyklen erfasst`
-                : 'Prognose basiert auf deinen Profilwerten – erfasse mehr Zyklen für genauere Ergebnisse.'}
+                ? t('cycle.regularityStats', { avg: stats.avgCycleLength, regularity: REGULARITY_LABEL[stats.regularity], count: stats.cyclesTracked })
+                : t('cycle.profileBased')}
             </Text>
             {!stats.hasReliableHistory && stats.cyclesTracked > 0 && (
-              <Text style={styles.warnText}>⚠️ Weniger als 2 abgeschlossene Zyklen – die Prognose kann noch stark abweichen.</Text>
+              <Text style={styles.warnText}>{t('cycle.fewCycles')}</Text>
             )}
           </>
         ) : (
           <Text style={styles.emptyText}>
-            Markiere unten den ersten Tag deiner Blutung{healthLinked ? '' : ` oder verbinde ${HEALTH_NAME}`}. Danach zeigt der
-            Kalender deine Periode, fruchtbaren Tage und die Prognose für die nächsten Monate.
+            {healthLinked ? t('cycle.emptyLinked') : t('cycle.emptyUnlinked', { source: HEALTH_NAME })}
           </Text>
         )}
 
@@ -185,7 +185,7 @@ export function CyclePanel({
         {!isFuture && (
           <>
             <View style={styles.separator} />
-            <Text style={styles.sectionLabel}>BLUTUNG</Text>
+            <Text style={styles.sectionLabel}>{t('cycle.bleeding').toUpperCase()}</Text>
             <View style={styles.flowRow}>
               {FLOW_LEVELS.map((lvl) => {
                 const active = selectedFlow === lvl.value;
@@ -197,21 +197,18 @@ export function CyclePanel({
                     activeOpacity={0.8}
                   >
                     <Text style={styles.flowDots}>{'🩸'.repeat(lvl.value)}</Text>
-                    <Text style={[styles.flowLabel, active && styles.flowLabelActive]}>{lvl.label}</Text>
+                    <Text style={[styles.flowLabel, active && styles.flowLabelActive]}>{t(lvl.label)}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
             {fromHealth && (
-              <Text style={styles.healthHint}>
-                Aus {HEALTH_NAME} übernommen. Änderungen am besten dort vornehmen – gelöschte Tage werden sonst beim
-                nächsten Abgleich wieder übernommen.
-              </Text>
+              <Text style={styles.healthHint}>{t('cycle.fromHealth', { source: HEALTH_NAME })}</Text>
             )}
             {selectedFlow != null && (
               <TouchableOpacity style={styles.removeRow} onPress={() => removeFlow(selectedDate)} activeOpacity={0.7}>
                 <Ionicons name="close-circle-outline" size={16} color={PERIOD_COLOR} />
-                <Text style={styles.removeText}>Blutung für diesen Tag entfernen</Text>
+                <Text style={styles.removeText}>{t('cycle.removeBleeding')}</Text>
               </TouchableOpacity>
             )}
           </>
@@ -222,7 +219,7 @@ export function CyclePanel({
           healthLinked ? (
             <View style={styles.healthRow}>
               <Ionicons name="checkmark-circle" size={15} color="#4CAF50" />
-              <Text style={styles.healthLinkedText}>Periodendaten werden aus {HEALTH_NAME} übernommen</Text>
+              <Text style={styles.healthLinkedText}>{t('cycle.healthLinked', { source: HEALTH_NAME })}</Text>
             </View>
           ) : (
             <TouchableOpacity style={styles.healthBtn} onPress={onLinkHealth} disabled={linking} activeOpacity={0.8}>
@@ -231,7 +228,7 @@ export function CyclePanel({
               ) : (
                 <>
                   <Ionicons name="heart-circle-outline" size={18} color={PERIOD_COLOR} />
-                  <Text style={styles.healthBtnText}>Periode aus {HEALTH_NAME} übernehmen</Text>
+                  <Text style={styles.healthBtnText}>{t('cycle.importFromHealth', { source: HEALTH_NAME })}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -244,8 +241,7 @@ export function CyclePanel({
         <TouchableOpacity style={[styles.card, styles.suggestionCard]} onPress={onApplyAverages} activeOpacity={0.85}>
           <Ionicons name="sparkles-outline" size={18} color="#FFD600" />
           <Text style={styles.suggestionText}>
-            Dein erfasster Durchschnitt weicht von den Profilwerten ab ({stats.avgCycleLength}/{stats.avgPeriodLength} Tage).
-            Tippen zum Übernehmen.
+            {t('cycle.suggestion', { cycle: stats.avgCycleLength, period: stats.avgPeriodLength })}
           </Text>
         </TouchableOpacity>
       )}
@@ -253,12 +249,12 @@ export function CyclePanel({
       {/* ── Verlauf ── */}
       {spans.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Zyklus-Verlauf</Text>
+          <Text style={styles.cardTitle}>{t('cycle.history')}</Text>
           {spans.map((s) => (
             <View key={s.start} style={styles.historyRow}>
               <Text style={styles.historyDate}>{formatDate(s.start)}</Text>
               <Text style={styles.historyMeta}>
-                {s.length != null ? `${s.length} Tage` : 'laufend'} · {s.periodDays} Blutungstage
+                {s.length != null ? t('cycle.historyDays', { count: s.length }) : t('cycle.ongoing')} · {t('cycle.bleedingDays', { count: s.periodDays })}
               </Text>
             </View>
           ))}
@@ -271,20 +267,21 @@ export function CyclePanel({
 // ─── Legende (unter dem Kalender) ─────────────────────────────────────────────
 
 export function CycleLegend() {
+  const { t } = useTranslation();
   return (
     <View style={styles.legendWrap}>
       <View style={styles.legend}>
-        <LegendItem swatch={[styles.swatch, { backgroundColor: PERIOD_COLOR + '66' }]} label="Periode" />
-        <LegendItem swatch={[styles.swatch, styles.swatchPredicted]} label="Periode (Prognose)" />
-        <LegendItem swatch={[styles.swatch, styles.swatchFertile]} label="Fruchtbar" />
+        <LegendItem swatch={[styles.swatch, { backgroundColor: PERIOD_COLOR + '66' }]} label={t('cycle.legendPeriod')} />
+        <LegendItem swatch={[styles.swatch, styles.swatchPredicted]} label={t('cycle.legendPredicted')} />
+        <LegendItem swatch={[styles.swatch, styles.swatchFertile]} label={t('cycle.legendFertile')} />
         <View style={styles.legendItem}>
           <Text style={styles.legendEgg}>🥚</Text>
-          <Text style={styles.legendText}>Eisprung</Text>
+          <Text style={styles.legendText}>{t('cycle.legendOvulation')}</Text>
         </View>
       </View>
       <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7}>
         <Text style={styles.disclaimerNote}>
-          {RECHNERISCHE_SICHERHEIT_HINWEIS} Mehr unter {'„'}Rechtliches{'“'} ›
+          {rechnerischeSicherheitHinweis()} {t('cycle.moreInLegal')}
         </Text>
       </TouchableOpacity>
     </View>

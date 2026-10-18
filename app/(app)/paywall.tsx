@@ -21,6 +21,7 @@ import { usePremium } from '@/hooks/usePremium';
 import {
   describePackage, getCurrentOffering, isPurchasesConfigured, purchasePackage, PurchaseCancelledError, restorePurchases,
 } from '@/lib/purchases';
+import { useTranslation } from '@/lib/i18n';
 import { estimateMinMonthlyPremiumRequests } from '@/services/gemini/client';
 
 const C_BG = '#121212';
@@ -31,14 +32,14 @@ const C_ACCENT = '#00E5FF';
 // täglichen Limits für kostenlose Accounts (PREMIUM_MONTHLY_COST_CAP_EUR in
 // services/gemini/client.ts). Beides in einem Satz, statt getrennter Zeilen
 // ("kein Limit" + "bis zu X/Monat"), die sich sonst widersprüchlich lesen.
-const BENEFITS = [
-  `Kein tägliches KI-Limit — bis zu ${estimateMinMonthlyPremiumRequests()}+ Anfragen im Monat`,
-  'KI-Trainingspläne & Kalorien-Scanner',
-  'Alle künftigen Premium-Funktionen',
-];
-
 export default function PaywallScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const BENEFITS = [
+    t('paywall.benefitLimit', { count: estimateMinMonthlyPremiumRequests() }),
+    t('paywall.benefitAi'),
+    t('paywall.benefitFuture'),
+  ];
   const { isPremium, refresh } = usePremium();
 
   const [offering, setOffering] = useState<PurchasesOffering | null>(null);
@@ -79,7 +80,7 @@ export default function PaywallScreen() {
       router.back();
     } catch (err) {
       if (!(err instanceof PurchaseCancelledError)) {
-        Alert.alert('Kauf fehlgeschlagen', (err as Error)?.message ?? 'Bitte später erneut versuchen.');
+        Alert.alert(t('paywall.purchaseFailed'), (err as Error)?.message ?? t('paywall.tryLater'));
       }
     } finally {
       setBusy(false);
@@ -95,10 +96,10 @@ export default function PaywallScreen() {
       if (ok) {
         router.back();
       } else {
-        Alert.alert('Keine Käufe gefunden', 'Für dieses Konto ist kein aktives Abo hinterlegt.');
+        Alert.alert(t('paywall.noPurchasesTitle'), t('paywall.noPurchases'));
       }
     } catch {
-      Alert.alert('Fehler', 'Käufe konnten nicht wiederhergestellt werden.');
+      Alert.alert(t('common.error'), t('paywall.restoreFailed'));
     } finally {
       setBusy(false);
     }
@@ -108,9 +109,7 @@ export default function PaywallScreen() {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <MaterialIcons name="bolt" size={44} color={C_ACCENT} style={{ alignSelf: 'center' }} />
-        <Text style={styles.lead}>
-          Hol das Maximum aus deinem Training – ohne Limits.
-        </Text>
+        <Text style={styles.lead}>{t('paywall.lead')}</Text>
 
         <View style={styles.benefits}>
           {BENEFITS.map((b) => (
@@ -127,8 +126,8 @@ export default function PaywallScreen() {
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>
               {isPurchasesConfigured()
-                ? 'Aktuell sind keine Abos verfügbar. Bitte später erneut versuchen.'
-                : 'Abos sind in diesem Build noch nicht aktiviert.'}
+                ? t('paywall.noPackages')
+                : t('paywall.notConfigured')}
             </Text>
           </View>
         ) : (
@@ -144,7 +143,7 @@ export default function PaywallScreen() {
                   style={[styles.pkg, active && styles.pkgActive]}>
                   {isAnnual && (
                     <View style={styles.badge}>
-                      <Text style={styles.badgeText}>BELIEBT</Text>
+                      <Text style={styles.badgeText}>{t('paywall.popular')}</Text>
                     </View>
                   )}
                   <View style={styles.radioOuter}>
@@ -168,23 +167,19 @@ export default function PaywallScreen() {
             activeOpacity={0.85}>
             {busy
               ? <ActivityIndicator color="#121212" />
-              : <Text style={styles.ctaText}>Premium freischalten</Text>}
+              : <Text style={styles.ctaText}>{t('paywall.unlock')}</Text>}
           </TouchableOpacity>
         )}
 
         <TouchableOpacity onPress={handleRestore} disabled={busy} style={{ padding: 12 }}>
-          <Text style={styles.restoreText}>Käufe wiederherstellen</Text>
+          <Text style={styles.restoreText}>{t('paywall.restore')}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.legal}>
-          Das Abo verlängert sich automatisch zum gewählten Zeitraum, sofern es nicht
-          mindestens 24 Stunden vor Ablauf in den Store-Einstellungen gekündigt wird.
-          Die Abrechnung erfolgt über deinen App-Store-Account.
-        </Text>
+        <Text style={styles.legal}>{t('paywall.autoRenew')}</Text>
         <View style={styles.legalLinks}>
-          <Text style={styles.legalLink} onPress={() => router.push('/legal')}>Rechtliches</Text>
+          <Text style={styles.legalLink} onPress={() => router.push('/legal')}>{t('paywall.legal')}</Text>
           <Text style={styles.legalDot}>·</Text>
-          <Text style={styles.legalLink} onPress={() => router.push('/legal')}>Datenschutz</Text>
+          <Text style={styles.legalLink} onPress={() => router.push('/legal')}>{t('paywall.privacy')}</Text>
         </View>
       </ScrollView>
     </View>

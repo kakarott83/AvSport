@@ -1,3 +1,5 @@
+import { getLanguage, t } from '@/lib/i18n';
+
 /**
  * Pure profile-validation and stepper helpers.
  * No React, no React Native — safe to import from tests.
@@ -69,7 +71,7 @@ export function validateProfileForm(form: {
   display_name: string;
 }): ProfileValidationResult {
   if (!form.display_name.trim()) {
-    return { valid: false, error: 'Bitte einen Anzeigenamen eingeben.' };
+    return { valid: false, error: t('domain.profile.displayNameRequired') };
   }
   return { valid: true, error: '' };
 }
@@ -95,7 +97,7 @@ export function parseDecimal(raw: string): number {
 
 /** Number → German display string for input fields ("75.5" → "75,5"). */
 export function formatDecimal(n: number | null | undefined): string {
-  return n == null ? '' : String(n).replace('.', ',');
+  return n == null ? '' : getLanguage() === 'de' ? String(n).replace('.', ',') : String(n);
 }
 
 /** Parse a user-typed decimal string; return `fallback` on NaN or empty input. */

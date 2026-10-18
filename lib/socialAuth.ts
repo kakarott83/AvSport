@@ -21,6 +21,7 @@ import { Platform } from 'react-native';
 
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { supabase } from '@/services/supabaseClient';
+import { t } from '@/lib/i18n';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export async function signInWithGoogle(): Promise<SocialAuthResult> {
       return {
         ok: false,
         cancelled: false,
-        message: getAuthErrorMessage(error?.message ?? 'Google-Login konnte nicht gestartet werden.'),
+        message: getAuthErrorMessage(error?.message ?? t('domain.socialAuth.googleStartFailed')),
       };
     }
 
@@ -73,7 +74,7 @@ export async function signInWithGoogle(): Promise<SocialAuthResult> {
       return {
         ok: false,
         cancelled: false,
-        message: desc ?? 'Google hat keinen Anmelde-Code zurückgegeben.',
+        message: desc ?? t('domain.socialAuth.googleNoCode'),
       };
     }
 
@@ -87,7 +88,7 @@ export async function signInWithGoogle(): Promise<SocialAuthResult> {
     return {
       ok: false,
       cancelled: false,
-      message: err instanceof Error ? getAuthErrorMessage(err.message) : 'Google-Login fehlgeschlagen.',
+      message: err instanceof Error ? getAuthErrorMessage(err.message) : t('domain.socialAuth.googleFailed'),
     };
   }
 }
@@ -121,7 +122,7 @@ export async function signInWithApple(): Promise<SocialAuthResult> {
     });
 
     if (!credential.identityToken) {
-      return { ok: false, cancelled: false, message: 'Apple hat kein Identity-Token geliefert.' };
+      return { ok: false, cancelled: false, message: t('domain.socialAuth.appleNoToken') };
     }
 
     const { data, error } = await supabase.auth.signInWithIdToken({
@@ -153,7 +154,7 @@ export async function signInWithApple(): Promise<SocialAuthResult> {
     return {
       ok: false,
       cancelled: false,
-      message: err instanceof Error ? err.message : 'Apple-Login fehlgeschlagen.',
+      message: err instanceof Error ? err.message : t('domain.socialAuth.appleFailed'),
     };
   }
 }

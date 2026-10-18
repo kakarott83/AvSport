@@ -11,9 +11,11 @@ import {
   View,
 } from "react-native";
 
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { Toast } from "@/components/Toast";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { useTranslation } from "@/lib/i18n";
 import {
   clearCredentials,
   loadCredentials,
@@ -23,6 +25,7 @@ import { supabase } from "@/services/supabaseClient";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [savePassword, setSavePassword] = useState(false);
@@ -55,7 +58,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email.trim() || !password) {
-      showToast("Bitte E-Mail und Passwort eingeben.");
+      showToast(t("auth.enterEmailPassword"));
       return;
     }
 
@@ -74,7 +77,7 @@ export default function LoginScreen() {
 
         showToast(
           isNoAccount
-            ? "Kein Konto gefunden. Bitte zuerst registrieren."
+            ? t("auth.noAccountFound")
             : getAuthErrorMessage(error.message),
         );
       } else {
@@ -104,8 +107,8 @@ export default function LoginScreen() {
     if (error) console.error("Session Fehler:", error);
     showToast(
       data.session
-        ? `Session aktiv: ${data.session.user.email}`
-        : "Keine aktive Session gefunden.",
+        ? t("auth.sessionActive", { email: data.session.user.email ?? "" })
+        : t("auth.noSession"),
     );
   }
 
@@ -115,22 +118,23 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
+        <LanguageSwitch style={{ marginBottom: 16 }} />
         <View style={styles.header}>
           <Text style={styles.logo}>AvoraSport</Text>
-          <Text style={styles.tagline}>Dein Fitness-Begleiter</Text>
+          <Text style={styles.tagline}>{t("auth.taglineLogin")}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.title}>Willkommen zurück</Text>
+          <Text style={styles.title}>{t("auth.welcomeBack")}</Text>
 
           <SocialAuthButtons onBusyChange={setSocialBusy} />
 
-          <Text style={styles.label}>E-Mail</Text>
+          <Text style={styles.label}>{t("auth.email")}</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="deine@email.de"
+            placeholder={t("auth.emailPlaceholder")}
             placeholderTextColor="#555"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -138,7 +142,7 @@ export default function LoginScreen() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, styles.labelSpacing]}>Passwort</Text>
+          <Text style={[styles.label, styles.labelSpacing]}>{t("auth.password")}</Text>
           <TextInput
             style={styles.input}
             value={password}
@@ -160,7 +164,7 @@ export default function LoginScreen() {
             >
               {savePassword && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <Text style={styles.checkboxLabel}>Passwort speichern</Text>
+            <Text style={styles.checkboxLabel}>{t("auth.savePassword")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -172,20 +176,20 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Anmelden</Text>
+              <Text style={styles.buttonText}>{t("auth.login")}</Text>
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Noch kein Konto? </Text>
+          <Text style={styles.footerText}>{t("auth.noAccount")}</Text>
           <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
-            <Text style={styles.footerLink}>Registrieren</Text>
+            <Text style={styles.footerLink}>{t("auth.register")}</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.debugButton} onPress={debugSession}>
-          <Text style={styles.debugText}>Session prüfen</Text>
+          <Text style={styles.debugText}>{t("auth.checkSession")}</Text>
         </TouchableOpacity>
 
         {toastMessage && (

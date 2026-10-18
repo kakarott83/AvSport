@@ -1,41 +1,64 @@
+import { getLanguage, t } from '@/lib/i18n';
 import { geminiRequest, type GeminiPart } from '@/services/gemini/client';
 
 export interface RecognizedItem {
   name:        string; // English name for USDA lookup
-  name_de:     string; // Deutscher Anzeigename (UI, food_logs)
+  name_de:     string; // Anzeigename in der App-Sprache (UI, food_logs) — Feldname historisch
   grams:       number;
   preparation: string; // e.g. "grilled", "boiled", "raw"
 }
 
 export interface FoodRecognitionResult {
   items:         RecognizedItem[];
-  meal_name?:    string; // Kurzer deutscher Mahlzeit-Name (nur Foto-Erkennung)
+  meal_name?:    string; // Kurzer Mahlzeit-Name in der App-Sprache (nur Foto-Erkennung)
   health_notes?: string; // Ein motivierender Satz zur Zusammensetzung (nur Foto-Erkennung)
 }
 
-const NO_FOOD_PHOTO =
-  'Konnte keine Lebensmittel auf dem Bild erkennen. Bitte versuche ein klareres Foto hochzuladen.';
+// Anzeigetexte (name_de, meal_name, health_notes, Fehlermeldung) erzeugt
+// Gemini in der aktuell gewählten App-Sprache.
+const DISPLAY_LANGUAGE = {
+  de: {
+    name: 'German',
+    itemExamples: '"Hähnchenbrust", "weißer Reis", "Brokkoli", "Olivenöl"',
+    mealExample: '"Gegrilltes Hähnchenbrustfilet mit Reis und Brokkoli"',
+    notesExample: '"Exzellente Proteinquelle mit ausgewogenen Kohlenhydraten."',
+  },
+  en: {
+    name: 'English',
+    itemExamples: '"Chicken breast", "White rice", "Broccoli", "Olive oil"',
+    mealExample: '"Grilled chicken breast with rice and broccoli"',
+    notesExample: '"Excellent source of protein with balanced carbohydrates."',
+  },
+} as const;
 
-const JSON_FORMAT =
-  'Return ONLY valid JSON — no markdown, no explanation, no extra text. ' +
-  'Format: {"items":[{"name":string,"name_de":string,"grams":number,"preparation":string}]}. ' +
-  '"name" must be a common English food name suitable for database lookup ' +
-  '(e.g. "chicken breast", "white rice", "broccoli", "olive oil"). ' +
-  '"name_de" is the same food item as a natural German name for display to the user ' +
-  '(e.g. "Hähnchenbrust", "weißer Reis", "Brokkoli", "Olivenöl"). ' +
-  'For preparation use exactly one English word: ' +
-  '"grilled", "boiled", "fried", "steamed", "raw", "baked", "roasted", or "mixed".';
+function jsonFormat(): string {
+  const lang = DISPLAY_LANGUAGE[getLanguage()];
+  return (
+    'Return ONLY valid JSON — no markdown, no explanation, no extra text. ' +
+    'Format: {"items":[{"name":string,"name_de":string,"grams":number,"preparation":string}]}. ' +
+    '"name" must be a common English food name suitable for database lookup ' +
+    '(e.g. "chicken breast", "white rice", "broccoli", "olive oil"). ' +
+    `"name_de" is the same food item as a natural ${lang.name} name for display to the user ` +
+    `(e.g. ${lang.itemExamples}). ` +
+    'For preparation use exactly one English word: ' +
+    '"grilled", "boiled", "fried", "steamed", "raw", "baked", "roasted", or "mixed".'
+  );
+}
 
 // Zusatzfelder nur für die Foto-Erkennung. Nährwerte rechnet bewusst nicht
 // Gemini, sondern die USDA-Kette in nutritionProvider.
-const PHOTO_EXTRAS =
-  ' Additionally include at the top level: ' +
-  '"meal_name": a short, concise German name for the whole meal ' +
-  '(e.g. "Gegrilltes Hähnchenbrustfilet mit Reis und Brokkoli"), and ' +
-  '"health_notes": one short, motivating German sentence about the composition of the meal ' +
-  '(e.g. "Exzellente Proteinquelle mit ausgewogenen Kohlenhydraten."). ' +
-  'If the image contains no food or recognition is impossible, return exactly ' +
-  `{"error":"${NO_FOOD_PHOTO}"} instead.`;
+function photoExtras(): string {
+  const lang = DISPLAY_LANGUAGE[getLanguage()];
+  return (
+    ' Additionally include at the top level: ' +
+    `"meal_name": a short, concise ${lang.name} name for the whole meal ` +
+    `(e.g. ${lang.mealExample}), and ` +
+    `"health_notes": one short, motivating ${lang.name} sentence about the composition of the meal ` +
+    `(e.g. ${lang.notesExample}). ` +
+    'If the image contains no food or recognition is impossible, return exactly ' +
+    `{"error":"${t('ai.noFoodPhoto')}"} instead.`
+  );
+}
 
 function buildPrompt(notes?: string): string {
   let p =
@@ -46,7 +69,7 @@ function buildPrompt(notes?: string): string {
     'Identify every visible food component on the plate or in the packaging ' +
     'and estimate realistic portion sizes in grams. ';
   if (notes?.trim()) p += `Additional user context: "${notes.trim()}". `;
-  return p + JSON_FORMAT + PHOTO_EXTRAS;
+  return p + jsonFormat() + photoExtras();
 }
 
 /**
@@ -58,7 +81,7 @@ function buildPrompt(notes?: string): string {
  */
 export async function recognizeFoodFromText(description: string): Promise<FoodRecognitionResult> {
   const prompt =
-    'You are a food logging assistant. The user describes in German (possibly ' +
+    `You are a food logging assistant. The user describes in ${DISPLAY_LANGUAGE[getLanguage()].name} (possibly ` +
     'dictated, informal) what they ate, possibly over a whole day. Split the description ' +
     'into the distinct dishes, foods and drinks the user mentions. ' +
     'Keep a named dish as ONE item — do not split it into ingredients ' +
@@ -68,11 +91,11 @@ export async function recognizeFoodFromText(description: string): Promise<FoodRe
     'if no quantity is given, estimate a typical single portion. ' +
     'Ignore anything that is not food or drink. ' +
     `User description: "${description.trim()}". ` +
-    JSON_FORMAT;
+    jsonFormat();
 
-  const text = await geminiRequest([{ text: prompt }]);
+  const text = await geminiRequest([{ text: prompt }], "food_text");
   if (!text) throw new Error('[FoodRecognition] Leere Antwort von Gemini');
-  const { items } = parseResult(text, 'In deiner Beschreibung wurde kein Essen erkannt');
+  const { items } = parseResult(text, t('ai.noFoodText'));
   return { items };
 }
 
@@ -87,10 +110,10 @@ export async function recognizeFoodItems(
   ];
   if (base64_2) parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64_2 } });
 
-  const text = await geminiRequest(parts);
+  const text = await geminiRequest(parts, "food_photo");
   if (!text) throw new Error('[FoodRecognition] Leere Antwort von Gemini');
 
-  const result = parseResult(text, NO_FOOD_PHOTO);
+  const result = parseResult(text, t('ai.noFoodPhoto'));
   console.log(
     '[FoodRecognition] Erkannt:',
     result.meal_name ?? '–', '|',

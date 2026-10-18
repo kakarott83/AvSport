@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 /**
  * Pure content builder for water-reminder notifications.
  * No React, no expo-notifications import — safe to unit-test directly.
@@ -49,7 +50,7 @@ function pickSuggestedIntake(remainingMl: number, sizesMl: number[]): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Builds the German notification text for the water-reminder feature.
+ * Builds the notification text (current app language) for the water-reminder feature.
  *
  * - `remainingMl <= 0` → type "encouragement", short congratulation.
  * - `remainingMl > 0`  → type "reminder", action-oriented, names the
@@ -63,8 +64,8 @@ export function buildWaterNotificationContent(
   if (remainingMl <= 0) {
     return {
       type: 'encouragement',
-      title: truncate('Tagesziel erreicht', TITLE_MAX_LEN),
-      body: truncate(`Super gemacht! Du hast dein Trinkziel von ${goalMl} ml heute erreicht.`, ENCOURAGEMENT_BODY_MAX_LEN),
+      title: truncate(t('domain.waterNotification.goalReachedTitle'), TITLE_MAX_LEN),
+      body: truncate(t('domain.waterNotification.goalReachedBody', { goal: goalMl }), ENCOURAGEMENT_BODY_MAX_LEN),
       suggestedIntakeMl: 0,
     };
   }
@@ -73,9 +74,9 @@ export function buildWaterNotificationContent(
 
   return {
     type: 'reminder',
-    title: truncate('Zeit zu trinken', TITLE_MAX_LEN),
+    title: truncate(t('domain.waterNotification.reminderTitle'), TITLE_MAX_LEN),
     body: truncate(
-      `Noch ${remainingMl} ml bis zum Tagesziel — trink jetzt ${suggestedIntakeMl} ml.`,
+      t('domain.waterNotification.reminderBody', { remaining: remainingMl, suggested: suggestedIntakeMl }),
       REMINDER_BODY_MAX_LEN,
     ),
     suggestedIntakeMl,

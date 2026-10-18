@@ -6,13 +6,21 @@ import { View } from "react-native";
 
 import { AnimatedLogo } from "@/components/AnimatedLogo";
 import { PremiumProvider } from "@/hooks/usePremium";
+import { loadStoredLanguage, useTranslation } from "@/lib/i18n";
 import { configurePurchases, identifyUser, resetUser } from "@/lib/purchases";
 import { supabase } from "@/services/supabaseClient";
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [languageReady, setLanguageReady] = useState(false);
+  // Abonniert die Sprache, damit der Root-Baum beim Wechsel neu rendert.
+  useTranslation();
   const router = useRouter();
   const segments = useSegments();
+
+  useEffect(() => {
+    loadStoredLanguage().finally(() => setLanguageReady(true));
+  }, []);
 
   useEffect(() => {
     configurePurchases();
@@ -38,7 +46,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (session === undefined) return;
+    if (session === undefined || !languageReady) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 
@@ -47,9 +55,9 @@ export default function RootLayout() {
     } else if (session && inAuthGroup) {
       router.replace("/(app)/(tabs)");
     }
-  }, [session, segments]);
+  }, [session, segments, languageReady]);
 
-  if (session === undefined) {
+  if (session === undefined || !languageReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
         <AnimatedLogo size={120} />

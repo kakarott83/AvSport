@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 /**
  * Pure helpers for the water-reminder schedule.
  * No React, no expo-notifications — safe to unit-test directly.
@@ -93,8 +94,13 @@ export function describeReminderSchedule(
   raw: Partial<WaterReminderSettings> | null | undefined,
 ): string {
   const s = sanitizeWaterReminderSettings(raw);
-  if (!s.enabled) return 'Erinnerungen sind ausgeschaltet.';
+  if (!s.enabled) return t('domain.waterSchedule.off');
   const count = computeReminderHours(s).length;
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `Alle ${s.intervalHours} h zwischen ${pad(s.startHour)}:00 und ${pad(s.endHour)}:00 Uhr (${count}×).`;
+  return t('domain.waterSchedule.summary', {
+    interval: s.intervalHours,
+    start: pad(s.startHour),
+    end: pad(s.endHour),
+    count,
+  });
 }

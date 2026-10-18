@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 
+import { getLanguage, useTranslation } from '@/lib/i18n';
+
 // ─────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────
@@ -30,11 +32,11 @@ function partsToIso(day: string, month: string, year: string): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-/** YYYY-MM-DD → dd.mm.yyyy */
-export function isoToGerman(iso: string): string {
+/** YYYY-MM-DD → dd.mm.yyyy (Deutsch) bzw. dd/mm/yyyy (Englisch) */
+export function formatIsoDate(iso: string): string {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
+  return getLanguage() === 'de' ? `${d}.${m}.${y}` : `${d}/${m}/${y}`;
 }
 
 // ─────────────────────────────────────────
@@ -50,6 +52,7 @@ type Props = {
 };
 
 export function DatePickerInput({ value, onChange, label, showQuickDates = true }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const parts = isoToParts(value);
   const [day, setDay] = useState(parts.day);
@@ -69,7 +72,7 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
   function handleConfirm() {
     const iso = partsToIso(day, month, year);
     if (!iso) {
-      setError('Bitte ein gültiges Datum eingeben (TT MM JJJJ).');
+      setError(t('datePicker.invalid'));
       return;
     }
     onChange(iso);
@@ -85,7 +88,7 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
     <>
       <TouchableOpacity style={styles.trigger} onPress={openModal} activeOpacity={0.8}>
         <Text style={styles.triggerText}>
-          {value ? isoToGerman(value) : 'Datum wählen'}
+          {value ? formatIsoDate(value) : t('datePicker.choose')}
         </Text>
         <Text style={styles.triggerIcon}>📅</Text>
       </TouchableOpacity>
@@ -93,19 +96,19 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
       <Modal visible={open} transparent animationType="fade" onRequestClose={handleCancel}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleCancel}>
           <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <Text style={styles.sheetTitle}>{label ?? 'Datum wählen'}</Text>
+            <Text style={styles.sheetTitle}>{label ?? t('datePicker.choose')}</Text>
 
             <View style={styles.fieldsRow}>
               {/* Tag */}
               <View style={styles.fieldWrap}>
-                <Text style={styles.fieldLabel}>Tag</Text>
+                <Text style={styles.fieldLabel}>{t('datePicker.day')}</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={day}
                   onChangeText={(v) => setDay(v.replace(/\D/g, '').slice(0, 2))}
                   keyboardType="number-pad"
                   maxLength={2}
-                  placeholder="TT"
+                  placeholder={t('datePicker.dayPlaceholder')}
                   placeholderTextColor="#555"
                   textAlign="center"
                 />
@@ -115,14 +118,14 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
 
               {/* Monat */}
               <View style={styles.fieldWrap}>
-                <Text style={styles.fieldLabel}>Monat</Text>
+                <Text style={styles.fieldLabel}>{t('datePicker.month')}</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={month}
                   onChangeText={(v) => setMonth(v.replace(/\D/g, '').slice(0, 2))}
                   keyboardType="number-pad"
                   maxLength={2}
-                  placeholder="MM"
+                  placeholder={t('datePicker.monthPlaceholder')}
                   placeholderTextColor="#555"
                   textAlign="center"
                 />
@@ -132,14 +135,14 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
 
               {/* Jahr */}
               <View style={[styles.fieldWrap, styles.fieldWrapYear]}>
-                <Text style={styles.fieldLabel}>Jahr</Text>
+                <Text style={styles.fieldLabel}>{t('datePicker.year')}</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={year}
                   onChangeText={(v) => setYear(v.replace(/\D/g, '').slice(0, 4))}
                   keyboardType="number-pad"
                   maxLength={4}
-                  placeholder="JJJJ"
+                  placeholder={t('datePicker.yearPlaceholder')}
                   placeholderTextColor="#555"
                   textAlign="center"
                 />
@@ -150,9 +153,9 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
             {showQuickDates && (
             <View style={styles.quickRow}>
               {[
-                { label: 'Heute', offset: 0 },
-                { label: 'Gestern', offset: -1 },
-                { label: 'Vorgestern', offset: -2 },
+                { label: t('datePicker.today'), offset: 0 },
+                { label: t('datePicker.yesterday'), offset: -1 },
+                { label: t('datePicker.dayBeforeYesterday'), offset: -2 },
               ].map(({ label: l, offset }) => {
                 const d = new Date(Date.now() + offset * 86400000);
                 return (
@@ -177,10 +180,10 @@ export function DatePickerInput({ value, onChange, label, showQuickDates = true 
 
             <View style={styles.actions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-                <Text style={styles.cancelBtnText}>Abbrechen</Text>
+                <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-                <Text style={styles.confirmBtnText}>Übernehmen</Text>
+                <Text style={styles.confirmBtnText}>{t('datePicker.apply')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>

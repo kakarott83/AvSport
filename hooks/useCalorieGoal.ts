@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 
 import { supabase } from '@/services/supabaseClient';
+import { t } from '@/lib/i18n';
 
 // ── Types (exported for testing) ──────────────────────────────────────────────
 
@@ -11,9 +12,9 @@ export type CalorieGoalType = 'lose' | 'maintain' | 'gain';
 export const CALORIE_GOAL_TYPES: CalorieGoalType[] = ['lose', 'maintain', 'gain'];
 
 export const CALORIE_GOAL_LABELS: Record<CalorieGoalType, string> = {
-  lose:     'Abnehmen',
-  maintain: 'Halten',
-  gain:     'Muskelaufbau',
+  get lose()     { return t('domain.calorieGoal.lose'); },
+  get maintain() { return t('domain.calorieGoal.maintain'); },
+  get gain()     { return t('domain.calorieGoal.gain'); },
 };
 
 /** kcal applied on top of the TDEE: moderate deficit / lean-bulk surplus. */

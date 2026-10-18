@@ -22,6 +22,7 @@ import { Toast } from '@/components/Toast';
 import { FoodScanner } from '@/components/FoodScanner';
 import { useCalorieGoal } from '@/hooks/useCalorieGoal';
 import { useHealthData } from '@/hooks/useHealthData';
+import { formatNumber, getLocale, t, useTranslation } from '@/lib/i18n';
 import { buildWeekDays, computeDayTotals, type FoodLog, type WeekDay } from '@/lib/nutrition';
 import { parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { calculateWaterGoal } from '@/lib/waterGoal';
@@ -75,7 +76,7 @@ function CalorieRing({ eaten, goal }: { eaten: number; goal: number }) {
       <View style={{ position: 'absolute', top: RING, left: RING, width: INNER, height: INNER, borderRadius: INNER / 2, backgroundColor: '#1e1e1e', alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: arcColor, fontSize: 26, fontWeight: '800', lineHeight: 30 }}>{eaten}</Text>
         <Text style={{ color: '#BBBBBB', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 }}>kcal</Text>
-        <Text style={{ color: '#999', fontSize: 10, marginTop: 2 }}>von {goal}</Text>
+        <Text style={{ color: '#999', fontSize: 10, marginTop: 2 }}>{t('nutrition.ofGoal', { goal })}</Text>
       </View>
     </View>
   );
@@ -100,10 +101,10 @@ function MacroBar({ label, value, color }: { label: string; value: number; color
 /** Wie MacroBar, aber in ml/l und relativ zum Tages-Wasserziel. */
 function WaterBar({ consumedMl, goalMl }: { consumedMl: number; goalMl: number }) {
   const pct = goalMl > 0 ? Math.min((consumedMl / goalMl) * 100, 100) : 0;
-  const toL = (ml: number) => (ml / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  const toL = (ml: number) => formatNumber(ml / 1000, { maximumFractionDigits: 1 });
   return (
     <View style={macroStyles.row}>
-      <Text style={macroStyles.label}>Wasser</Text>
+      <Text style={macroStyles.label}>{t('nutrition.water')}</Text>
       <View style={macroStyles.barBg}>
         <View style={[macroStyles.barFill, { backgroundColor: COLOR_WATER, width: `${pct}%` }]} />
       </View>
@@ -144,11 +145,11 @@ function WeeklyChart({ weekData, tdee }: { weekData: WeekDay[]; tdee: number }) 
       <View style={weekStyles.legend}>
         <View style={weekStyles.legendItem}>
           <View style={[weekStyles.dot, { backgroundColor: '#0a7ea4' }]} />
-          <Text style={weekStyles.legendText}>Gegessen</Text>
+          <Text style={weekStyles.legendText}>{t('nutrition.eaten')}</Text>
         </View>
         <View style={weekStyles.legendItem}>
           <View style={[weekStyles.line, { backgroundColor: '#e67e22' }]} />
-          <Text style={weekStyles.legendText}>Ziel ({tdee} kcal)</Text>
+          <Text style={weekStyles.legendText}>{t('nutrition.goalLegend', { kcal: tdee })}</Text>
         </View>
       </View>
       <BarChart
@@ -191,6 +192,7 @@ const weekStyles = StyleSheet.create({
 type MealModalProps = { visible: boolean; onClose: () => void; onSaved: () => void };
 
 function MealModal({ visible, onClose, onSaved }: MealModalProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
@@ -204,9 +206,9 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
 
   async function handleSave() {
     setError('');
-    if (!name.trim()) { setError('Bitte einen Namen eingeben.'); return; }
+    if (!name.trim()) { setError(t('nutrition.meal.nameRequired')); return; }
     const kcal = parseInt(calories, 10);
-    if (!calories || isNaN(kcal) || kcal <= 0) { setError('Bitte gültige Kalorien eingeben.'); return; }
+    if (!calories || isNaN(kcal) || kcal <= 0) { setError(t('nutrition.meal.caloriesRequired')); return; }
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -221,7 +223,7 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
       fat: fat && !isNaN(parseDecimal(fat)) ? parseDecimal(fat) : null,
     });
 
-    if (dbErr) { setSaving(false); setError(`Fehler: ${dbErr.message}`); return; }
+    if (dbErr) { setSaving(false); setError(t('nutrition.meal.errorPrefix', { message: dbErr.message })); return; }
 
     // Optional zur Mahlzeit getrunkenes Wasser mitloggen (best-effort — ein
     // Fehler hier darf die gespeicherte Mahlzeit nicht zunichtemachen).
@@ -242,26 +244,26 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
       <View style={modalStyles.backdrop}>
         <View style={modalStyles.sheet}>
           <View style={modalStyles.header}>
-            <Text style={modalStyles.title}>Mahlzeit erfassen</Text>
+            <Text style={modalStyles.title}>{t('nutrition.meal.title')}</Text>
             <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <MaterialIcons name="close" size={22} color="#666" />
             </TouchableOpacity>
           </View>
 
-          <Text style={modalStyles.label}>Name *</Text>
+          <Text style={modalStyles.label}>{t('nutrition.meal.name')}</Text>
           <TextInput style={modalStyles.input} value={name} onChangeText={setName}
-            placeholder="z.B. Haferflocken mit Milch" placeholderTextColor="#555" />
+            placeholder={t('nutrition.meal.namePlaceholder')} placeholderTextColor="#555" />
 
-          <Text style={modalStyles.label}>Kalorien (kcal) *</Text>
+          <Text style={modalStyles.label}>{t('nutrition.meal.calories')}</Text>
           <TextInput style={modalStyles.input} value={calories} onChangeText={setCalories}
-            placeholder="z.B. 350" placeholderTextColor="#555" keyboardType="number-pad" />
+            placeholder={t('nutrition.meal.caloriesPlaceholder')} placeholderTextColor="#555" keyboardType="number-pad" />
 
           <View style={modalStyles.macroRow}>
-            {([['Protein', protein, setProtein], ['Carbs', carbs, setCarbs], ['Fett', fat, setFat]] as const).map(
+            {([[t('nutrition.protein'), protein, setProtein], [t('nutrition.carbs'), carbs, setCarbs], [t('nutrition.fat'), fat, setFat]] as const).map(
               ([lbl, val, setter]) => (
                 <View key={lbl} style={modalStyles.macroField}>
-                  <Text style={modalStyles.label}>{lbl} (g)</Text>
-                  <TextInput style={modalStyles.input} value={val} onChangeText={(t) => setter(sanitizeDecimalInput(t))}
+                  <Text style={modalStyles.label}>{t('nutrition.meal.gramsSuffix', { label: lbl })}</Text>
+                  <TextInput style={modalStyles.input} value={val} onChangeText={(v) => setter(sanitizeDecimalInput(v))}
                     placeholder="0" placeholderTextColor="#555" keyboardType="decimal-pad" />
                 </View>
               )
@@ -269,10 +271,10 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
           </View>
 
           <View style={modalStyles.waterHeader}>
-            <Text style={modalStyles.label}>Wasser dazu</Text>
+            <Text style={modalStyles.label}>{t('nutrition.meal.waterWith')}</Text>
             {waterMl > 0 && (
               <TouchableOpacity onPress={() => setWaterMl(0)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={modalStyles.waterClear}>zurücksetzen</Text>
+                <Text style={modalStyles.waterClear}>{t('nutrition.meal.reset')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -306,7 +308,7 @@ function MealModal({ visible, onClose, onSaved }: MealModalProps) {
             style={[modalStyles.saveBtn, saving && modalStyles.saveBtnDisabled]}
             onPress={handleSave} disabled={saving} activeOpacity={0.8}
           >
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={modalStyles.saveBtnText}>Speichern</Text>}
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={modalStyles.saveBtnText}>{t('common.save')}</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -354,6 +356,7 @@ const modalStyles = StyleSheet.create({
 // ─────────────────────────────────────────
 
 export default function NutritionScreen() {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [weekData, setWeekData] = useState<WeekDay[]>([]);
@@ -460,10 +463,10 @@ export default function NutritionScreen() {
         <View style={styles.card}>
           {/* Greeting */}
           <Text style={styles.greeting}>
-            {displayName ? `Hallo ${displayName},` : 'Hallo,'}
+            {displayName ? t('nutrition.greetingName', { name: displayName }) : t('nutrition.greeting')}
           </Text>
           <Text style={styles.cardTitle}>
-            dein Ziel für heute · {new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+            {t('nutrition.goalToday', { date: new Date().toLocaleDateString(getLocale(), { day: '2-digit', month: '2-digit' }) })}
           </Text>
 
           <View style={styles.ringRow}>
@@ -477,11 +480,11 @@ export default function NutritionScreen() {
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   style={styles.goalLink}
                 >
-                  <Text style={styles.summaryLabel}>Ziel kcal</Text>
+                  <Text style={styles.summaryLabel}>{t('nutrition.goalKcal')}</Text>
                   <MaterialIcons name="info-outline" size={11} color="#999" />
                 </TouchableOpacity>
                 {bonusActive && (
-                  <Text style={styles.lutealBonusHint}>+{cycleBonus} kcal Bonus</Text>
+                  <Text style={styles.lutealBonusHint}>{t('nutrition.bonus', { kcal: cycleBonus })}</Text>
                 )}
               </View>
               <View style={styles.summaryDivider} />
@@ -490,7 +493,7 @@ export default function NutritionScreen() {
                   {Math.abs(remaining)}
                 </Text>
                 <Text style={styles.summaryLabel}>
-                  {remaining < 0 ? 'Überschuss' : 'Verbleibend'}
+                  {remaining < 0 ? t('nutrition.surplus') : t('nutrition.remaining')}
                 </Text>
               </View>
             </View>
@@ -505,8 +508,8 @@ export default function NutritionScreen() {
             <MaterialIcons name="tune" size={13} color="#555" />
             <Text style={styles.adjustTriggerText}>
               {dailyAdjustment !== 0
-                ? `Tages-Anpassung: ${dailyAdjustment > 0 ? '+' : ''}${dailyAdjustment} kcal`
-                : 'Ziel für heute anpassen'}
+                ? t('nutrition.dailyAdjustment', { value: `${dailyAdjustment > 0 ? '+' : ''}${dailyAdjustment}` })
+                : t('nutrition.adjustToday')}
             </Text>
             <MaterialIcons name={adjustOpen ? 'expand-less' : 'expand-more'} size={14} color="#555" />
           </TouchableOpacity>
@@ -517,17 +520,17 @@ export default function NutritionScreen() {
                 style={styles.adjustInput}
                 value={adjustInput}
                 onChangeText={(v) => setAdjustInput(v.replace(/[^0-9-]/g, ''))}
-                placeholder="-300 oder +200"
+                placeholder={t('nutrition.adjustPlaceholder')}
                 placeholderTextColor="#555"
                 keyboardType="default"
                 autoFocus
               />
               <View style={styles.adjustActions}>
                 <TouchableOpacity style={styles.adjustReset} onPress={() => { setDailyAdjustment(0); setAdjustInput(''); setAdjustOpen(false); }}>
-                  <Text style={styles.adjustResetText}>Zurücksetzen</Text>
+                  <Text style={styles.adjustResetText}>{t('nutrition.reset')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.adjustApply} onPress={applyDailyAdjustment}>
-                  <Text style={styles.adjustApplyText}>Übernehmen</Text>
+                  <Text style={styles.adjustApplyText}>{t('nutrition.apply')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -535,9 +538,9 @@ export default function NutritionScreen() {
 
           {/* Makro-Balken */}
           <View style={styles.macroSection}>
-            <MacroBar label="Protein" value={totalProtein} color={macroColor('protein')} />
-            <MacroBar label="Carbs" value={totalCarbs} color={macroColor('carbs')} />
-            <MacroBar label="Fett" value={totalFat} color={macroColor('fat')} />
+            <MacroBar label={t('nutrition.protein')} value={totalProtein} color={macroColor('protein')} />
+            <MacroBar label={t('nutrition.carbs')} value={totalCarbs} color={macroColor('carbs')} />
+            <MacroBar label={t('nutrition.fat')} value={totalFat} color={macroColor('fat')} />
             <WaterBar consumedMl={waterConsumedMl} goalMl={waterGoalMl} />
           </View>
         </View>
@@ -545,20 +548,20 @@ export default function NutritionScreen() {
         {/* ══ WOCHEN-VERLAUF ══ */}
         {weekData.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitlePlain}>Verlauf · letzte 7 Tage</Text>
+            <Text style={styles.cardTitlePlain}>{t('nutrition.history')}</Text>
             <WeeklyChart weekData={weekData} tdee={effectiveTdee} />
           </View>
         )}
 
         {/* ══ JOURNAL HEADER ══ */}
         <View style={styles.journalHeader}>
-          <Text style={styles.sectionTitle}>Tages-Journal</Text>
+          <Text style={styles.sectionTitle}>{t('nutrition.journal')}</Text>
           <View style={styles.journalActions}>
             <TouchableOpacity
               style={styles.dayLogBtn}
               onPress={() => setDayLogOpen(true)}
               activeOpacity={0.8}
-              accessibilityLabel="Tag erfassen"
+              accessibilityLabel={t('nutrition.logDay')}
             >
               <MaterialIcons name="playlist-add-check" size={20} color="#0a7ea4" />
             </TouchableOpacity>
@@ -567,7 +570,7 @@ export default function NutritionScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.addButton} onPress={() => setModalOpen(true)} activeOpacity={0.8}>
               <MaterialIcons name="add" size={18} color="#fff" />
-              <Text style={styles.addButtonText}>Mahlzeit</Text>
+              <Text style={styles.addButtonText}>{t('nutrition.addMeal')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -578,12 +581,12 @@ export default function NutritionScreen() {
         ) : logs.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialIcons name="restaurant" size={40} color="#2a2a2a" />
-            <Text style={styles.emptyText}>Noch keine Mahlzeiten heute</Text>
+            <Text style={styles.emptyText}>{t('nutrition.noMeals')}</Text>
             <TouchableOpacity style={styles.emptyButton} onPress={() => setModalOpen(true)}>
-              <Text style={styles.emptyButtonText}>Erste Mahlzeit erfassen</Text>
+              <Text style={styles.emptyButtonText}>{t('nutrition.firstMeal')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setDayLogOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.emptyLink}>Aus bisherigen Gerichten wählen</Text>
+              <Text style={styles.emptyLink}>{t('nutrition.pickPrevious')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -597,9 +600,9 @@ export default function NutritionScreen() {
                   <Text style={styles.logName}>{log.meal_name}</Text>
                   <Text style={styles.logMacros}>
                     {[
-                      log.protein != null && `P ${log.protein}g`,
-                      log.carbs != null && `C ${log.carbs}g`,
-                      log.fat != null && `F ${log.fat}g`,
+                      log.protein != null && `${t('nutrition.macroP')} ${log.protein}g`,
+                      log.carbs != null && `${t('nutrition.macroC')} ${log.carbs}g`,
+                      log.fat != null && `${t('nutrition.macroF')} ${log.fat}g`,
                     ].filter(Boolean).join(' · ')}
                   </Text>
                 </View>
@@ -618,7 +621,7 @@ export default function NutritionScreen() {
       <MealModal
         visible={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSaved={() => { setModalOpen(false); setToast('Mahlzeit gespeichert!'); loadData(); }}
+        onSaved={() => { setModalOpen(false); setToast(t('nutrition.mealSaved')); loadData(); }}
       />
 
       <CalorieBreakdownModal
@@ -633,7 +636,7 @@ export default function NutritionScreen() {
         onClose={() => setDayLogOpen(false)}
         onSaved={(count) => {
           setDayLogOpen(false);
-          setToast(count === 1 ? 'Gericht gespeichert!' : `${count} Gerichte gespeichert!`);
+          setToast(t('nutrition.dishesSaved', { count }));
           loadData();
         }}
       />
@@ -641,7 +644,7 @@ export default function NutritionScreen() {
       <FoodScanner
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
-        onDetected={() => { setToast('Mahlzeit gespeichert!'); loadData(); }}
+        onDetected={() => { setToast(t('nutrition.mealSaved')); loadData(); }}
       />
 
       {toast && <Toast message={toast} type="success" duration={2000} onDismiss={() => setToast(null)} />}

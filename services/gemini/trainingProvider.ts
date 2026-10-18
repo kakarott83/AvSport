@@ -5,6 +5,7 @@
  * Enthält Prompt-Logik, Response-Validierung und Fallback-Pool.
  */
 
+import { getLanguage, t } from '@/lib/i18n';
 import { geminiRequest, GeminiDailyLimitError } from './client';
 import type {
   AiPlanInput, FocusArea, GeneratedDay, GeneratedExercise, FitnessLevel,
@@ -36,18 +37,24 @@ const GOAL_LABEL: Record<AiPlanInput['goal'], string> = {
   muskeln:  'Muskeln aufbauen (Kraft & Hypertrophie)',
 };
 
+/** Anzeige-Labels in der aktuellen App-Sprache (Getter, damit ein Sprachwechsel greift). */
 export const FOCUS_LABEL: Record<FocusArea, string> = {
-  bauch:        'Bauch / Core',
-  beine:        'Beine',
-  oberkoerper:  'Oberkörper',
-  'ganzkörper': 'Ganzkörper',
+  get bauch()        { return t('aiPlan.focus.bauch'); },
+  get beine()        { return t('aiPlan.focus.beine'); },
+  get oberkoerper()  { return t('aiPlan.focus.oberkoerper'); },
+  get 'ganzkörper'() { return t('aiPlan.focus.ganzkoerper'); },
 };
 
 export const FITNESS_LEVEL_LABEL: Record<FitnessLevel, string> = {
-  anfaenger:       'Anfänger',
-  fortgeschritten: 'Fortgeschritten',
-  profi:           'Profi',
+  get anfaenger()       { return t('aiPlan.level.anfaenger'); },
+  get fortgeschritten() { return t('aiPlan.level.fortgeschritten'); },
+  get profi()           { return t('aiPlan.level.profi'); },
 };
+
+/** Sprache, in der Gemini alle Texte des Plans formulieren soll. */
+function outputLanguageName(): string {
+  return getLanguage() === 'en' ? 'Englisch' : 'Deutsch';
+}
 
 const GYM_EQUIPMENT_TEXT =
   'Vollausstattung Fitnessstudio: Langhantel, Kurzhanteln, Kabelzug, Maschinen, Kettlebell, Freigewichte';
@@ -117,7 +124,11 @@ function buildPrompt(input: AiPlanInput, sanitizedDays: number[] | null): string
     ? `Einschränkungen: ${input.restrictions.trim()} — betroffene Übungen meiden oder durch gelenkschonende Alternativen ersetzen.`
     : 'Keine bekannten Einschränkungen.';
 
+  const outLang = outputLanguageName();
+
   return `Du bist ein zertifizierter Personal Trainer. Erstelle einen individualisierten, mehrtägigen Trainingsplan (Split).
+
+AUSGABESPRACHE: Formuliere ALLE Textwerte im JSON (title, progression_notes, label, warmup, cooldown, exercise_name, description, muscle_group, equipment_type) auf ${outLang}.
 
 Nutzerprofil:
 - Ziel: ${GOAL_LABEL[input.goal]}
@@ -136,7 +147,7 @@ Erstelle GENAU ${daySplitCount} unterschiedliche Trainingstage (Day 1 bis Day ${
 
 Liefere NUR ein valides JSON-Objekt (kein Markdown, keine Erklärung, kein Code-Block):
 {
-  "title": "<motivierender, prägnanter Planname auf Deutsch, max 35 Zeichen>",
+  "title": "<motivierender, prägnanter Planname auf ${outLang}, max 35 Zeichen>",
   "is_circuit": <true oder false>,
   "progression_notes": "<1-2 Sätze: wie über die ${input.targetWeeks} Wochen gesteigert werden soll>",
   "days": [
@@ -147,7 +158,7 @@ Liefere NUR ein valides JSON-Objekt (kein Markdown, keine Erklärung, kein Code-
       "cooldown": "<kurze Cool-down-Anleitung>",
       "exercises": [
         {
-          "exercise_name": "<kurze deutsche Übungsbezeichnung, max 3 Wörter>",
+          "exercise_name": "<kurze Übungsbezeichnung auf ${outLang}, max 3 Wörter>",
           "description": "<Bewegung in einem kurzen Satz, max 8 Wörter>",
           "muscle_group": "<Zielmuskelgruppe/Fokus, z. B. 'Brust', 'Beine', 'Core'>",
           "equipment_type": "<Ausrüstung, z. B. 'Langhantel', 'Kurzhantel', 'Maschine', 'Kabelzug', 'Körpergewicht', 'Laufband', 'Band'>",
@@ -296,6 +307,68 @@ const FALLBACK_POOL: Record<FocusArea, GeneratedExercise[]> = {
   ],
 };
 
+/** Englische Texte für den Fallback-Pool (Schlüssel = deutscher Text). */
+const FALLBACK_EN: Record<string, string> = {
+  'Crunches': 'Crunches',
+  'Plank': 'Plank',
+  'Bicycle Crunches': 'Bicycle Crunches',
+  'Leg Raises': 'Leg Raises',
+  'Russian Twists': 'Russian Twists',
+  'Kniebeugen': 'Squats',
+  'Ausfallschritte': 'Lunges',
+  'Beinpresse': 'Leg Press',
+  'Rumän. Kreuzheben': 'Romanian Deadlift',
+  'Wadenheben': 'Calf Raises',
+  'Liegestütze': 'Push-ups',
+  'Bankdrücken': 'Bench Press',
+  'Klimmzüge': 'Pull-ups',
+  'Schulterdrücken': 'Shoulder Press',
+  'Kurzhantel-Rudern': 'Dumbbell Row',
+  'Burpees': 'Burpees',
+  'Shoulder Press': 'Shoulder Press',
+  'Oberkörper vom Boden einrollen, Bauch anspannen.': 'Curl your upper body off the floor, brace your abs.',
+  'Unterarmstütz halten, Körper gerade.': 'Hold a forearm plank, body straight.',
+  'Ellbogen zum gegenüberliegenden Knie führen.': 'Bring each elbow to the opposite knee.',
+  'Gestreckte Beine im Liegen heben und senken.': 'Lying down, raise and lower straight legs.',
+  'Im Sitzen Oberkörper rotieren, Boden berühren.': 'Seated, rotate your torso and touch the floor.',
+  'Hüfte tief absenken, Knie in Zehenrichtung.': 'Lower your hips deep, knees in line with toes.',
+  'Großer Schritt nach vorn, Knie fast zum Boden.': 'Big step forward, knee almost to the floor.',
+  'Platte mit den Beinen kontrolliert wegdrücken.': 'Push the platform away with control.',
+  'Hüfte nach hinten schieben, Rücken gerade.': 'Push your hips back, keep your back straight.',
+  'Auf die Zehenspitzen heben und langsam senken.': 'Rise onto your toes and lower slowly.',
+  'Körper gerade, Brust Richtung Boden senken.': 'Body straight, lower your chest toward the floor.',
+  'Langhantel kontrolliert zur Brust senken, drücken.': 'Lower the barbell to your chest with control, press.',
+  'Körper hochziehen, Kinn über die Stange.': 'Pull your body up, chin over the bar.',
+  'Hantel über Kopf drücken, Rumpf stabil halten.': 'Press the dumbbell overhead, keep your core stable.',
+  'Hantel zur Hüfte ziehen, Rücken gerade halten.': 'Pull the dumbbell to your hip, keep your back straight.',
+  'Squat, Liegestütz, Strecksprung fließend kombiniert.': 'Squat, push-up and jump combined in one flow.',
+  'Hanteln über Kopf drücken, Core anspannen.': 'Press the dumbbells overhead, brace your core.',
+  'Bauch': 'Abs',
+  'Beine': 'Legs',
+  'Beine/Rücken': 'Legs/Back',
+  'Brust': 'Chest',
+  'Rücken': 'Back',
+  'Schultern': 'Shoulders',
+  'Ganzkörper': 'Full body',
+  'Core': 'Core',
+  'Körpergewicht': 'Bodyweight',
+  'Maschine': 'Machine',
+  'Langhantel': 'Barbell',
+  'Kurzhantel': 'Dumbbell',
+};
+
+function localizeFallbackExercise(ex: GeneratedExercise): GeneratedExercise {
+  if (getLanguage() !== 'en') return ex;
+  const en = (s: string) => FALLBACK_EN[s] ?? s;
+  return {
+    ...ex,
+    exercise_name:  en(ex.exercise_name),
+    description:    en(ex.description),
+    muscle_group:   en(ex.muscle_group),
+    equipment_type: en(ex.equipment_type),
+  };
+}
+
 function buildFallback(input: AiPlanInput, sanitizedDays: number[] | null): WorkoutPlanAiResponse {
   const daySplitCount = resolveDaySplitCount(sanitizedDays);
 
@@ -305,7 +378,7 @@ function buildFallback(input: AiPlanInput, sanitizedDays: number[] | null): Work
   const filtered = bodyweightOnly ? basePool.filter((ex) => ex.target_weight_kg === null) : basePool;
   const pool = filtered.length > 0 ? filtered : basePool;
 
-  const exercises = pool.map((ex) =>
+  const exercises = pool.map(localizeFallbackExercise).map((ex) =>
     input.goal === 'abnehmen'
       ? {
           ...ex,
@@ -322,16 +395,16 @@ function buildFallback(input: AiPlanInput, sanitizedDays: number[] | null): Work
 
   const days: GeneratedDay[] = Array.from({ length: daySplitCount }, (_, i) => ({
     day_index: i + 1,
-    label:     daySplitCount > 1 ? `${FOCUS_LABEL[input.focusArea]} · Tag ${i + 1}` : FOCUS_LABEL[input.focusArea],
-    warmup:    '5–10 Min. lockeres Cardio + dynamisches Dehnen der beanspruchten Muskeln.',
-    cooldown:  '5 Min. statisches Dehnen der trainierten Muskelgruppen, ruhige Atmung.',
+    label:     daySplitCount > 1 ? `${FOCUS_LABEL[input.focusArea]} · ${t('aiPlan.fallback.day', { n: i + 1 })}` : FOCUS_LABEL[input.focusArea],
+    warmup:    t('aiPlan.fallback.warmup'),
+    cooldown:  t('aiPlan.fallback.cooldown'),
     exercises,
   }));
 
   return {
-    title:              `${input.targetWeeks}-Wochen ${FOCUS_LABEL[input.focusArea]}-Plan`,
+    title:              t('aiPlan.fallback.title', { weeks: input.targetWeeks, focus: FOCUS_LABEL[input.focusArea] }),
     is_circuit:         input.goal === 'abnehmen',
-    progression_notes:  'Steigere alle 2 Wochen entweder das Gewicht (+2,5–5 kg) oder die Wiederholungen (+1–2 pro Satz).',
+    progression_notes:  t('aiPlan.fallback.progression'),
     days,
     scheduled_days:     sanitizedDays,
   };
@@ -350,7 +423,7 @@ export async function generateWorkoutPlan(input: AiPlanInput): Promise<WorkoutPl
   const sanitizedDays = sanitizeScheduledDays(input.scheduledDays);
 
   try {
-    const text = await geminiRequest([{ text: buildPrompt(input, sanitizedDays) }]);
+    const text = await geminiRequest([{ text: buildPrompt(input, sanitizedDays) }], "training_plan");
 
     if (!text) {
       console.warn('[Training] Gemini leere Antwort — Fallback wird genutzt');

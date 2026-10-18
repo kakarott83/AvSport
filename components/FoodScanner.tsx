@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
+import { useTranslation } from '@/lib/i18n';
 import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
 import { analyzeFoodImage, analyzeFoodItems } from '@/services/gemini/nutritionProvider';
 import { recognizeFoodFromText, type RecognizedItem } from '@/services/nutrition/foodRecognition';
@@ -128,6 +129,7 @@ export function FoodScanner({
   proteinGoal   = 150,
 }: Props) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [phase,  setPhase]  = useState<Phase>('camera');
   const [image1, setImage1] = useState<CapturedPhoto | null>(null);
@@ -164,7 +166,7 @@ export function FoodScanner({
     setIsCapturing(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.2 });
-      if (!photo?.base64 || !photo?.uri) throw new Error('Kein Bild erhalten');
+      if (!photo?.base64 || !photo?.uri) throw new Error(t('scanner.noImage'));
       return { base64: photo.base64, uri: photo.uri };
     } finally {
       setIsCapturing(false);
@@ -179,7 +181,7 @@ export function FoodScanner({
       setImage1(photo);
       setPhase('tip');
     } catch (e: any) {
-      setError(e?.message || 'Aufnahme fehlgeschlagen');
+      setError(e?.message || t('scanner.captureFailed'));
     }
   }
 
@@ -191,7 +193,7 @@ export function FoodScanner({
       setImage2(photo);
       setPhase('review');
     } catch (e: any) {
-      setError(e?.message || 'Aufnahme fehlgeschlagen');
+      setError(e?.message || t('scanner.captureFailed'));
     }
   }
 
@@ -204,13 +206,13 @@ export function FoodScanner({
     }
     const msg: string = e?.message ?? '';
     if (msg.includes('503')) {
-      setError('Die KI ist gerade stark ausgelastet. Bitte versuch es gleich nochmal! ☕');
+      setError(t('scanner.aiBusy'));
     } else if (e instanceof TypeError || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-      setError('Verbindung fehlgeschlagen. Prüfe dein Internet.');
+      setError(t('scanner.connectionFailed'));
     } else if (e instanceof SyntaxError) {
-      setError('Die KI-Antwort war unvollständig. Bitte versuch es nochmal.');
+      setError(t('scanner.incomplete'));
     } else {
-      setError(msg || 'Analyse fehlgeschlagen');
+      setError(msg || t('scanner.analysisFailed'));
     }
     setPhase(backTo);
   }
@@ -286,7 +288,7 @@ export function FoodScanner({
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      setError('Nicht eingeloggt — Mahlzeit konnte nicht gespeichert werden.');
+      setError(t('scanner.notLoggedIn'));
       setPhase('result');
       return;
     }
@@ -314,7 +316,7 @@ export function FoodScanner({
     const { error: dbErr } = await supabase.from('food_logs').insert(rows);
 
     if (dbErr) {
-      setError(`Speichern fehlgeschlagen: ${dbErr.message}`);
+      setError(t('scanner.saveFailed', { message: dbErr.message }));
       setPhase('result');
       return;
     }
@@ -346,12 +348,12 @@ export function FoodScanner({
               <CameraView ref={cameraRef} style={s.camera} facing="back" />
             ) : (
               <View style={s.centeredBox}>
-                <Text style={s.permText}>Kamera-Zugriff wird benötigt</Text>
+                <Text style={s.permText}>{t('scanner.cameraNeeded')}</Text>
                 <TouchableOpacity style={s.primaryBtn} onPress={requestPermission} activeOpacity={0.8}>
-                  <Text style={s.primaryBtnText}>Erlauben</Text>
+                  <Text style={s.primaryBtnText}>{t('scanner.allow')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.retryBtn} onPress={openDescribe} activeOpacity={0.7}>
-                  <Text style={s.retryText}>Mahlzeit stattdessen beschreiben</Text>
+                  <Text style={s.retryText}>{t('scanner.describeInsteadLong')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -361,9 +363,7 @@ export function FoodScanner({
                 {phase === 'camera2' && (
                   <View style={s.camera2Banner}>
                     <MaterialIcons name="straighten" size={14} color="#FF9100" />
-                    <Text style={s.camera2BannerText}>
-                      Referenzobjekt (z. B. Hand oder Besteck) neben den Teller legen
-                    </Text>
+                    <Text style={s.camera2BannerText}>{t('scanner.referenceBanner')}</Text>
                   </View>
                 )}
                 {error && <Text style={s.errorText}>{error}</Text>}
@@ -377,13 +377,13 @@ export function FoodScanner({
                 </TouchableOpacity>
                 {phase === 'camera2' && (
                   <TouchableOpacity style={s.skipBtn} onPress={() => setPhase('review')} activeOpacity={0.7}>
-                    <Text style={s.skipText}>Überspringen</Text>
+                    <Text style={s.skipText}>{t('scanner.skip')}</Text>
                   </TouchableOpacity>
                 )}
                 {phase === 'camera' && (
                   <TouchableOpacity style={s.describeBtn} onPress={openDescribe} activeOpacity={0.8}>
                     <MaterialIcons name="keyboard-voice" size={16} color="#fff" />
-                    <Text style={s.describeBtnText}>Stattdessen beschreiben</Text>
+                    <Text style={s.describeBtnText}>{t('scanner.describeInstead')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -402,10 +402,10 @@ export function FoodScanner({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={s.sectionLabel}>WAS HAST DU GEGESSEN?</Text>
+              <Text style={s.sectionLabel}>{t('scanner.whatDidYouEat')}</Text>
               <TextInput
                 style={[s.notesInput, s.describeInput]}
-                placeholder={'z. B. „Morgens Müsli mit Milch, mittags Spaghetti Bolognese, abends zwei Käsebrote und ein Apfel“'}
+                placeholder={t('scanner.describePlaceholder')}
                 placeholderTextColor="#444"
                 value={description}
                 onChangeText={setDescription}
@@ -415,9 +415,7 @@ export function FoodScanner({
               />
               <View style={s.tipBox}>
                 <MaterialIcons name="keyboard-voice" size={18} color="#FF9100" style={{ marginTop: 1 }} />
-                <Text style={s.tipText}>
-                  Tipp: Tippe auf das Mikrofon deiner Tastatur und sprich einfach, was du gegessen hast — gern auch den ganzen Tag. Jedes Gericht wird ein eigener Eintrag. Mengenangaben machen das Ergebnis genauer.
-                </Text>
+                <Text style={s.tipText}>{t('scanner.describeTip')}</Text>
               </View>
 
               {error && <Text style={s.errorText}>{error}</Text>}
@@ -429,11 +427,11 @@ export function FoodScanner({
                 activeOpacity={0.85}
               >
                 <MaterialIcons name="playlist-add-check" size={20} color="#121212" />
-                <Text style={s.analyzeBtnText}>Erfassen</Text>
+                <Text style={s.analyzeBtnText}>{t('scanner.capture')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
-                <Text style={s.retryText}>Stattdessen Foto aufnehmen</Text>
+                <Text style={s.retryText}>{t('scanner.photoInstead')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -443,7 +441,7 @@ export function FoodScanner({
         {phase === 'parsing' && (
           <View style={[s.centeredBox, { justifyContent: 'center', alignItems: 'center' }]}>
             <AnimatedLogo size={90} />
-            <Text style={s.analyzingText}>Erfasse deine Mahlzeit…</Text>
+            <Text style={s.analyzingText}>{t('scanner.parsing')}</Text>
           </View>
         )}
 
@@ -458,10 +456,8 @@ export function FoodScanner({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={s.sectionLabel}>ERFASSTE LEBENSMITTEL</Text>
-              <Text style={s.itemsHint}>
-                Prüfe die Liste und passe Namen oder Mengen an, bevor die Nährwerte berechnet werden.
-              </Text>
+              <Text style={s.sectionLabel}>{t('scanner.recognizedItems')}</Text>
+              <Text style={s.itemsHint}>{t('scanner.itemsHint')}</Text>
 
               {items.map((it) => (
                 <View key={it.key} style={s.itemRow}>
@@ -469,7 +465,7 @@ export function FoodScanner({
                     style={[s.itemInput, s.itemName]}
                     value={it.name_de}
                     onChangeText={(v) => updateItem(it.key, { name_de: v, name: '', preparation: '' })}
-                    placeholder="Lebensmittel"
+                    placeholder={t('scanner.itemPlaceholder')}
                     placeholderTextColor="#444"
                   />
                   <TextInput
@@ -493,7 +489,7 @@ export function FoodScanner({
 
               <TouchableOpacity style={s.addItemBtn} onPress={addItem} activeOpacity={0.7}>
                 <MaterialIcons name="add" size={18} color={COLOR_CALORIES} />
-                <Text style={s.addItemText}>Lebensmittel hinzufügen</Text>
+                <Text style={s.addItemText}>{t('scanner.addItem')}</Text>
               </TouchableOpacity>
 
               {error && <Text style={s.errorText}>{error}</Text>}
@@ -505,11 +501,11 @@ export function FoodScanner({
                 activeOpacity={0.85}
               >
                 <MaterialIcons name="auto-awesome" size={18} color="#121212" />
-                <Text style={s.analyzeBtnText}>Analysieren</Text>
+                <Text style={s.analyzeBtnText}>{t('scanner.analyze')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={s.retryBtn} onPress={() => { setError(null); setPhase('describe'); }} activeOpacity={0.7}>
-                <Text style={s.retryText}>Beschreibung ändern</Text>
+                <Text style={s.retryText}>{t('scanner.editDescription')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -522,18 +518,16 @@ export function FoodScanner({
 
             <View style={s.tipBox}>
               <MaterialIcons name="lightbulb-outline" size={18} color="#FF9100" style={{ marginTop: 1 }} />
-              <Text style={s.tipText}>
-                Tipp: Mache ein zweites Foto mit einem Referenzobjekt (z.{' '}B. Hand oder Besteck) neben dem Teller für eine genauere Schätzung.
-              </Text>
+              <Text style={s.tipText}>{t('scanner.secondPhotoTip')}</Text>
             </View>
 
             <TouchableOpacity style={s.primaryBtn} onPress={() => setPhase('camera2')} activeOpacity={0.85}>
               <MaterialIcons name="add-a-photo" size={18} color="#121212" />
-              <Text style={s.primaryBtnText}>Zweites Foto aufnehmen</Text>
+              <Text style={s.primaryBtnText}>{t('scanner.takeSecondPhoto')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={s.skipBtn} onPress={() => setPhase('review')} activeOpacity={0.7}>
-              <Text style={s.skipText}>Überspringen</Text>
+              <Text style={s.skipText}>{t('scanner.skip')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -549,7 +543,7 @@ export function FoodScanner({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={s.sectionLabel}>MAHLZEIT ÜBERPRÜFEN</Text>
+              <Text style={s.sectionLabel}>{t('scanner.reviewMeal')}</Text>
 
               <View style={s.thumbnailRow}>
                 {/* image1 */}
@@ -557,7 +551,7 @@ export function FoodScanner({
                   <Image source={{ uri: image1.uri }} style={s.thumbImg} resizeMode="cover" />
                   <View style={s.thumbBadge}>
                     <MaterialIcons name="check" size={11} color="#4caf50" />
-                    <Text style={s.thumbBadgeText}>Mahlzeit</Text>
+                    <Text style={s.thumbBadgeText}>{t('scanner.meal')}</Text>
                   </View>
                 </View>
 
@@ -567,7 +561,7 @@ export function FoodScanner({
                     <Image source={{ uri: image2.uri }} style={s.thumbImg} resizeMode="cover" />
                     <View style={[s.thumbBadge, { backgroundColor: '#0a1a1e' }]}>
                       <MaterialIcons name="straighten" size={11} color={COLOR_CALORIES} />
-                      <Text style={[s.thumbBadgeText, { color: COLOR_CALORIES }]}>Referenz</Text>
+                      <Text style={[s.thumbBadgeText, { color: COLOR_CALORIES }]}>{t('scanner.reference')}</Text>
                     </View>
                     <TouchableOpacity style={s.removeThumbBtn} onPress={() => setImage2(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                       <MaterialIcons name="close" size={13} color="#fff" />
@@ -576,17 +570,17 @@ export function FoodScanner({
                 ) : (
                   <TouchableOpacity style={[s.thumbSlot, s.emptySlot]} onPress={() => { setError(null); setPhase('camera2'); }} activeOpacity={0.7}>
                     <MaterialIcons name="add-a-photo" size={22} color="#444" />
-                    <Text style={s.emptySlotTitle}>Optional</Text>
-                    <Text style={s.emptySlotSub}>Referenzobjekt</Text>
+                    <Text style={s.emptySlotTitle}>{t('scanner.optional')}</Text>
+                    <Text style={s.emptySlotSub}>{t('scanner.referenceObject')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               <View style={s.notesSection}>
-                <Text style={s.notesLabel}>DETAILS (OPTIONAL)</Text>
+                <Text style={s.notesLabel}>{t('scanner.details')}</Text>
                 <TextInput
                   style={s.notesInput}
-                  placeholder={'z. B. „200g Reis, Dressing separat“'}
+                  placeholder={t('scanner.detailsPlaceholder')}
                   placeholderTextColor="#444"
                   value={notes}
                   onChangeText={setNotes}
@@ -600,11 +594,11 @@ export function FoodScanner({
 
               <TouchableOpacity style={s.analyzeBtn} onPress={handleAnalyze} activeOpacity={0.85}>
                 <MaterialIcons name="auto-awesome" size={18} color="#121212" />
-                <Text style={s.analyzeBtnText}>Analysieren</Text>
+                <Text style={s.analyzeBtnText}>{t('scanner.analyze')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
-                <Text style={s.retryText}>Nochmal aufnehmen</Text>
+                <Text style={s.retryText}>{t('scanner.retake')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -614,9 +608,9 @@ export function FoodScanner({
         {phase === 'analyzing' && (
           <View style={[s.centeredBox, { justifyContent: 'center', alignItems: 'center' }]}>
             <AnimatedLogo size={90} />
-            <Text style={s.analyzingText}>KI analysiert…</Text>
+            <Text style={s.analyzingText}>{t('scanner.aiAnalyzing')}</Text>
             {image2 && (
-              <Text style={s.analyzingSubText}>Beide Bilder werden ausgewertet</Text>
+              <Text style={s.analyzingSubText}>{t('scanner.bothImages')}</Text>
             )}
           </View>
         )}
@@ -629,7 +623,7 @@ export function FoodScanner({
             showsVerticalScrollIndicator={false}
           >
             <View style={s.previewCard}>
-              <Text style={s.cardLabel}>ERNÄHRUNG · VORSCHAU</Text>
+              <Text style={s.cardLabel}>{t('scanner.preview')}</Text>
 
               <View style={s.nutritionRow}>
                 <MealRing
@@ -641,7 +635,7 @@ export function FoodScanner({
                 <View style={s.nutritionInfo}>
                   <Text style={s.mealName} numberOfLines={2}>{result.name}</Text>
                   <Text style={s.kcalValue}>{result.calories}</Text>
-                  <Text style={s.kcalUnit}>kcal dieser Mahlzeit</Text>
+                  <Text style={s.kcalUnit}>{t('scanner.kcalThisMeal')}</Text>
                   <View style={s.kcalDivider} />
                   <View style={s.legendChip}>
                     <View style={[s.legendDot, { backgroundColor: COLOR_PROTEIN }]} />
@@ -649,11 +643,11 @@ export function FoodScanner({
                   </View>
                   <View style={s.legendChip}>
                     <View style={[s.legendDot, { backgroundColor: COLOR_CARBS }]} />
-                    <Text style={s.legendText}>{result.carbs}g KH</Text>
+                    <Text style={s.legendText}>{result.carbs}g {t('scanner.carbsShort')}</Text>
                   </View>
                   <View style={s.legendChip}>
                     <View style={[s.legendDot, { backgroundColor: '#c0392b' }]} />
-                    <Text style={s.legendText}>{result.fat}g Fett</Text>
+                    <Text style={s.legendText}>{result.fat}g {t('scanner.fat')}</Text>
                   </View>
                 </View>
               </View>
@@ -672,7 +666,7 @@ export function FoodScanner({
                       <View style={{ flex: 1 }}>
                         <Text style={s.breakdownName} numberOfLines={1}>{it.name}</Text>
                         <Text style={s.breakdownMacros}>
-                          {it.grams} g · P {it.protein} g · KH {it.carbs} g · F {it.fat} g
+                          {t('scanner.itemMacros', { grams: it.grams, p: it.protein, c: it.carbs, f: it.fat })}
                         </Text>
                       </View>
                       <Text style={s.breakdownKcal}>{it.calories} kcal</Text>
@@ -692,7 +686,7 @@ export function FoodScanner({
                 ) : (
                   <>
                     <Text style={s.cardLinkText}>
-                      {savesSeparately ? `${result.items!.length} Einträge speichern` : 'Mahlzeit bestätigen'}
+                      {savesSeparately ? t('scanner.saveEntries', { count: result.items!.length }) : t('scanner.confirmMeal')}
                     </Text>
                     <MaterialIcons name="chevron-right" size={15} color={COLOR_CALORIES} />
                   </>
@@ -704,11 +698,11 @@ export function FoodScanner({
 
             {mode === 'text' ? (
               <TouchableOpacity style={s.retryBtn} onPress={() => { setError(null); setPhase('items'); }} activeOpacity={0.7}>
-                <Text style={s.retryText}>Liste bearbeiten</Text>
+                <Text style={s.retryText}>{t('scanner.editList')}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={s.retryBtn} onPress={reset} activeOpacity={0.7}>
-                <Text style={s.retryText}>Nochmal aufnehmen</Text>
+                <Text style={s.retryText}>{t('scanner.retake')}</Text>
               </TouchableOpacity>
             )}
           </ScrollView>

@@ -7,6 +7,10 @@
     "icon": "./assets/images/Avora_Sport_Logo.png",
     "scheme": "avorasport",
     "userInterfaceStyle": "automatic",
+    "locales": {
+      "de": "./locales/de.json",
+      "en": "./locales/en.json"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.avorasport.app",

@@ -1,3 +1,4 @@
+import { t, tList } from '@/lib/i18n';
 /**
  * Pure nutrition-calculation helpers.
  * No React, no React Native — safe to import from tests and server code.
@@ -52,14 +53,14 @@ export function computeRemaining(goal: number, eaten: number): number {
  * The last entry (today) is always labelled 'Heute'.
  */
 export function buildWeekDays(dayMap: Record<string, number>): WeekDay[] {
-  const DE_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const dayLabels = tList('common.weekdaysShort');
   return Array.from({ length: 7 }, (_, i) => {
     const d   = new Date(Date.now() - (6 - i) * 86_400_000);
     const iso = d.toISOString().slice(0, 10);
     return {
       date:  iso,
       eaten: dayMap[iso] ?? 0,
-      label: i === 6 ? 'Heute' : DE_LABELS[d.getDay()],
+      label: i === 6 ? t('common.today') : dayLabels[d.getDay()],
     };
   });
 }

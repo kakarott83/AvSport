@@ -41,7 +41,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
           EXPO_PUBLIC_REVENUECAT_IOS_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_KEY }}
           EXPO_PUBLIC_REVENUECAT_ANDROID_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
         run: |
@@ -72,7 +71,6 @@ jobs:
           echo "App-Konfiguration:"
           check EXPO_PUBLIC_SUPABASE_URL             "$EXPO_PUBLIC_SUPABASE_URL"             ""
           check EXPO_PUBLIC_SUPABASE_ANON_KEY        "$EXPO_PUBLIC_SUPABASE_ANON_KEY"        ""
-          check EXPO_PUBLIC_GEMINI_API_KEY           "$EXPO_PUBLIC_GEMINI_API_KEY"           ""
           check EXPO_PUBLIC_REVENUECAT_IOS_KEY       "$EXPO_PUBLIC_REVENUECAT_IOS_KEY"       ""
           check EXPO_PUBLIC_REVENUECAT_ANDROID_KEY   "$EXPO_PUBLIC_REVENUECAT_ANDROID_KEY"   ""
 
@@ -102,14 +100,13 @@ jobs:
 
       # EXPO_PUBLIC_*-Variablen werden beim JS-Bundling (Teil des Xcode-Archiv-
       # Build-Schritts) fest in den Bundle eingebacken. Ohne diese Datei liefe
-      # die App zwar, hätte aber keine Supabase-/Gemini-/RevenueCat-Anbindung
+      # die App zwar, hätte aber keine Supabase-/RevenueCat-Anbindung
       # (dasselbe Problem, das wir vorhin schon beim EAS-Preview-Build hatten).
       - name: .env für den JS-Bundle-Build schreiben
         run: |
           cat > .env <<EOF
           EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-          EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
           EXPO_PUBLIC_REVENUECAT_IOS_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_KEY }}
           EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
           EOF

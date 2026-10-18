@@ -3,6 +3,8 @@
  * No React, no React Native — safe to import from tests and hooks alike.
  */
 
+import { t } from "@/lib/i18n";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,12 +19,12 @@ export type ActivityLevel =
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** German display labels for each activity level. */
+/** Display labels for each activity level (in the current app language). */
 export const ACTIVITY_LEVEL_LABELS: Record<ActivityLevel, string> = {
-  sedentary:  "Sitzend",
-  light:      "Leicht aktiv",
-  active:     "Aktiv",
-  very_active: "Sehr aktiv",
+  get sedentary()   { return t("domain.activityLevel.sedentary"); },
+  get light()       { return t("domain.activityLevel.light"); },
+  get active()      { return t("domain.activityLevel.active"); },
+  get very_active() { return t("domain.activityLevel.very_active"); },
 };
 
 /** All four activity levels in display order. */

@@ -15,8 +15,9 @@ import {
 } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 
-import { DatePickerInput, isoToGerman } from '@/components/DatePickerInput';
+import { DatePickerInput, formatIsoDate } from '@/components/DatePickerInput';
 import { Toast } from '@/components/Toast';
+import { getLanguage, t, useTranslation } from '@/lib/i18n';
 import { formatDecimal, parseDecimal, sanitizeDecimalInput } from '@/lib/profile';
 import { supabase } from '@/services/supabaseClient';
 
@@ -24,7 +25,38 @@ import { supabase } from '@/services/supabaseClient';
 // Konstanten & Types
 // ─────────────────────────────────────────
 
+// Regionen werden mit ihrem deutschen Namen gespeichert (body_measurements.region);
+// angezeigt wird die Übersetzung über REGION_KEYS.
 const CHART_TABS = ['Gewicht', 'Bauchumfang', 'Brustumfang', 'Oberarm (links)', 'Hüfte'];
+
+const REGION_KEYS = {
+  'Gewicht':               'weight',
+  'Bauchumfang':           'waist',
+  'Brustumfang':           'chest',
+  'Oberarm (links)':       'upperArmLeft',
+  'Oberarm (rechts)':      'upperArmRight',
+  'Oberschenkel (links)':  'thighLeft',
+  'Oberschenkel (rechts)': 'thighRight',
+  'Waden':                 'calves',
+  'Hüfte':                 'hips',
+} as const;
+
+type StoredRegion = keyof typeof REGION_KEYS;
+
+/** Gespeicherter (deutscher) Regionsname → Anzeige in der App-Sprache. */
+function regionLabel(region: string): string {
+  const key = REGION_KEYS[region as StoredRegion];
+  return key ? t(`bodyStats.regions.${key}`) : region;
+}
+
+/** Eingabe (ggf. übersetzter Name) → gespeicherter Regionsname. */
+function storedRegion(input: string): string {
+  const trimmed = input.trim();
+  const match = (Object.keys(REGION_KEYS) as StoredRegion[]).find(
+    (r) => r === trimmed || regionLabel(r).toLowerCase() === trimmed.toLowerCase(),
+  );
+  return match ?? trimmed;
+}
 
 type RegionMeta = {
   label: string;
@@ -61,10 +93,9 @@ function toISODate(d: Date): string {
 function formatDisplayDate(iso: string): string {
   const today = toISODate(new Date());
   const yesterday = toISODate(new Date(Date.now() - 86400000));
-  if (iso === today) return 'Heute';
-  if (iso === yesterday) return 'Gestern';
-  const [, m, d] = iso.split('-');
-  return `${d}.${m}.`;
+  if (iso === today) return t('common.today');
+  if (iso === yesterday) return t('common.yesterday');
+  return toShortLabel(iso);
 }
 
 function regionMeta(label: string): RegionMeta {
@@ -84,7 +115,7 @@ const CHART_WIDTH = Dimensions.get('window').width - 40 - 56; // screen padding 
 /** YYYY-MM-DD → '08.04.' */
 function toShortLabel(iso: string): string {
   const [, m, d] = iso.split('-');
-  return `${d}.${m}.`;
+  return getLanguage() === 'de' ? `${d}.${m}.` : `${d}/${m}`;
 }
 
 function buildChartPoints(data: { x: string; y: number }[]) {
@@ -102,11 +133,12 @@ function buildChartPoints(data: { x: string; y: number }[]) {
 // ─────────────────────────────────────────
 
 function RegionPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const suggestions = value.trim().length === 0
     ? REGIONS
-    : REGIONS.filter((r) => r.label.toLowerCase().includes(value.toLowerCase()));
+    : REGIONS.filter((r) => regionLabel(r.label).toLowerCase().includes(value.toLowerCase()));
 
   return (
     <View style={pickerStyles.wrapper}>
@@ -117,7 +149,7 @@ function RegionPicker({ value, onChange }: { value: string; onChange: (v: string
         onChangeText={(v) => { onChange(v); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Region wählen oder eingeben…"
+        placeholder={t('bodyStats.regionPlaceholder')}
         placeholderTextColor="#555"
         returnKeyType="next"
       />
@@ -127,11 +159,11 @@ function RegionPicker({ value, onChange }: { value: string; onChange: (v: string
             <TouchableOpacity
               key={r.label}
               style={pickerStyles.item}
-              onPress={() => { onChange(r.label); setOpen(false); inputRef.current?.blur(); }}
+              onPress={() => { onChange(regionLabel(r.label)); setOpen(false); inputRef.current?.blur(); }}
               activeOpacity={0.7}
             >
               <MaterialIcons name={r.icon} size={15} color="#0a7ea4" style={{ marginRight: 10 }} />
-              <Text style={pickerStyles.itemText}>{r.label}</Text>
+              <Text style={pickerStyles.itemText}>{regionLabel(r.label)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -176,6 +208,7 @@ const pickerStyles = StyleSheet.create({
 // ─────────────────────────────────────────
 
 export default function BodyStatsScreen() {
+  const { t } = useTranslation();
   // ── Gewicht-Input ──
   const [weightInput, setWeightInput] = useState('');
   const [weightDate, setWeightDate] = useState(toISODate(new Date()));
@@ -254,7 +287,7 @@ export default function BodyStatsScreen() {
     setWeightError('');
     const v = parseDecimal(weightInput);
     if (!weightInput.trim() || isNaN(v) || v <= 0) {
-      setWeightError('Bitte ein gültiges Gewicht eingeben.');
+      setWeightError(t('bodyStats.invalidWeight'));
       return;
     }
     setWeightSaving(true);
@@ -268,10 +301,10 @@ export default function BodyStatsScreen() {
       measured_at: weightDate,
     });
     setWeightSaving(false);
-    if (error) { setWeightError(`Fehler: ${error.message}`); return; }
+    if (error) { setWeightError(t('bodyStats.errorPrefix', { message: error.message })); return; }
 
     setLatestWeight(v);
-    setToast(`Gewicht: ${formatDecimal(v)} kg – ${isoToGerman(weightDate)} gespeichert`);
+    setToast(t('bodyStats.weightSaved', { value: formatDecimal(v), date: formatIsoDate(weightDate) }));
     setWeightInput('');
     loadAll();
     if (activeTab === 'Gewicht') loadChartData('Gewicht');
@@ -280,14 +313,14 @@ export default function BodyStatsScreen() {
   // ── Umfang speichern ──
   async function handleSaveMeasurement() {
     setMeasError('');
-    if (!region.trim()) { setMeasError('Bitte eine Region angeben.'); return; }
+    if (!region.trim()) { setMeasError(t('bodyStats.regionRequired')); return; }
     const v = parseDecimal(valueInput);
     if (!valueInput.trim() || isNaN(v) || v <= 0) {
-      setMeasError('Bitte einen gültigen Wert eingeben.');
+      setMeasError(t('bodyStats.invalidValue'));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(measureDate)) {
-      setMeasError('Datum muss im Format JJJJ-MM-TT sein.');
+      setMeasError(t('bodyStats.invalidDate'));
       return;
     }
     setMeasSaving(true);
@@ -296,19 +329,19 @@ export default function BodyStatsScreen() {
 
     const { error } = await supabase.from('body_measurements').insert({
       user_id: user.id,
-      region: region.trim(),
+      region: storedRegion(region),
       value: v,
       measured_at: measureDate,
     });
     setMeasSaving(false);
-    if (error) { setMeasError(`Fehler: ${error.message}`); return; }
+    if (error) { setMeasError(t('bodyStats.errorPrefix', { message: error.message })); return; }
 
-    setToast(`${region.trim()}: ${v} cm – ${isoToGerman(measureDate)} gespeichert`);
+    setToast(t('bodyStats.measurementSaved', { region: regionLabel(storedRegion(region)), value: formatDecimal(v), date: formatIsoDate(measureDate) }));
     setRegion('');
     setValueInput('');
     setMeasureDate(toISODate(new Date()));
     loadAll();
-    if (activeTab === region.trim()) loadChartData(region.trim());
+    if (activeTab === storedRegion(region)) loadChartData(storedRegion(region));
   }
 
   // ── Eintrag löschen ──
@@ -332,7 +365,7 @@ export default function BodyStatsScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <MaterialIcons name="monitor-weight" size={20} color="#0a7ea4" />
-            <Text style={styles.cardTitle}>Körpergewicht</Text>
+            <Text style={styles.cardTitle}>{t('bodyStats.bodyWeight')}</Text>
             {latestWeight !== null && (
               <Text style={styles.currentBadge}>{formatDecimal(latestWeight)} kg</Text>
             )}
@@ -342,8 +375,8 @@ export default function BodyStatsScreen() {
             <TextInput
               style={[styles.input, styles.weightInput]}
               value={weightInput}
-              onChangeText={(t) => setWeightInput(sanitizeDecimalInput(t))}
-              placeholder="z.B. 82,5"
+              onChangeText={(v) => setWeightInput(sanitizeDecimalInput(v))}
+              placeholder={t('bodyStats.weightPlaceholder')}
               placeholderTextColor="#555"
               keyboardType="decimal-pad"
               returnKeyType="done"
@@ -352,7 +385,7 @@ export default function BodyStatsScreen() {
             <Text style={styles.unitLabel}>kg</Text>
           </View>
 
-          <DatePickerInput value={weightDate} onChange={setWeightDate} label="Datum der Messung" />
+          <DatePickerInput value={weightDate} onChange={setWeightDate} label={t('bodyStats.measurementDate')} />
 
           {weightError ? <Text style={styles.inputError}>{weightError}</Text> : null}
 
@@ -364,7 +397,7 @@ export default function BodyStatsScreen() {
           >
             {weightSaving
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveButtonText}>Gewicht speichern</Text>
+              : <Text style={styles.saveButtonText}>{t('bodyStats.saveWeight')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -373,18 +406,18 @@ export default function BodyStatsScreen() {
         <View style={[styles.card, { zIndex: 10 }]}>
           <View style={styles.cardHeaderRow}>
             <MaterialIcons name="straighten" size={20} color="#0a7ea4" />
-            <Text style={styles.cardTitle}>Körperumfang</Text>
+            <Text style={styles.cardTitle}>{t('bodyStats.circumference')}</Text>
           </View>
 
-          <Text style={styles.label}>Region</Text>
+          <Text style={styles.label}>{t('bodyStats.region')}</Text>
           <RegionPicker value={region} onChange={setRegion} />
 
           <View style={styles.weightRow}>
             <TextInput
               style={[styles.input, styles.weightInput]}
               value={valueInput}
-              onChangeText={(t) => setValueInput(sanitizeDecimalInput(t))}
-              placeholder="z.B. 85,0"
+              onChangeText={(v) => setValueInput(sanitizeDecimalInput(v))}
+              placeholder={t('bodyStats.valuePlaceholder')}
               placeholderTextColor="#555"
               keyboardType="decimal-pad"
               returnKeyType="done"
@@ -393,8 +426,8 @@ export default function BodyStatsScreen() {
             <Text style={styles.unitLabel}>cm</Text>
           </View>
 
-          <Text style={styles.label}>Datum</Text>
-          <DatePickerInput value={measureDate} onChange={setMeasureDate} label="Datum der Messung" />
+          <Text style={styles.label}>{t('bodyStats.date')}</Text>
+          <DatePickerInput value={measureDate} onChange={setMeasureDate} label={t('bodyStats.measurementDate')} />
 
           {measError ? <Text style={styles.inputError}>{measError}</Text> : null}
 
@@ -406,7 +439,7 @@ export default function BodyStatsScreen() {
           >
             {measSaving
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveButtonText}>Umfang speichern</Text>
+              : <Text style={styles.saveButtonText}>{t('bodyStats.saveMeasurement')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -415,7 +448,7 @@ export default function BodyStatsScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <MaterialIcons name="show-chart" size={20} color="#0a7ea4" />
-            <Text style={styles.cardTitle}>Verlauf · 30 Tage</Text>
+            <Text style={styles.cardTitle}>{t('bodyStats.history30')}</Text>
           </View>
 
           {/* Tab-Chips */}
@@ -432,7 +465,7 @@ export default function BodyStatsScreen() {
                 onPress={() => setActiveTab(tab)}
               >
                 <Text style={[styles.tabChipText, activeTab === tab && styles.tabChipTextActive]}>
-                  {tab}
+                  {regionLabel(tab)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -442,9 +475,7 @@ export default function BodyStatsScreen() {
             <ActivityIndicator color="#0a7ea4" style={{ marginVertical: 24 }} />
           ) : chartData.length < 2 ? (
             <View style={styles.chartEmpty}>
-              <Text style={styles.chartEmptyText}>
-                Mindestens 2 Einträge für den Verlauf
-              </Text>
+              <Text style={styles.chartEmptyText}>{t('bodyStats.minEntries')}</Text>
             </View>
           ) : (
             <View style={styles.chartWrapper}>
@@ -504,12 +535,12 @@ export default function BodyStatsScreen() {
         </View>
 
         {/* ══ HISTORIE ══ */}
-        <Text style={styles.sectionTitle}>Letzte Einträge</Text>
+        <Text style={styles.sectionTitle}>{t('bodyStats.recentEntries')}</Text>
 
         {historyLoading ? (
           <ActivityIndicator color="#0a7ea4" style={{ marginTop: 16 }} />
         ) : history.length === 0 ? (
-          <Text style={styles.emptyText}>Noch keine Messungen vorhanden.</Text>
+          <Text style={styles.emptyText}>{t('bodyStats.noMeasurements')}</Text>
         ) : (
           history.map((m) => {
             const meta = m.region === 'Gewicht'
@@ -521,7 +552,7 @@ export default function BodyStatsScreen() {
                   <MaterialIcons name={meta.icon} size={17} color="#0a7ea4" />
                 </View>
                 <View style={styles.historyInfo}>
-                  <Text style={styles.historyRegion}>{m.region}</Text>
+                  <Text style={styles.historyRegion}>{regionLabel(m.region)}</Text>
                   <Text style={styles.historyDate}>{formatDisplayDate(m.measured_at)}</Text>
                 </View>
                 <Text style={styles.historyValue}>{formatDecimal(m.value)} {meta.unit}</Text>
@@ -538,7 +569,7 @@ export default function BodyStatsScreen() {
         )}
 
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Zurück</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </ScrollView>
 

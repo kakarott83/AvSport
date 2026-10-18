@@ -13,11 +13,14 @@ import {
   View,
 } from "react-native";
 
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { useTranslation } from "@/lib/i18n";
 import { supabase } from "@/services/supabaseClient";
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,18 +29,18 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (!email.trim() || !password) {
-      Alert.alert("Pflichtfelder", "Bitte E-Mail und Passwort eingeben.");
+      Alert.alert(t("auth.requiredFields"), t("auth.enterEmailPassword"));
       return;
     }
     if (password !== confirmPassword) {
       Alert.alert(
-        "Passwörter stimmen nicht überein",
-        "Bitte beide Felder prüfen.",
+        t("auth.passwordMismatchTitle"),
+        t("auth.passwordMismatch"),
       );
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Passwort zu kurz", "Mindestens 6 Zeichen erforderlich.");
+      Alert.alert(t("auth.passwordTooShortTitle"), t("auth.passwordTooShort"));
       return;
     }
 
@@ -51,7 +54,7 @@ export default function RegisterScreen() {
 
       if (error) {
         Alert.alert(
-          "Registrierung fehlgeschlagen",
+          t("auth.registerFailed"),
           getAuthErrorMessage(error.message),
         );
         return;
@@ -61,14 +64,14 @@ export default function RegisterScreen() {
         // Session sofort aktiv (kein E-Mail-Bestätigung) → _layout.tsx übernimmt Routing
       } else {
         Alert.alert(
-          "Bestätige deine E-Mail",
-          "Wir haben dir eine Bestätigungs-E-Mail geschickt. Bitte klicke auf den Link und melde dich dann an.",
-          [{ text: "OK", onPress: () => router.replace("/(auth)/login") }],
+          t("auth.confirmEmailTitle"),
+          t("auth.confirmEmail"),
+          [{ text: t("common.ok"), onPress: () => router.replace("/(auth)/login") }],
         );
       }
     } catch (error) {
       Alert.alert(
-        "Registrierung fehlgeschlagen",
+        t("auth.registerFailed"),
         getAuthErrorMessage(
           error instanceof Error ? error.message : "Network request failed",
         ),
@@ -87,22 +90,23 @@ export default function RegisterScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        <LanguageSwitch style={{ marginBottom: 16 }} />
         <View style={styles.header}>
           <Text style={styles.logo}>AvoraSport</Text>
-          <Text style={styles.tagline}>Starte deine Fitness-Reise</Text>
+          <Text style={styles.tagline}>{t("auth.taglineRegister")}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.title}>Konto erstellen</Text>
+          <Text style={styles.title}>{t("auth.createAccount")}</Text>
 
           <SocialAuthButtons onBusyChange={setSocialBusy} />
 
-          <Text style={styles.label}>E-Mail</Text>
+          <Text style={styles.label}>{t("auth.email")}</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="deine@email.de"
+            placeholder={t("auth.emailPlaceholder")}
             placeholderTextColor="#555"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -110,19 +114,19 @@ export default function RegisterScreen() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, styles.labelSpacing]}>Passwort</Text>
+          <Text style={[styles.label, styles.labelSpacing]}>{t("auth.password")}</Text>
           <TextInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="Mindestens 6 Zeichen"
+            placeholder={t("auth.passwordPlaceholderMin")}
             placeholderTextColor="#555"
             secureTextEntry
             returnKeyType="next"
           />
 
           <Text style={[styles.label, styles.labelSpacing]}>
-            Passwort bestätigen
+            {t("auth.confirmPassword")}
           </Text>
           <TextInput
             style={styles.input}
@@ -144,15 +148,15 @@ export default function RegisterScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Registrieren</Text>
+              <Text style={styles.buttonText}>{t("auth.register")}</Text>
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Bereits ein Konto? </Text>
+          <Text style={styles.footerText}>{t("auth.haveAccount")}</Text>
           <TouchableOpacity onPress={() => router.push("/(auth)/login")}>
-            <Text style={styles.footerLink}>Anmelden</Text>
+            <Text style={styles.footerLink}>{t("auth.login")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

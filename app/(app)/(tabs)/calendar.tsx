@@ -14,12 +14,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Calendar } from 'react-native-calendars';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
 
 import { CycleLegend, CyclePanel, PERIOD_COLOR } from '@/components/CyclePanel';
 import { useCycle } from '@/hooks/useCycle';
 import { buildMarked, computeMonthStats, type LogRow, type MarkedDates, type Tag } from '@/lib/calendar';
 import { addDays, FERTILE_WINDOW_COLOR, type DayPhase } from '@/lib/cycle';
+import { getLocale, t, tList, useTranslation, type Language } from '@/lib/i18n';
 import { supabase } from '@/services/supabaseClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,6 +35,30 @@ const DEFAULT_TAGS: Tag[] = [
   { id: 'stress',     label: 'Viel Stress',  emoji: '🤯', color: '#FF9100' },
 ];
 
+/** Standard-Tags tragen ihr deutsches Label in der DB — für die Anzeige übersetzen, solange es nicht umbenannt wurde. */
+const DEFAULT_TAG_LABELS: Record<string, string> = Object.fromEntries(DEFAULT_TAGS.map((tag) => [tag.id, tag.label]));
+
+type DefaultTagId = 'no_alcohol' | 'period' | 'stress';
+
+function tagLabel(tag: Tag): string {
+  if (DEFAULT_TAG_LABELS[tag.id] === tag.label) {
+    return t(`calendar.defaultTags.${tag.id as DefaultTagId}`);
+  }
+  return tag.label;
+}
+
+/** Monats-/Wochentagsnamen von react-native-calendars an die App-Sprache anpassen. */
+function applyCalendarLocale(lang: Language) {
+  LocaleConfig.locales[lang] = {
+    monthNames: tList('calendar.months'),
+    monthNamesShort: tList('calendar.monthsShort'),
+    dayNames: tList('common.weekdays'),
+    dayNamesShort: tList('common.weekdaysShort'),
+    today: t('common.today'),
+  };
+  LocaleConfig.defaultLocale = lang;
+}
+
 const COLOR_PALETTE = [
   '#00E5FF', '#FF5252', '#FF9100', '#4CAF50',
   '#AB47BC', '#FFD600', '#F06292', '#42A5F5',
@@ -47,6 +72,8 @@ const PERIOD_TAG_ID = 'period';
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
+  const { t, language } = useTranslation();
+  applyCalendarLocale(language);
   const today        = new Date().toISOString().slice(0, 10);
   const todayMonth   = today.slice(0, 7); // YYYY-MM
 
@@ -257,7 +284,7 @@ export default function CalendarScreen() {
     if (!user) return;
     const updated = tags.filter((t) => t.id !== id);
     const { error } = await supabase.from('profiles').update({ custom_tags: updated }).eq('id', user.id);
-    if (error) { Alert.alert('Fehler', error.message); return; }
+    if (error) { Alert.alert(t('common.error'), error.message); return; }
     setTags(updated);
     setLog((prev) => ({ ...prev, tagIds: prev.tagIds.filter((t) => t !== id) }));
   };
@@ -270,7 +297,7 @@ export default function CalendarScreen() {
 
   const openEditModal = (tag: Tag) => {
     setEditingTag(tag);
-    setNewLabel(tag.label);
+    setNewLabel(tagLabel(tag));
     setNewEmoji(tag.emoji);
     setNewColor(tag.color);
     setModalVisible(true);
@@ -301,7 +328,7 @@ export default function CalendarScreen() {
     }
 
     const { error } = await supabase.from('profiles').update({ custom_tags: updated }).eq('id', user.id);
-    if (error) { Alert.alert('Fehler', error.message); } else { setTags(updated); }
+    if (error) { Alert.alert(t('common.error'), error.message); } else { setTags(updated); }
     setAddingTag(false);
     closeModal();
   };
@@ -309,12 +336,12 @@ export default function CalendarScreen() {
   const deleteDay = () => {
     if (log.tagIds.length === 0 && !log.note.trim()) return;
     Alert.alert(
-      'Eintrag löschen?',
-      'Alle Tags und Notizen für diesen Tag werden gelöscht.',
+      t('calendar.deleteEntryTitle'),
+      t('calendar.deleteEntryText'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen', style: 'destructive',
+          text: t('common.delete'), style: 'destructive',
           onPress: async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
@@ -338,14 +365,14 @@ export default function CalendarScreen() {
 
   const formatDisplayDate = (iso: string) => {
     const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('de-DE', {
+    return new Date(y, m - 1, d).toLocaleDateString(getLocale(), {
       weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
     });
   };
 
   const formatMonth = (ym: string) => {
     const [y, m] = ym.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    return new Date(y, m - 1, 1).toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' });
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -357,12 +384,13 @@ export default function CalendarScreen() {
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.screenTitle}>Kalender</Text>
+            <Text style={styles.screenTitle}>{t('calendar.title')}</Text>
           </View>
 
           {/* Calendar */}
           <View style={styles.card}>
             <Calendar
+              key={language}
               current={selectedDate}
               firstDay={1}
               onDayPress={onDayPress}
@@ -406,10 +434,10 @@ export default function CalendarScreen() {
             </View>
 
             <View style={styles.labelRow}>
-              <Text style={styles.label}>TAGS</Text>
+              <Text style={styles.label}>{t('calendar.tags')}</Text>
               <TouchableOpacity style={styles.addTagButton} onPress={openAddModal} activeOpacity={0.8}>
                 <Ionicons name="add" size={14} color="#00E5FF" />
-                <Text style={styles.addTagText}>Neu</Text>
+                <Text style={styles.addTagText}>{t('calendar.newTag')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -427,10 +455,10 @@ export default function CalendarScreen() {
                 ))}
             </View>
 
-            <Text style={styles.label}>NOTIZEN</Text>
+            <Text style={styles.label}>{t('calendar.notes')}</Text>
             <TextInput
               style={[styles.noteInput, noteFocused && styles.noteInputFocused]}
-              placeholder="Wie war dein Tag?"
+              placeholder={t('calendar.notesPlaceholder')}
               placeholderTextColor="#555"
               multiline
               numberOfLines={4}
@@ -447,7 +475,7 @@ export default function CalendarScreen() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={20} color="#121212" />
-                  <Text style={styles.saveButtonText}>Speichern</Text>
+                  <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -456,12 +484,12 @@ export default function CalendarScreen() {
           {/* Monthly stats */}
           <View style={styles.card}>
             <Text style={styles.statsTitle}>
-              Monats-Statistik{' '}
+              {t('calendar.monthStats')}{' '}
               <Text style={styles.statsMonth}>{formatMonth(currentMonth)}</Text>
             </Text>
 
             {monthStats.length === 0 ? (
-              <Text style={styles.statsEmpty}>Noch keine Tags in diesem Monat.</Text>
+              <Text style={styles.statsEmpty}>{t('calendar.noTagsThisMonth')}</Text>
             ) : (
               <View style={styles.statsGrid}>
                 {monthStats.map(({ tag, count, total }) => (
@@ -479,12 +507,12 @@ export default function CalendarScreen() {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
 
-            <Text style={styles.modalTitle}>{editingTag ? 'Tag bearbeiten' : 'Neuen Tag erstellen'}</Text>
+            <Text style={styles.modalTitle}>{editingTag ? t('calendar.editTag') : t('calendar.createTag')}</Text>
 
             <View style={styles.modalRow}>
               <TextInput
                 style={[styles.modalInput, { flex: 1 }]}
-                placeholder="Name (z.B. Guter Schlaf)"
+                placeholder={t('calendar.tagNamePlaceholder')}
                 placeholderTextColor="#555"
                 value={newLabel}
                 onChangeText={setNewLabel}
@@ -496,12 +524,12 @@ export default function CalendarScreen() {
                 placeholder="😀"
                 placeholderTextColor="#555"
                 value={newEmoji}
-                onChangeText={(t) => setNewEmoji(t.slice(-2))}
+                onChangeText={(v) => setNewEmoji(v.slice(-2))}
                 maxLength={2}
               />
             </View>
 
-            <Text style={styles.modalLabel}>FARBE</Text>
+            <Text style={styles.modalLabel}>{t('calendar.color')}</Text>
             <View style={styles.paletteRow}>
               {COLOR_PALETTE.map((color) => (
                 <TouchableOpacity
@@ -514,17 +542,17 @@ export default function CalendarScreen() {
             </View>
 
             <View style={styles.previewRow}>
-              <Text style={styles.modalLabel}>VORSCHAU</Text>
+              <Text style={styles.modalLabel}>{t('calendar.preview')}</Text>
               <View style={[styles.chip, { backgroundColor: newColor + '22', borderColor: newColor }]}>
                 <Text style={[styles.chipText, { color: newColor }]}>
-                  {newEmoji || '🏷️'} {newLabel || 'Mein Tag'}
+                  {newEmoji || '🏷️'} {newLabel || t('calendar.myTag')}
                 </Text>
               </View>
             </View>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
-                <Text style={styles.modalCancelText}>Abbrechen</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalSave, { backgroundColor: newColor }, (!newLabel.trim() || addingTag) && { opacity: 0.5 }]}
@@ -532,7 +560,7 @@ export default function CalendarScreen() {
                 disabled={!newLabel.trim() || addingTag}>
                 {addingTag
                   ? <ActivityIndicator color="#121212" size="small" />
-                  : <Text style={styles.modalSaveText}>{editingTag ? 'Speichern' : 'Hinzufügen'}</Text>}
+                  : <Text style={styles.modalSaveText}>{editingTag ? t('common.save') : t('common.add')}</Text>}
               </TouchableOpacity>
             </View>
 
@@ -540,15 +568,15 @@ export default function CalendarScreen() {
               <TouchableOpacity
                 style={styles.modalDelete}
                 onPress={() => Alert.alert(
-                  `"${editingTag.emoji} ${editingTag.label}" löschen?`,
-                  'Der Tag wird aus deiner Liste entfernt.',
+                  t('calendar.deleteTagTitle', { tag: `${editingTag.emoji} ${tagLabel(editingTag)}` }),
+                  t('calendar.deleteTagText'),
                   [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    { text: 'Löschen', style: 'destructive', onPress: () => { closeModal(); deleteTag(editingTag.id); } },
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('common.delete'), style: 'destructive', onPress: () => { closeModal(); deleteTag(editingTag.id); } },
                   ]
                 )}>
                 <Ionicons name="trash-outline" size={15} color="#FF5252" />
-                <Text style={styles.modalDeleteText}>Tag löschen</Text>
+                <Text style={styles.modalDeleteText}>{t('calendar.deleteTag')}</Text>
               </TouchableOpacity>
             )}
           </TouchableOpacity>
@@ -721,7 +749,7 @@ function TagChip({ tag, active, onPress, onEdit }: {
       ]}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.chipPressable}>
         <Text style={[styles.chipText, active && { color: tag.color, fontWeight: '700' }]}>
-          {tag.emoji} {tag.label}
+          {tag.emoji} {tagLabel(tag)}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={onEdit} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.6}>
@@ -739,8 +767,8 @@ function StatTile({ tag, count, total }: { tag: Tag; count: number; total: numbe
     <View style={statStyles.tile}>
       <View style={statStyles.tileHeader}>
         <Text style={statStyles.tileEmoji}>{tag.emoji}</Text>
-        <Text style={statStyles.tileLabel} numberOfLines={1}>{tag.label}</Text>
-        <Text style={[statStyles.tileCount, { color: tag.color }]}>{count} T.</Text>
+        <Text style={statStyles.tileLabel} numberOfLines={1}>{tagLabel(tag)}</Text>
+        <Text style={[statStyles.tileCount, { color: tag.color }]}>{t('calendar.daysShort', { count })}</Text>
       </View>
       {/* Progress bar */}
       <View style={statStyles.barBg}>

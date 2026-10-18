@@ -12,6 +12,7 @@ import * as Notifications from 'expo-notifications';
 
 import { buildWaterNotificationContent } from '@/lib/waterNotifications';
 import { computeReminderHours, type WaterReminderSettings } from '@/lib/waterReminders';
+import { t } from '@/lib/i18n';
 
 // ─── Feste Defaults ───────────────────────────────────────────────────────────
 
@@ -61,13 +62,13 @@ export async function syncWaterReminders({
     if (!granted) return;
 
     const body = goalMl > 0
-      ? `Denk an dein Wasser — Tagesziel ${goalMl} ml.`
-      : 'Denk an dein Wasser.';
+      ? t('domain.waterNotification.dailyBodyWithGoal', { goal: goalMl })
+      : t('domain.waterNotification.dailyBody');
 
     for (const hour of hours) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Zeit zu trinken',
+          title: t('domain.waterNotification.reminderTitle'),
           body,
           data: { tag: WATER_TAG },
         },

@@ -1,8 +1,10 @@
+import { t } from "@/lib/i18n";
+
 export function getAuthErrorMessage(errorMessage?: string | null): string {
   const message = (errorMessage ?? "").trim();
 
   if (!message) {
-    return "Ein unbekannter Fehler ist aufgetreten. Bitte versuche es erneut.";
+    return t("common.unknownError");
   }
 
   const normalized = message.toLowerCase();
@@ -14,7 +16,7 @@ export function getAuthErrorMessage(errorMessage?: string | null): string {
     normalized.includes("network error") ||
     normalized.includes("load failed")
   ) {
-    return "Keine Internetverbindung oder Supabase ist derzeit nicht erreichbar. Bitte prüfe deine Verbindung und versuche es erneut.";
+    return t("common.networkError");
   }
 
   return message;

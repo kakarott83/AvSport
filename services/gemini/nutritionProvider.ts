@@ -5,11 +5,12 @@ import { GeminiDailyLimitError }         from './client';
 import { getCachedResult, setCachedResult } from '@/services/nutrition/nutritionCache';
 import { supabase }                      from '@/services/supabaseClient';
 import type { Macros }                   from '@/services/nutrition/usdaLookup';
+import { t } from '@/lib/i18n';
 
 // ── Öffentliches Interface (bleibt identisch → FoodScanner.tsx unverändert) ──
 
 export interface AnalyzedItem {
-  name:     string; // Deutscher Anzeigename
+  name:     string; // Anzeigename (in der App-Sprache)
   grams:    number;
   calories: number;
   protein:  number;
@@ -177,8 +178,7 @@ export async function analyzeFoodItems(
 
   if (resolvedCount === 0) {
     throw new Error(
-      'Nährwerte konnten für keines der erkannten Lebensmittel ermittelt werden. ' +
-      'Bitte überprüfe deine Internetverbindung und versuche es erneut.',
+      t('ai.nutrientsFailed'),
     );
   }
 

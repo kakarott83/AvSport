@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 
+import { t, tList, useTranslation } from '@/lib/i18n';
 import { isDailyLimitError, openPaywall } from '@/lib/premiumGate';
 import { generateAiPlan, saveAiPlan } from '@/services/gemini/aiTrainingService';
 import { FITNESS_LEVEL_LABEL } from '@/services/gemini/trainingProvider';
@@ -41,19 +42,18 @@ const C_MUTED  = '#888';
 const C_BORDER = '#2a2a2a';
 
 // DB-Mapping: 0=So, 1=Mo … 6=Sa  (wie Date.getDay() / create-plan.tsx)
-const WEEK_DAYS = [
-  { label: 'Mo', value: 1 },
-  { label: 'Di', value: 2 },
-  { label: 'Mi', value: 3 },
-  { label: 'Do', value: 4 },
-  { label: 'Fr', value: 5 },
-  { label: 'Sa', value: 6 },
-  { label: 'So', value: 0 },
-] as const;
+const WEEK_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+
+/** Wochentage Mo–So mit Kurzlabel in der aktuellen Sprache. */
+function weekDays() {
+  const labels = tList('common.weekdaysShort');
+  return WEEK_DAY_ORDER.map((value) => ({ label: labels[value], value }));
+}
 
 const EQUIPMENT_OPTIONS = [
-  'Kurzhanteln', 'Langhantel', 'Widerstandsbänder', 'Klimmzugstange', 'Kettlebell', 'Trainingsbank',
+  'dumbbells', 'barbell', 'bands', 'pullupBar', 'kettlebell', 'bench',
 ] as const;
+type EquipmentKey = (typeof EQUIPMENT_OPTIONS)[number];
 
 const SESSION_OPTIONS: SessionMinutes[] = [30, 45, 60, 90];
 
@@ -63,12 +63,7 @@ type Step =
   | 'goal' | 'environment' | 'equipment' | 'focus' | 'weeks' | 'days'
   | 'duration' | 'level' | 'restrictions' | 'loading' | 'preview';
 
-const LOADING_MESSAGES = [
-  'Coach analysiert Daten...',
-  'Trainingsplan wird erstellt...',
-  'Tage & Übungen werden verteilt...',
-  'Fast fertig...',
-];
+const LOADING_MESSAGE_COUNT = 4;
 
 /** Frage-Schritte in Reihenfolge — hängt von Umgebung (Geräte-Schritt) und bekanntem Fitnesslevel ab. */
 function questionSteps(environment: Environment | null, needsLevelStep: boolean): Step[] {
@@ -143,7 +138,7 @@ function ExercisePreviewRow({ name, description, muscleGroup, equipmentType, set
   name: string; description: string; muscleGroup: string; equipmentType: string;
   sets: number; reps: number; duration: number | null; rest: number | null;
 }) {
-  const detail = duration ? `${sets} × ${duration}s` : `${sets} × ${reps} Wdh.`;
+  const detail = duration ? `${sets} × ${duration}s` : t('aiPlan.repsShort', { sets, reps });
   const tag = [muscleGroup, equipmentType].filter(Boolean).join(' / ');
   return (
     <View style={styles.exRow}>
@@ -160,7 +155,7 @@ function ExercisePreviewRow({ name, description, muscleGroup, equipmentType, set
       </View>
       <View style={styles.exMetaCol}>
         <Text style={styles.exDetail}>{detail}</Text>
-        {rest != null && <Text style={styles.exRest}>{rest}s Pause</Text>}
+        {rest != null && <Text style={styles.exRest}>{t('aiPlan.restShort', { s: rest })}</Text>}
       </View>
     </View>
   );
@@ -176,10 +171,11 @@ type Props = {
 
 export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [step,          setStep]          = useState<Step>('goal');
   const [goal,          setGoal]          = useState<FitnessGoal | null>(null);
   const [environment,   setEnvironment]   = useState<Environment | null>(null);
-  const [equipment,     setEquipment]     = useState<string[]>([]);
+  const [equipment,     setEquipment]     = useState<EquipmentKey[]>([]);
   const [focusArea,     setFocusArea]     = useState<FocusArea | null>(null);
   const [weeks,         setWeeks]         = useState<TargetWeeks | null>(null);
   const [scheduledDays, setScheduledDays] = useState<number[]>([]);
@@ -205,7 +201,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
     }
     setLoadingMsgIdx(0);
     msgIntervalRef.current = setInterval(
-      () => setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length),
+      () => setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGE_COUNT),
       1800,
     );
     const loop = Animated.loop(
@@ -262,7 +258,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
     );
   }
 
-  function toggleEquipment(name: string) {
+  function toggleEquipment(name: EquipmentKey) {
     setEquipment((prev) =>
       prev.includes(name) ? prev.filter((e) => e !== name) : [...prev, name],
     );
@@ -282,7 +278,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
       targetWeeks:    weeks,
       scheduledDays,
       environment,
-      equipment:      environment === 'home' ? equipment : [],
+      equipment:      environment === 'home' ? equipment.map((k) => t(`aiPlan.equipment.${k}`)) : [],
       sessionMinutes,
       fitnessLevel:   level,
       restrictions:   restrictions.trim() || null,
@@ -305,7 +301,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
         openPaywall(router);
         return;
       }
-      setError(e?.message || 'Plan konnte nicht generiert werden. Bitte versuche es erneut.');
+      setError(e?.message || t('aiPlan.generateFailed'));
       setStep('restrictions');
     }
   }
@@ -318,12 +314,12 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
     setError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Nicht eingeloggt.');
+      if (!user) throw new Error(t('aiPlan.notLoggedIn'));
       const id = await saveAiPlan(plan, user.id, supabase);
       onSaved(id, plan.title);
       onClose();
     } catch (e: any) {
-      setError(e.message ?? 'Fehler beim Speichern.');
+      setError(e.message ?? t('aiPlan.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -332,9 +328,10 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
   // ── Header-Titel ─────────────────────────────────────────────────────────────
 
   const headerTitle =
-    step === 'loading' ? 'Coach arbeitet...' :
-    step === 'preview' ? 'Dein KI-Plan'     :
-                         'Neuer KI-Plan';
+    step === 'loading' ? t('aiPlan.headerLoading') :
+    step === 'preview' ? t('aiPlan.headerPreview') :
+                         t('aiPlan.headerNew');
+  const WEEK_DAYS = weekDays();
 
   const goBack = prevStep(step, environment, needsLevelStep);
 
@@ -378,18 +375,18 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Ziel ── */}
           {step === 'goal' && (
             <>
-              <Text style={styles.coachText}>Was ist dein Trainingsziel? 💪</Text>
+              <Text style={styles.coachText}>{t('aiPlan.goalQuestion')}</Text>
               <View style={styles.chipRow}>
                 <OptionChip
-                  label="Abnehmen"
-                  sub="Fettverbrennung & Ausdauer"
+                  label={t('aiPlan.goalLose')}
+                  sub={t('aiPlan.goalLoseSub')}
                   icon="local-fire-department"
                   selected={goal === 'abnehmen'}
                   onPress={() => { setGoal('abnehmen'); setStep('environment'); }}
                 />
                 <OptionChip
-                  label="Muskeln aufbauen"
-                  sub="Kraft & Hypertrophie"
+                  label={t('aiPlan.goalMuscle')}
+                  sub={t('aiPlan.goalMuscleSub')}
                   icon="fitness-center"
                   selected={goal === 'muskeln'}
                   onPress={() => { setGoal('muskeln'); setStep('environment'); }}
@@ -401,18 +398,18 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Trainingsumgebung ── */}
           {step === 'environment' && (
             <>
-              <Text style={styles.coachText}>Wo trainierst du? 🏋️</Text>
+              <Text style={styles.coachText}>{t('aiPlan.envQuestion')}</Text>
               <View style={styles.chipRow}>
                 <OptionChip
-                  label="Fitnessstudio"
-                  sub="Geräte & Freigewichte"
+                  label={t('aiPlan.gym')}
+                  sub={t('aiPlan.gymSub')}
                   icon="fitness-center"
                   selected={environment === 'gym'}
                   onPress={() => { setEnvironment('gym'); setEquipment([]); setStep('focus'); }}
                 />
                 <OptionChip
-                  label="Zuhause"
-                  sub="Eigene Ausstattung"
+                  label={t('aiPlan.home')}
+                  sub={t('aiPlan.homeSub')}
                   icon="home"
                   selected={environment === 'home'}
                   onPress={() => { setEnvironment('home'); setStep('equipment'); }}
@@ -424,8 +421,8 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Geräte (nur Zuhause) ── */}
           {step === 'equipment' && (
             <>
-              <Text style={styles.coachText}>Welche Geräte hast du zur Verfügung?</Text>
-              <Text style={styles.coachSub}>Mehrfachauswahl möglich — der Coach plant nur damit.</Text>
+              <Text style={styles.coachText}>{t('aiPlan.equipmentQuestion')}</Text>
+              <Text style={styles.coachSub}>{t('aiPlan.equipmentSub')}</Text>
 
               <View style={styles.dayRow}>
                 {EQUIPMENT_OPTIONS.map((name) => {
@@ -438,7 +435,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                       activeOpacity={0.7}
                     >
                       <Text style={[styles.equipChipText, active && styles.equipChipTextActive]}>
-                        {name}
+                        {t(`aiPlan.equipment.${name}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -446,14 +443,12 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
               </View>
 
               <TouchableOpacity style={styles.nextBtn} onPress={() => setStep('focus')} activeOpacity={0.8}>
-                <Text style={styles.nextBtnText}>Weiter</Text>
+                <Text style={styles.nextBtnText}>{t('aiPlan.next')}</Text>
                 <MaterialIcons name="arrow-forward" size={17} color="#121212" />
               </TouchableOpacity>
 
               {equipment.length === 0 && (
-                <Text style={styles.skipHint}>
-                  Ohne Auswahl plant der Coach nur Körpergewichtsübungen.
-                </Text>
+                <Text style={styles.skipHint}>{t('aiPlan.equipmentNone')}</Text>
               )}
             </>
           )}
@@ -461,12 +456,12 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Fokus ── */}
           {step === 'focus' && (
             <>
-              <Text style={styles.coachText}>Welchen Bereich fokussierst du?</Text>
+              <Text style={styles.coachText}>{t('aiPlan.focusQuestion')}</Text>
               <View style={styles.chipRow}>
-                <OptionChip label="Bauch"      icon="crop-free"          selected={focusArea === 'bauch'}       onPress={() => { setFocusArea('bauch');       setStep('weeks'); }} />
-                <OptionChip label="Beine"      icon="directions-run"     selected={focusArea === 'beine'}       onPress={() => { setFocusArea('beine');       setStep('weeks'); }} />
-                <OptionChip label="Oberkörper" icon="sports-gymnastics"  selected={focusArea === 'oberkoerper'} onPress={() => { setFocusArea('oberkoerper'); setStep('weeks'); }} />
-                <OptionChip label="Ganzkörper" icon="self-improvement"   selected={focusArea === 'ganzkörper'}  onPress={() => { setFocusArea('ganzkörper');  setStep('weeks'); }} />
+                <OptionChip label={t('aiPlan.focusShort.bauch')} icon="crop-free"          selected={focusArea === 'bauch'}       onPress={() => { setFocusArea('bauch');       setStep('weeks'); }} />
+                <OptionChip label={t('aiPlan.focusShort.beine')} icon="directions-run"     selected={focusArea === 'beine'}       onPress={() => { setFocusArea('beine');       setStep('weeks'); }} />
+                <OptionChip label={t('aiPlan.focusShort.oberkoerper')} icon="sports-gymnastics"  selected={focusArea === 'oberkoerper'} onPress={() => { setFocusArea('oberkoerper'); setStep('weeks'); }} />
+                <OptionChip label={t('aiPlan.focusShort.ganzkoerper')} icon="self-improvement"   selected={focusArea === 'ganzkörper'}  onPress={() => { setFocusArea('ganzkörper');  setStep('weeks'); }} />
               </View>
             </>
           )}
@@ -474,13 +469,13 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Programmdauer ── */}
           {step === 'weeks' && (
             <>
-              <Text style={styles.coachText}>Wie lange soll der Plan laufen?</Text>
+              <Text style={styles.coachText}>{t('aiPlan.weeksQuestion')}</Text>
               <View style={styles.chipRow}>
                 {([4, 8, 12] as TargetWeeks[]).map((w) => (
                   <OptionChip
                     key={w}
-                    label={`${w} Wochen`}
-                    sub={w === 4 ? 'Schnell-Start' : w === 8 ? 'Empfohlen' : 'Intensiv'}
+                    label={t('aiPlan.weeks', { n: w })}
+                    sub={w === 4 ? t('aiPlan.weeksQuick') : w === 8 ? t('aiPlan.weeksRecommended') : t('aiPlan.weeksIntense')}
                     selected={weeks === w}
                     onPress={() => { setWeeks(w); setStep('days'); }}
                   />
@@ -492,10 +487,8 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Trainingstage ── */}
           {step === 'days' && (
             <>
-              <Text style={styles.coachText}>Wann trainierst du?</Text>
-              <Text style={styles.coachSub}>
-                Wähle deine Wochentage — die Anzahl bestimmt, wie viele Tage dein Split hat.
-              </Text>
+              <Text style={styles.coachText}>{t('aiPlan.daysQuestion')}</Text>
+              <Text style={styles.coachSub}>{t('aiPlan.daysSub')}</Text>
 
               <View style={styles.dayRow}>
                 {WEEK_DAYS.map(({ label, value }) => {
@@ -519,25 +512,23 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                 <View style={styles.daySummary}>
                   <MaterialIcons name="info-outline" size={13} color={C_MUTED} />
                   <Text style={styles.daySummaryText}>
-                    {scheduledDays.length}× pro Woche
+                    {t('aiPlan.perWeek', { n: scheduledDays.length })}
                     {scheduledDays.length >= 4
-                      ? ' · Split-Training'
+                      ? t('aiPlan.splitTraining')
                       : scheduledDays.length === 3
-                        ? ' · Push/Pull/Beine'
-                        : ' · Ganzkörper'}
+                        ? t('aiPlan.pushPullLegs')
+                        : t('aiPlan.fullBody')}
                   </Text>
                 </View>
               )}
 
               <TouchableOpacity style={styles.nextBtn} onPress={() => setStep('duration')} activeOpacity={0.8}>
-                <Text style={styles.nextBtnText}>Weiter</Text>
+                <Text style={styles.nextBtnText}>{t('aiPlan.next')}</Text>
                 <MaterialIcons name="arrow-forward" size={17} color="#121212" />
               </TouchableOpacity>
 
               {scheduledDays.length === 0 && (
-                <Text style={styles.skipHint}>
-                  Ohne Auswahl erstellt der Coach einen 3-Tage-Split zum flexiblen Einteilen.
-                </Text>
+                <Text style={styles.skipHint}>{t('aiPlan.daysNone')}</Text>
               )}
             </>
           )}
@@ -545,12 +536,12 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Dauer pro Einheit ── */}
           {step === 'duration' && (
             <>
-              <Text style={styles.coachText}>Wie viel Zeit hast du pro Training?</Text>
+              <Text style={styles.coachText}>{t('aiPlan.durationQuestion')}</Text>
               <View style={styles.chipRow}>
                 {SESSION_OPTIONS.map((m) => (
                   <OptionChip
                     key={m}
-                    label={`${m} Min`}
+                    label={t('aiPlan.minutes', { n: m })}
                     selected={sessionMinutes === m}
                     onPress={() => { setSessionMinutes(m); setStep(needsLevelStep ? 'level' : 'restrictions'); }}
                   />
@@ -562,8 +553,8 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Trainingsniveau (nur falls im Profil unbekannt) ── */}
           {step === 'level' && (
             <>
-              <Text style={styles.coachText}>Wie schätzt du dein Trainingsniveau ein?</Text>
-              <Text style={styles.coachSub}>Wird für künftige Pläne im Profil gemerkt.</Text>
+              <Text style={styles.coachText}>{t('aiPlan.levelQuestion')}</Text>
+              <Text style={styles.coachSub}>{t('aiPlan.levelSub')}</Text>
               <View style={styles.chipRow}>
                 {FITNESS_LEVEL_OPTIONS.map((lvl) => (
                   <OptionChip
@@ -580,17 +571,15 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
           {/* ── SCHRITT: Einschränkungen ── */}
           {step === 'restrictions' && (
             <>
-              <Text style={styles.coachText}>Gibt es Einschränkungen?</Text>
-              <Text style={styles.coachSub}>
-                Z. B. Verletzungen oder Übungen, die du meiden willst — optional.
-              </Text>
+              <Text style={styles.coachText}>{t('aiPlan.restrictionsQuestion')}</Text>
+              <Text style={styles.coachSub}>{t('aiPlan.restrictionsSub')}</Text>
               {error && <Text style={styles.errorText}>{error}</Text>}
 
               <TextInput
                 style={styles.restrictionsInput}
                 value={restrictions}
                 onChangeText={setRestrictions}
-                placeholder="z. B. Knieprobleme, kein Springen…"
+                placeholder={t('aiPlan.restrictionsPlaceholder')}
                 placeholderTextColor="#555"
                 multiline
                 maxLength={200}
@@ -602,7 +591,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="auto-awesome" size={17} color="#121212" />
-                <Text style={styles.nextBtnText}>Plan generieren</Text>
+                <Text style={styles.nextBtnText}>{t('aiPlan.generate')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -612,20 +601,18 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
             <View style={styles.loadingContainer}>
               <AnimatedLogo size={90} />
               <Animated.Text style={[styles.loadingText, { opacity: loadingOpacity }]}>
-                {LOADING_MESSAGES[loadingMsgIdx]}
+                {tList('aiPlan.loading')[loadingMsgIdx]}
               </Animated.Text>
-              <Text style={styles.loadingSubText}>
-                Gemini erstellt deinen personalisierten Plan
-              </Text>
+              <Text style={styles.loadingSubText}>{t('aiPlan.geminiCreating')}</Text>
               {goal && focusArea && weeks && (
                 <View style={styles.loadingMeta}>
                   <Text style={styles.loadingMetaText}>
-                    {goal === 'abnehmen' ? 'Fettverbrennung' : 'Muskelaufbau'}
+                    {goal === 'abnehmen' ? t('aiPlan.fatBurn') : t('aiPlan.muscleGain')}
                     {'  ·  '}
-                    {focusArea === 'ganzkörper' ? 'Ganzkörper' : focusArea === 'oberkoerper' ? 'Oberkörper' : focusArea.charAt(0).toUpperCase() + focusArea.slice(1)}
-                    {'  ·  '}{weeks} Wo.
-                    {'  ·  '}{environment === 'gym' ? 'Studio' : 'Zuhause'}
-                    {scheduledDays.length > 0 ? `  ·  ${scheduledDays.length}×/Woche` : ''}
+                    {t(`aiPlan.focusShort.${focusArea === 'ganzkörper' ? 'ganzkoerper' : focusArea}`)}
+                    {'  ·  '}{t('aiPlan.weeksShort', { n: weeks })}
+                    {'  ·  '}{environment === 'gym' ? t('aiPlan.studio') : t('aiPlan.home')}
+                    {scheduledDays.length > 0 ? `  ·  ${t('aiPlan.perWeekShort', { n: scheduledDays.length })}` : ''}
                   </Text>
                 </View>
               )}
@@ -642,24 +629,24 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
 
               <View style={styles.previewMeta}>
                 <View style={styles.metaChip}>
-                  <Text style={styles.metaText}>{plan.target_weeks} Wochen</Text>
+                  <Text style={styles.metaText}>{t('aiPlan.weeks', { n: plan.target_weeks })}</Text>
                 </View>
                 <View style={styles.metaChip}>
                   <Text style={styles.metaText}>
-                    {plan.fitness_goal === 'abnehmen' ? 'Fettverbrennung' : 'Muskelaufbau'}
+                    {plan.fitness_goal === 'abnehmen' ? t('aiPlan.fatBurn') : t('aiPlan.muscleGain')}
                   </Text>
                 </View>
                 <View style={styles.metaChip}>
                   <Text style={styles.metaText}>
-                    {plan.environment === 'gym' ? 'Studio' : 'Zuhause'}
+                    {plan.environment === 'gym' ? t('aiPlan.studio') : t('aiPlan.home')}
                   </Text>
                 </View>
                 <View style={styles.metaChip}>
-                  <Text style={styles.metaText}>{plan.estimated_duration_minutes} Min/Einheit</Text>
+                  <Text style={styles.metaText}>{t('aiPlan.minPerSession', { n: plan.estimated_duration_minutes })}</Text>
                 </View>
                 {plan.is_circuit && (
                   <View style={[styles.metaChip, { borderColor: C_ORANGE }]}>
-                    <Text style={[styles.metaText, { color: C_ORANGE }]}>Zirkel</Text>
+                    <Text style={[styles.metaText, { color: C_ORANGE }]}>{t('aiPlan.circuit')}</Text>
                   </View>
                 )}
               </View>
@@ -677,7 +664,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
               {plan.restrictions && (
                 <View style={styles.noteBox}>
                   <MaterialIcons name="health-and-safety" size={14} color={C_ORANGE} />
-                  <Text style={styles.noteBoxText}>Berücksichtigt: {plan.restrictions}</Text>
+                  <Text style={styles.noteBoxText}>{t('aiPlan.considered', { text: plan.restrictions })}</Text>
                 </View>
               )}
 
@@ -690,10 +677,10 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
 
               {plan.days.map((day) => (
                 <View key={day.day_index} style={styles.dayCard}>
-                  <Text style={styles.dayCardTitle}>Tag {day.day_index} · {day.label}</Text>
+                  <Text style={styles.dayCardTitle}>{t('aiPlan.dayTitle', { n: day.day_index, label: day.label })}</Text>
 
                   {day.warmup && (
-                    <Text style={styles.dayCardSub}>🔥 Warm-up: {day.warmup}</Text>
+                    <Text style={styles.dayCardSub}>{t('aiPlan.warmup', { text: day.warmup })}</Text>
                   )}
 
                   <View style={styles.exerciseList}>
@@ -713,7 +700,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                   </View>
 
                   {day.cooldown && (
-                    <Text style={styles.dayCardSub}>🧊 Cool-down: {day.cooldown}</Text>
+                    <Text style={styles.dayCardSub}>{t('aiPlan.cooldown', { text: day.cooldown })}</Text>
                   )}
                 </View>
               ))}
@@ -730,14 +717,14 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                   ? <ActivityIndicator size="small" color="#121212" />
                   : <>
                       <MaterialIcons name="check" size={18} color="#121212" />
-                      <Text style={styles.saveBtnText}>Plan speichern</Text>
+                      <Text style={styles.saveBtnText}>{t('aiPlan.savePlan')}</Text>
                     </>
                 }
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.regenerateBtn} onPress={() => setStep('goal')} activeOpacity={0.7}>
                 <MaterialIcons name="refresh" size={16} color={C_MUTED} />
-                <Text style={styles.regenerateBtnText}>Neu generieren</Text>
+                <Text style={styles.regenerateBtnText}>{t('aiPlan.regenerate')}</Text>
               </TouchableOpacity>
             </>
           )}

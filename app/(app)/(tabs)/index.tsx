@@ -36,6 +36,7 @@ import { useWaterIntake } from "@/hooks/useWaterIntake";
 import { isStale, loadCache, saveCache } from "@/lib/dashboardCache";
 import { clearCredentials } from "@/lib/credentialStore";
 import { HealthManager } from "@/lib/healthManager";
+import { formatNumber, getLanguage, getLocale, t, tList, useTranslation } from "@/lib/i18n";
 import { syncHealthToSupabase } from "@/lib/healthSync";
 import { resolveDayIndexForDate } from "@/services/gemini/trainingProvider";
 import { supabase } from "@/services/supabaseClient";
@@ -115,8 +116,6 @@ function calcProteinGoal(p: Profile): number {
   return Math.round(p.weight_kg * (p.protein_per_kg ?? 2.0));
 }
 
-const DAY_NAMES = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-
 function nextScheduledDayName(
   scheduledDays: number[] | null | undefined,
 ): string | null {
@@ -124,13 +123,14 @@ function nextScheduledDayName(
   const today = new Date().getDay();
   for (let i = 1; i <= 7; i++) {
     const candidate = (today + i) % 7;
-    if (scheduledDays.includes(candidate)) return DAY_NAMES[candidate];
+    if (scheduledDays.includes(candidate)) return tList("common.weekdaysShort")[candidate];
   }
   return null;
 }
 
 function isoToLabel(iso: string): string {
-  return iso.substring(8, 10) + "." + iso.substring(5, 7) + ".";
+  const sep = getLanguage() === "de" ? "." : "/";
+  return iso.substring(8, 10) + sep + iso.substring(5, 7) + (sep === "." ? "." : "");
 }
 
 /**
@@ -220,7 +220,7 @@ function computeWeightInsight(
     if (avgP - avgN > 0.3) {
       const lo = Math.min(...periodEntries.map((e) => e.value));
       const hi = Math.max(...periodEntries.map((e) => e.value));
-      return `💡 Deine Gewichtsschwankungen von ca. ${(hi - lo).toFixed(1)} kg treten zeitgleich mit deiner Periode auf. Das sind hormonell bedingte Wassereinlagerungen – kein Fettaufbau.`;
+      return t("home.insightPeriodRange", { range: (hi - lo).toFixed(1) });
     }
   }
 
@@ -238,9 +238,9 @@ function computeWeightInsight(
     const d1 = entries[maxIdx].measured_at.slice(0, 10);
     const d2 = entries[maxIdx - 1].measured_at.slice(0, 10);
     if (tagMap.get(d1)?.period || tagMap.get(d2)?.period)
-      return `💡 Dein Gewichtssprung von +${maxJump.toFixed(1)} kg korreliert mit deiner Periode 🩸 – meist Wassereinlagerung, kein Grund zur Sorge.`;
+      return t("home.insightPeriodJump", { jump: maxJump.toFixed(1) });
     if (tagMap.get(d1)?.alcohol || tagMap.get(d2)?.alcohol)
-      return `💡 Dein Gewichtssprung von +${maxJump.toFixed(1)} kg fällt auf einen Tag mit Alkohol 🍷 – oft kurzfristige Wassereinlagerung.`;
+      return t("home.insightAlcoholJump", { jump: maxJump.toFixed(1) });
   }
 
   return null;
@@ -340,7 +340,7 @@ function GoalRings({
       </Svg>
       {/* Ringmitte: "Noch X kcal" */}
       <View style={ringStyles.center}>
-        <Text style={ringStyles.noch}>noch</Text>
+        <Text style={ringStyles.noch}>{t("home.ringRemaining")}</Text>
         <Text style={ringStyles.pct}>{displayRemaining}</Text>
         <Text style={ringStyles.sub}>kcal</Text>
       </View>
@@ -387,6 +387,7 @@ const ringStyles = StyleSheet.create({
 // ─────────────────────────────────────────
 
 export default function HomeScreen() {
+  const { language } = useTranslation();
   // ── Calorie goal (TDEE + training burn + luteal bonus) via shared hook ────────
   const { healthBurnKcal, healthSteps, healthProtein, refreshHealth } = useHealthData();
   const { currentGoal, bonusActive, breakdown } = useCalorieGoal(healthBurnKcal);
@@ -441,7 +442,7 @@ export default function HomeScreen() {
   async function handleAddWater(ml: number) {
     const ok = await water.addIntake(ml);
     setWaterToast(
-      ok ? `+${ml} ml Wasser hinzugefügt` : "Wasser konnte nicht gespeichert werden",
+      ok ? t("home.waterAdded", { ml }) : t("home.waterSaveFailed"),
     );
   }
 
@@ -761,7 +762,7 @@ export default function HomeScreen() {
       }),
       chartStrips: buildChartStrips(weightData, weightTagMap),
     }),
-    [weightData, weightTagMap],
+    [weightData, weightTagMap, language],
   );
 
   const {
@@ -782,7 +783,7 @@ export default function HomeScreen() {
       isTodayTrainingDay: isToday,
       nextDayName: !isToday ? nextScheduledDayName(days) : null,
     };
-  }, [scheduledPlan, lastPlan]);
+  }, [scheduledPlan, lastPlan, language]);
 
   // Tooltip renderer (closure over weightTagMap)
   const renderTooltip = (items: any[]) => {
@@ -790,8 +791,8 @@ export default function HomeScreen() {
     if (!item) return null;
     const info = weightTagMap.get(item.date as string);
     const tags: string[] = [];
-    if (info?.period) tags.push("🩸 Periode");
-    if (info?.alcohol) tags.push("🍷 Alkohol");
+    if (info?.period) tags.push(t("home.tagPeriod"));
+    if (info?.alcohol) tags.push(t("home.tagAlcohol"));
     return (
       <View style={styles.tooltip}>
         <Text style={styles.tooltipWeight}>{item.value} kg</Text>
@@ -833,14 +834,12 @@ export default function HomeScreen() {
           <View>
             <Text style={styles.greeting}>
               {profile?.display_name
-                ? `Hallo, ${profile.display_name}!`
-                : "Hallo!"}
+                ? t("home.greetingName", { name: profile.display_name })
+                : t("home.greeting")}
             </Text>
             <Text style={styles.appName}>AvoraSport</Text>
             {lastSynced && (
-              <Text style={styles.syncText}>
-                Zuletzt aktualisiert: Gerade eben
-              </Text>
+              <Text style={styles.syncText}>{t("home.lastSynced")}</Text>
             )}
           </View>
           <View style={styles.headerActions}>
@@ -875,8 +874,8 @@ export default function HomeScreen() {
             <MaterialIcons name="cloud-off" size={12} color="#FF9100" />
             <Text style={styles.offlineBannerText}>
               {cacheTimestamp && isStale(cacheTimestamp)
-                ? `Offline · Cache vom ${new Date(cacheTimestamp).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr`
-                : "Offline · Zeige lokale Daten"}
+                ? t("home.offlineCache", { time: new Date(cacheTimestamp).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit" }) })
+                : t("home.offlineLocal")}
             </Text>
           </View>
         )}
@@ -889,7 +888,7 @@ export default function HomeScreen() {
                 entering={FadeInDown.delay(0).duration(600).springify()}
                 style={styles.card}
               >
-                <Text style={styles.cardLabel}>ERNÄHRUNG · HEUTE</Text>
+                <Text style={styles.cardLabel}>{t("home.nutritionToday")}</Text>
                 <View style={styles.nutritionRow}>
                   {/* Ring + Legende als vertikale Einheit */}
                   <View style={styles.ringWithLegend}>
@@ -903,19 +902,19 @@ export default function HomeScreen() {
                     <View style={styles.ringLegend}>
                       <View style={styles.ringLegendItem}>
                         <View style={[styles.ringLegendDot, { backgroundColor: COLOR_CAL_RING }]} />
-                        <Text style={styles.ringLegendText}>Kcal</Text>
+                        <Text style={styles.ringLegendText}>{t("home.legendKcal")}</Text>
                       </View>
                       <View style={styles.ringLegendItem}>
                         <View style={[styles.ringLegendDot, { backgroundColor: COLOR_STEPS }]} />
-                        <Text style={styles.ringLegendText}>Schritte</Text>
+                        <Text style={styles.ringLegendText}>{t("home.legendSteps")}</Text>
                       </View>
                       <View style={styles.ringLegendItem}>
                         <View style={[styles.ringLegendDot, { backgroundColor: COLOR_PROTEIN }]} />
-                        <Text style={styles.ringLegendText}>Protein</Text>
+                        <Text style={styles.ringLegendText}>{t("home.legendProtein")}</Text>
                       </View>
                       <View style={styles.ringLegendItem}>
                         <View style={[styles.ringLegendDot, { backgroundColor: COLOR_WATER }]} />
-                        <Text style={styles.ringLegendText}>Wasser</Text>
+                        <Text style={styles.ringLegendText}>{t("home.legendWater")}</Text>
                       </View>
                     </View>
                   </View>
@@ -927,13 +926,11 @@ export default function HomeScreen() {
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       style={styles.goalLink}
                     >
-                      <Text style={styles.kcalUnit}>von {currentGoal} kcal</Text>
+                      <Text style={styles.kcalUnit}>{t("home.ofKcal", { goal: currentGoal })}</Text>
                       <MaterialIcons name="info-outline" size={12} color="#999" />
                     </TouchableOpacity>
                     {bonusActive && (
-                      <Text style={styles.lutealBonusText}>
-                        Inkl. Zyklus-Bonus 🩸
-                      </Text>
+                      <Text style={styles.lutealBonusText}>{t("home.cycleBonus")}</Text>
                     )}
                     <View style={styles.kcalDivider} />
                     <Text
@@ -953,7 +950,7 @@ export default function HomeScreen() {
                       {Math.abs(remaining)}
                     </Text>
                     <Text style={styles.kcalUnit}>
-                      {remaining < 0 ? "kcal überschritten" : "kcal verfügbar"}
+                      {remaining < 0 ? t("home.kcalExceeded") : t("home.kcalAvailable")}
                     </Text>
                     <View style={styles.legendRow}>
                       {burnedKcal > 0 && (
@@ -1004,7 +1001,7 @@ export default function HomeScreen() {
                             ]}
                           />
                           <Text style={styles.legendText}>
-                            {(water.consumedMl / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })}/{(water.goalMl / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} l
+                            {formatNumber(water.consumedMl / 1000, { maximumFractionDigits: 1 })}/{formatNumber(water.goalMl / 1000, { maximumFractionDigits: 1 })} l
                           </Text>
                         </View>
                       )}
@@ -1016,7 +1013,7 @@ export default function HomeScreen() {
                   onPress={() => router.push("/(app)/(tabs)/nutrition")}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cardLinkText}>Mahlzeit erfassen</Text>
+                  <Text style={styles.cardLinkText}>{t("home.logMeal")}</Text>
                   <MaterialIcons
                     name="chevron-right"
                     size={15}
@@ -1032,16 +1029,16 @@ export default function HomeScreen() {
                 entering={FadeInDown.delay(60).duration(500).springify()}
                 style={styles.card}
               >
-                <Text style={styles.cardLabel}>AKTIVITÄT · HEUTE</Text>
+                <Text style={styles.cardLabel}>{t("home.activityToday")}</Text>
 
                 {/* Schrittzahl + Prozent-Badge */}
                 <View style={styles.activityHeader}>
                   <View>
                     <Text style={styles.activitySteps}>
-                      {healthSteps.toLocaleString("de-DE")}
+                      {formatNumber(healthSteps)}
                     </Text>
                     <Text style={styles.activitySubtitle}>
-                      von {stepGoal.toLocaleString("de-DE")} Schritten
+                      {t("home.ofSteps", { goal: formatNumber(stepGoal) })}
                     </Text>
                   </View>
                   <View style={styles.activityBadge}>
@@ -1066,7 +1063,7 @@ export default function HomeScreen() {
                   {healthBurnKcal > 0 && (
                     <View style={styles.activityExtraItem}>
                       <MaterialIcons name="local-fire-department" size={14} color={COLOR_STEPS} />
-                      <Text style={styles.activityExtraLabel}>Kalorien</Text>
+                      <Text style={styles.activityExtraLabel}>{t("home.calories")}</Text>
                       <Text style={[styles.activityExtraValue, { color: COLOR_STEPS }]}>
                         {healthBurnKcal} kcal
                       </Text>
@@ -1074,12 +1071,12 @@ export default function HomeScreen() {
                   )}
                   <View style={styles.activityExtraItem}>
                     <MaterialIcons name="favorite-border" size={14} color="#333" />
-                    <Text style={styles.activityExtraLabel}>Puls</Text>
+                    <Text style={styles.activityExtraLabel}>{t("home.pulse")}</Text>
                     <Text style={styles.activityExtraValue}>— bpm</Text>
                   </View>
                   <View style={styles.activityExtraItem}>
                     <MaterialIcons name="timer" size={14} color="#333" />
-                    <Text style={styles.activityExtraLabel}>Akt. Min.</Text>
+                    <Text style={styles.activityExtraLabel}>{t("home.activeMinutes")}</Text>
                     <Text style={styles.activityExtraValue}>—</Text>
                   </View>
                 </View>
@@ -1093,7 +1090,7 @@ export default function HomeScreen() {
                 style={styles.card}
               >
                 <View style={styles.cardLabelRow}>
-                  <Text style={styles.cardLabel}>GEWICHTSVERLAUF</Text>
+                  <Text style={styles.cardLabel}>{t("home.weightHistory")}</Text>
                   {latestWeight !== null && (
                     <View style={styles.weightBadge}>
                       <Text style={styles.weightBadgeText}>
@@ -1182,7 +1179,7 @@ export default function HomeScreen() {
                           },
                         ]}
                       />
-                      <Text style={styles.legendText}>Periode</Text>
+                      <Text style={styles.legendText}>{t("home.legendPeriod")}</Text>
                     </View>
                     <View style={styles.legendChip}>
                       <View
@@ -1196,7 +1193,7 @@ export default function HomeScreen() {
                           },
                         ]}
                       />
-                      <Text style={styles.legendText}>Alkohol</Text>
+                      <Text style={styles.legendText}>{t("home.legendAlcohol")}</Text>
                     </View>
                   </View>
                 )}
@@ -1213,7 +1210,7 @@ export default function HomeScreen() {
                   onPress={() => router.push("/body-stats")}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cardLinkText}>Körperwerte erfassen</Text>
+                  <Text style={styles.cardLinkText}>{t("home.logBodyStats")}</Text>
                   <MaterialIcons
                     name="chevron-right"
                     size={15}
@@ -1227,7 +1224,7 @@ export default function HomeScreen() {
             <Animated.View
               entering={FadeInDown.delay(240).duration(600).springify()}
             >
-              <Text style={styles.sectionTitle}>Training</Text>
+              <Text style={styles.sectionTitle}>{t("home.training")}</Text>
 
               {trainedToday && (
                 <View style={[styles.card, styles.cardGreen]}>
@@ -1237,9 +1234,7 @@ export default function HomeScreen() {
                       size={18}
                       color="#4caf50"
                     />
-                    <Text style={styles.successText}>
-                      Heute schon aktiv — stark!
-                    </Text>
+                    <Text style={styles.successText}>{t("home.trainedToday")}</Text>
                   </View>
                 </View>
               )}
@@ -1249,10 +1244,10 @@ export default function HomeScreen() {
                   <View style={styles.planCardHeader}>
                     <Text style={styles.cardLabel}>
                       {isPlanScheduledToday
-                        ? "PLAN FÜR HEUTE"
+                        ? t("home.planToday")
                         : trainedToday
-                          ? "LETZTER PLAN"
-                          : "BEREIT FÜR HEUTE"}
+                          ? t("home.lastPlan")
+                          : t("home.readyToday")}
                     </Text>
                     {planDays && planDays.length > 0 && (
                       <View
@@ -1269,9 +1264,9 @@ export default function HomeScreen() {
                           ]}
                         >
                           {isTodayTrainingDay
-                            ? "Heute steht dein Training an! 🔥"
+                            ? t("home.trainingToday")
                             : nextDayName
-                              ? `Nächstes Training: ${nextDayName}`
+                              ? t("home.nextTraining", { day: nextDayName })
                               : ""}
                         </Text>
                       </View>
@@ -1294,7 +1289,7 @@ export default function HomeScreen() {
                       activeOpacity={0.8}
                     >
                       <MaterialIcons name="play-arrow" size={17} color="#fff" />
-                      <Text style={styles.planStartText}>Starten</Text>
+                      <Text style={styles.planStartText}>{t("home.start")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1307,7 +1302,7 @@ export default function HomeScreen() {
                   activeOpacity={0.8}
                 >
                   <MaterialIcons name="fitness-center" size={18} color="#fff" />
-                  <Text style={styles.actionText}>Freies Training</Text>
+                  <Text style={styles.actionText}>{t("home.freeWorkout")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionSecondary]}
@@ -1320,7 +1315,7 @@ export default function HomeScreen() {
                     color={COLOR_CALORIES}
                   />
                   <Text style={[styles.actionText, { color: COLOR_CALORIES }]}>
-                    Mit Plan
+                    {t("home.withPlan")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1330,23 +1325,23 @@ export default function HomeScreen() {
             <Animated.View
               entering={FadeInDown.delay(280).duration(600).springify()}
             >
-              <Text style={styles.sectionTitle}>Wasser</Text>
+              <Text style={styles.sectionTitle}>{t("home.water")}</Text>
 
               <View style={styles.card}>
                 <View style={styles.waterHeaderRow}>
                   {water.remainingMl > 0 ? (
                     <Text style={styles.waterRemainingText}>
-                      {water.consumedMl} ml getrunken · noch {water.remainingMl} ml
+                      {t("home.waterProgress", { consumed: water.consumedMl, remaining: water.remainingMl })}
                     </Text>
                   ) : (
                     <View style={styles.row}>
                       <MaterialIcons name="check-circle" size={15} color="#4caf50" />
-                      <Text style={styles.successText}>Tagesziel erreicht!</Text>
+                      <Text style={styles.successText}>{t("home.waterGoalReached")}</Text>
                     </View>
                   )}
                   {water.hasIntakeToday && (
                     <TouchableOpacity onPress={() => water.removeLastIntake()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.waterUndoText}>Rückgängig</Text>
+                      <Text style={styles.waterUndoText}>{t("home.undo")}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1369,7 +1364,7 @@ export default function HomeScreen() {
                     style={styles.waterCustomInput}
                     value={customWaterMl}
                     onChangeText={(v) => setCustomWaterMl(v.replace(/[^0-9]/g, "").slice(0, 4))}
-                    placeholder="Andere Menge (ml)"
+                    placeholder={t("home.customAmount")}
                     placeholderTextColor="#557"
                     keyboardType="number-pad"
                     returnKeyType="done"
@@ -1381,7 +1376,7 @@ export default function HomeScreen() {
                     disabled={!customWaterMl}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.waterCustomBtnText}>Hinzufügen</Text>
+                    <Text style={styles.waterCustomBtnText}>{t("common.add")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
