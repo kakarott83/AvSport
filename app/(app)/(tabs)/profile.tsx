@@ -45,6 +45,8 @@ import { formatNumber, LANGUAGE_NAMES, LANGUAGES, useTranslation, type Language 
 import { calculateWaterGoal } from '@/lib/waterGoal';
 import { describeReminderSchedule, sanitizeWaterReminderSettings } from '@/lib/waterReminders';
 import { syncWaterReminders } from '@/services/notifications/waterReminderService';
+import { formatReminderTime, MEAL_REMINDER_BOUNDS, sanitizeMealReminderSettings } from '@/lib/mealReminder';
+import { syncMealReminder } from '@/services/notifications/mealReminderService';
 import { supabase } from '@/services/supabaseClient';
 
 // ─────────────────────────────────────────
@@ -75,6 +77,9 @@ type ProfileForm = {
   water_reminder_start_hour: number;
   water_reminder_end_hour: number;
   water_reminder_interval_hours: number;
+  meal_reminder_enabled: boolean;
+  meal_reminder_hour: number;
+  meal_reminder_minute: number;
 };
 
 const EMPTY: ProfileForm = {
@@ -101,6 +106,9 @@ const EMPTY: ProfileForm = {
   water_reminder_start_hour: 8,
   water_reminder_end_hour: 20,
   water_reminder_interval_hours: 2,
+  meal_reminder_enabled: false,
+  meal_reminder_hour: 20,
+  meal_reminder_minute: 0,
 };
 
 // ─────────────────────────────────────────
@@ -142,7 +150,8 @@ export default function ProfileScreen() {
                  cycle_calorie_bonus, cycle_period_reminder, cycle_fertile_reminder,
                  activity_level, manual_step_goal, sync_health,
                  water_goal_ml, water_reminder_enabled, water_reminder_start_hour,
-                 water_reminder_end_hour, water_reminder_interval_hours`)
+                 water_reminder_end_hour, water_reminder_interval_hours,
+                 meal_reminder_enabled, meal_reminder_hour, meal_reminder_minute`)
         .eq('id', user.id)
         .single();
 
@@ -171,6 +180,9 @@ export default function ProfileScreen() {
           water_reminder_start_hour:     data.water_reminder_start_hour ?? 8,
           water_reminder_end_hour:       data.water_reminder_end_hour ?? 20,
           water_reminder_interval_hours: data.water_reminder_interval_hours ?? 2,
+          meal_reminder_enabled:         data.meal_reminder_enabled ?? false,
+          meal_reminder_hour:            data.meal_reminder_hour ?? 20,
+          meal_reminder_minute:          data.meal_reminder_minute ?? 0,
         });
       }
       setLoading(false);
@@ -327,11 +339,28 @@ export default function ProfileScreen() {
     });
   }
 
+  // Plant die tägliche Mahlzeiten-Erinnerung neu (best-effort, siehe Service).
+  function resyncMealReminder(f: ProfileForm) {
+    void syncMealReminder(sanitizeMealReminderSettings({
+      enabled: f.meal_reminder_enabled,
+      hour:    f.meal_reminder_hour,
+      minute:  f.meal_reminder_minute,
+    }));
+  }
+
   function onLanguageChange(lang: Language) {
     if (lang === language) return;
     setLanguage(lang);
     // Geplante Benachrichtigungen enthalten fertigen Text → in neuer Sprache neu planen.
     resyncWaterReminders(form);
+    resyncMealReminder(form);
+  }
+
+  function onMealReminderToggle(enabled: boolean) {
+    const updated = { ...form, meal_reminder_enabled: enabled };
+    setForm(updated);
+    syncCycleField({ meal_reminder_enabled: enabled });
+    resyncMealReminder(updated);
   }
 
   function onWaterReminderToggle(enabled: boolean) {
@@ -350,7 +379,9 @@ export default function ProfileScreen() {
       | 'water_goal_ml'
       | 'water_reminder_start_hour'
       | 'water_reminder_end_hour'
-      | 'water_reminder_interval_hours',
+      | 'water_reminder_interval_hours'
+      | 'meal_reminder_hour'
+      | 'meal_reminder_minute',
     delta: number,
     min: number,
     max: number
@@ -362,6 +393,7 @@ export default function ProfileScreen() {
       cycleDebounce.current = setTimeout(() => {
         syncCycleField({ [field]: next });
         if (field.startsWith('water_')) resyncWaterReminders(updated);
+        if (field.startsWith('meal_')) resyncMealReminder(updated);
       }, 800);
       return updated;
     });
@@ -405,6 +437,9 @@ export default function ProfileScreen() {
         water_reminder_start_hour:     form.water_reminder_start_hour,
         water_reminder_end_hour:       form.water_reminder_end_hour,
         water_reminder_interval_hours: form.water_reminder_interval_hours,
+        meal_reminder_enabled:         form.meal_reminder_enabled,
+        meal_reminder_hour:            form.meal_reminder_hour,
+        meal_reminder_minute:          form.meal_reminder_minute,
       },
       { onConflict: 'id' }
     );
@@ -412,6 +447,7 @@ export default function ProfileScreen() {
     setSaving(false);
     if (dbErr) { setError(dbErr.message); return; }
     resyncWaterReminders(form);
+    resyncMealReminder(form);
     setToast(t('profile.saved'));
   }
 
@@ -649,6 +685,56 @@ export default function ProfileScreen() {
             onIncrement={() => stepperChange('manual_step_goal', +STEPPER_BOUNDS.manual_step_goal.step, STEPPER_BOUNDS.manual_step_goal.min, STEPPER_BOUNDS.manual_step_goal.max)}
             accentColor="#FF9100"
           />
+        </View>
+
+        {/* ── Mahlzeiten-Erinnerung ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('profile.meal.title')}</Text>
+          <Text style={styles.hint}>{t('profile.meal.hint')}</Text>
+
+          <View style={[styles.toggleRow, { marginBottom: form.meal_reminder_enabled ? 20 : 0 }]}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.toggleLabel}>{t('profile.meal.toggle')}</Text>
+              <Text style={styles.toggleSub}>
+                {form.meal_reminder_enabled
+                  ? t('profile.meal.dailyAt', { time: formatReminderTime(form.meal_reminder_hour, form.meal_reminder_minute) })
+                  : t('common.inactive')}
+              </Text>
+            </View>
+            <Switch
+              value={form.meal_reminder_enabled}
+              onValueChange={onMealReminderToggle}
+              trackColor={{ false: '#2a2a2a', true: '#0a2a30' }}
+              thumbColor={form.meal_reminder_enabled ? '#00E5FF' : '#555'}
+            />
+          </View>
+
+          {form.meal_reminder_enabled && (
+            <>
+              <Text style={styles.label}>{t('profile.meal.hour')}</Text>
+              <Stepper
+                value={form.meal_reminder_hour}
+                unit={t('common.units.oClock')}
+                min={MEAL_REMINDER_BOUNDS.hour.min}
+                max={MEAL_REMINDER_BOUNDS.hour.max}
+                onDecrement={() => stepperChange('meal_reminder_hour', -1, MEAL_REMINDER_BOUNDS.hour.min, MEAL_REMINDER_BOUNDS.hour.max)}
+                onIncrement={() => stepperChange('meal_reminder_hour', +1, MEAL_REMINDER_BOUNDS.hour.min, MEAL_REMINDER_BOUNDS.hour.max)}
+              />
+
+              <View style={styles.separator} />
+
+              <Text style={styles.label}>{t('profile.meal.minute')}</Text>
+              <Stepper
+                value={form.meal_reminder_minute}
+                unit="min"
+                step={MEAL_REMINDER_BOUNDS.minute.step}
+                min={MEAL_REMINDER_BOUNDS.minute.min}
+                max={MEAL_REMINDER_BOUNDS.minute.max}
+                onDecrement={() => stepperChange('meal_reminder_minute', -MEAL_REMINDER_BOUNDS.minute.step, MEAL_REMINDER_BOUNDS.minute.min, MEAL_REMINDER_BOUNDS.minute.max)}
+                onIncrement={() => stepperChange('meal_reminder_minute', +MEAL_REMINDER_BOUNDS.minute.step, MEAL_REMINDER_BOUNDS.minute.min, MEAL_REMINDER_BOUNDS.minute.max)}
+              />
+            </>
+          )}
         </View>
 
         {/* ── Wasser ── */}

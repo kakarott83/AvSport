@@ -1,8 +1,8 @@
 // TODO: Kamera-Workflow: 1. expo-camera öffnen 2. Foto aufnehmen 3. Base64 an analyzeFoodImage() senden 4. Ergebnis-Modal mit Makros (JSON) anzeigen & Speichern-Option bieten.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -375,6 +375,9 @@ export default function NutritionScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [dayLogOpen, setDayLogOpen] = useState(false);
+  // Aus der Mahlzeiten-Erinnerung geöffnet (?dayLog=<zeitstempel>) → direkt "Tag erfassen"
+  const { dayLog } = useLocalSearchParams<{ dayLog?: string }>();
+  useEffect(() => { if (dayLog) setDayLogOpen(true); }, [dayLog]);
   const [toast, setToast] = useState<string | null>(null);
   const [waterGoalMl, setWaterGoalMl] = useState(0);
   const [waterConsumedMl, setWaterConsumedMl] = useState(0);

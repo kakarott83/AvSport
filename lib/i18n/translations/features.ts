@@ -28,9 +28,10 @@ export default defineMessages(
       points: [
         'Foto-Scanner: Teller fotografieren — die KI erkennt die Zutaten, die Nährwerte kommen aus der USDA-Datenbank. Ein zweites Foto mit Hand oder Besteck macht die Portion genauer.',
         'Ohne Foto: „Stattdessen beschreiben“ im Scanner — tippen oder diktieren, was du gegessen hast, auch den ganzen Tag auf einmal. Die Nährwerte werden berechnet und jedes Gericht landet als eigener Eintrag im Journal.',
-        'Tag erfassen (Listen-Symbol): mit „Tag beschreiben (KI)“ alles vom Tag eintippen oder diktieren — die KI listet die Gerichte zur Kontrolle auf und berechnet dann die Nährwerte. Außerdem bisherige Gerichte auswählen oder neue selbst eintragen.',
+        'Tag erfassen (Listen-Symbol): mit „Mahlzeiten am Tag erfassen“ alles vom Tag eintippen oder diktieren — die KI listet die Gerichte zur Kontrolle auf und berechnet dann die Nährwerte. Außerdem bisherige Gerichte auswählen oder neue selbst eintragen.',
         'Manuell erfassen über „+ Mahlzeit“, optional mit dem Wasser dazu.',
         'Kalorienziel für heute anpassen und Verlauf der letzten 7 Tage ansehen.',
+        'Tägliche Mahlzeiten-Erinnerung zur gewünschten Uhrzeit: Profil → Mahlzeiten-Erinnerung.',
         'Tippe auf „Ziel kcal“ (oder auf dem Home-Screen auf „von … kcal“), um Schritt für Schritt zu sehen, wie dein Kalorienziel berechnet wird.',
       ],
     },
@@ -97,9 +98,10 @@ export default defineMessages(
       points: [
         'Photo scanner: take a picture of your plate — the AI recognizes the ingredients, nutrition values come from the USDA database. A second photo with your hand or cutlery makes the portion more accurate.',
         'Without a photo: “Describe instead” in the scanner — type or dictate what you ate, even a whole day at once. Nutrition values are calculated and every dish becomes its own journal entry.',
-        'Log a day (list icon): use “Describe your day (AI)” to type or dictate everything you ate — the AI lists the dishes for you to check, then calculates the nutrition. You can also pick previous dishes or enter new ones yourself.',
+        'Log a day (list icon): use “Log today’s meals” to type or dictate everything you ate — the AI lists the dishes for you to check, then calculates the nutrition. You can also pick previous dishes or enter new ones yourself.',
         'Log manually via “+ Meal”, optionally with water.',
         "Adjust today's calorie goal and view the last 7 days.",
+        'Daily meal reminder at a time of your choice: Profile → Meal reminder.',
         'Tap “Goal kcal” (or “of … kcal” on the Home screen) to see step by step how your calorie goal is calculated.',
       ],
     },

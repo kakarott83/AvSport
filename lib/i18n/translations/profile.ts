@@ -45,6 +45,14 @@ export default defineMessages(
       manualGoal: 'Manuelles Ziel (0 = automatisch)',
       manualGoalHint: 'Überschreibe die Berechnung mit einem festen Wert. 0 = Automatik bleibt aktiv. Mit Health-Synchronisation erhöhen nur Schritte über diesem Ziel dein Kalorienziel.',
     },
+    meal: {
+      title: 'Mahlzeiten-Erinnerung',
+      hint: 'Erinnert dich einmal täglich daran, deine Mahlzeiten des Tages zu erfassen. Ein Tippen auf die Mitteilung öffnet direkt „Tag erfassen“.',
+      toggle: '🍽️ Tägliche Erinnerung',
+      dailyAt: 'Täglich um {{time}} Uhr',
+      hour: 'Uhrzeit – Stunde',
+      minute: 'Uhrzeit – Minute',
+    },
     water: {
       title: 'Wasser',
       hintBefore: 'Dein Tagesbedarf wird aus Gewicht und Aktivitätslevel geschätzt. Er liegt aktuell bei',
@@ -178,6 +186,14 @@ export default defineMessages(
       activityLevel: 'Activity level',
       manualGoal: 'Manual goal (0 = automatic)',
       manualGoalHint: 'Override the calculation with a fixed value. 0 = automatic stays active. With health sync, only steps beyond this goal increase your calorie goal.',
+    },
+    meal: {
+      title: 'Meal reminder',
+      hint: 'Reminds you once a day to log your meals. Tapping the notification opens “Log day” directly.',
+      toggle: '🍽️ Daily reminder',
+      dailyAt: 'Daily at {{time}}',
+      hour: 'Time – hour',
+      minute: 'Time – minute',
     },
     water: {
       title: 'Water',

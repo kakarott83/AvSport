@@ -21,6 +21,10 @@ export default defineMessages(
       off: 'Erinnerungen sind ausgeschaltet.',
       summary: 'Alle {{interval}} h zwischen {{start}}:00 und {{end}}:00 Uhr ({{count}}×).',
     },
+    mealNotification: {
+      title: 'Mahlzeiten erfassen',
+      body: 'Hast du schon eingetragen, was du heute gegessen hast? Tippe hier, um deine Mahlzeiten zu erfassen.',
+    },
     waterNotification: {
       goalReachedTitle: 'Tagesziel erreicht',
       goalReachedBody: 'Super gemacht! Du hast dein Trinkziel von {{goal}} ml heute erreicht.',
@@ -71,6 +75,10 @@ export default defineMessages(
     waterSchedule: {
       off: 'Reminders are turned off.',
       summary: 'Every {{interval}} h between {{start}}:00 and {{end}}:00 ({{count}}×).',
+    },
+    mealNotification: {
+      title: 'Log your meals',
+      body: 'Have you logged what you ate today? Tap here to log your meals.',
     },
     waterNotification: {
       goalReachedTitle: 'Daily goal reached',

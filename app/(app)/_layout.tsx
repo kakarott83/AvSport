@@ -1,16 +1,32 @@
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { AnimatedLogo } from '@/components/AnimatedLogo';
 import { FeedbackFab } from '@/components/FeedbackFab';
 import { useTranslation } from '@/lib/i18n';
+import { sanitizeMealReminderSettings } from '@/lib/mealReminder';
+import { MEAL_REMINDER_TAG, syncMealReminder } from '@/services/notifications/mealReminderService';
 import { supabase } from '@/services/supabaseClient';
 
 export default function AppLayout() {
   const router = useRouter();
   const { t } = useTranslation();
   const [ready, setReady] = useState(false);
+  // Tippen auf die Mahlzeiten-Erinnerung (auch beim Kaltstart) → "Tag erfassen"
+  const lastResponse = Notifications.useLastNotificationResponse();
+  const handledResponse = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ready || !lastResponse) return;
+    const { request } = lastResponse.notification;
+    if (request.content.data?.tag !== MEAL_REMINDER_TAG) return;
+    if (lastResponse.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+    if (handledResponse.current === request.identifier + lastResponse.notification.date) return;
+    handledResponse.current = request.identifier + lastResponse.notification.date;
+    router.push({ pathname: '/(app)/(tabs)/nutrition', params: { dayLog: String(Date.now()) } });
+  }, [ready, lastResponse]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -18,7 +34,7 @@ export default function AppLayout() {
 
       supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, meal_reminder_enabled, meal_reminder_hour, meal_reminder_minute')
         .eq('id', user.id)
         .maybeSingle()
         .then(({ data }) => {
@@ -26,6 +42,12 @@ export default function AppLayout() {
             router.replace('/onboarding');
           } else {
             setReady(true);
+            // Erinnerung nach Neuinstallation / auf neuem Gerät wieder einplanen
+            void syncMealReminder(sanitizeMealReminderSettings({
+              enabled: data.meal_reminder_enabled,
+              hour:    data.meal_reminder_hour,
+              minute:  data.meal_reminder_minute,
+            }));
           }
         })
         .catch(() => setReady(true));

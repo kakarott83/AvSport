@@ -74,7 +74,7 @@ export default defineMessages(
       notLoggedIn: 'Nicht eingeloggt.',
       saveFailed: 'Speichern fehlgeschlagen: {{message}}',
       ai: {
-        open: 'Tag beschreiben (KI)',
+        open: 'Mahlzeiten am Tag erfassen',
         hint: 'Schreib oder diktiere alles, was du heute gegessen hast. Die KI erkennt die Gerichte, du prüfst die Liste, dann werden die Nährwerte berechnet.',
         placeholder: '„Morgens Müsli mit Milch, mittags Spaghetti Bolognese, nachmittags ein Apfel, abends zwei Käsebrote“',
         recognize: 'Gerichte erkennen',
@@ -166,7 +166,7 @@ export default defineMessages(
       notLoggedIn: 'Not logged in.',
       saveFailed: 'Saving failed: {{message}}',
       ai: {
-        open: 'Describe your day (AI)',
+        open: "Log today's meals",
         hint: 'Type or dictate everything you ate today. The AI recognizes the dishes, you check the list, then the nutrition values are calculated.',
         placeholder: '"Muesli with milk for breakfast, spaghetti bolognese for lunch, an apple in the afternoon, two cheese sandwiches for dinner"',
         recognize: 'Recognize dishes',
