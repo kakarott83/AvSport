@@ -1,7 +1,10 @@
 # AvoraSport Admin-Panel
 
 Statische Website (HTML/CSS/JS, kein Build-Schritt, kein PHP/Node) zur
-Steuerung der AvoraSport-App, gehostet auf **milan-muc.de**.
+Steuerung der AvoraSport-App, gehostet bei Strato im Ordner `htdocs/avadmin`:
+**https://milan-muc.de/avadmin/** (Subdomain `avadmin.milan-muc.de` zeigt auf
+denselben Ordner, braucht aber ein eigenes SSL-Zertifikat). SFTP-Host:
+`5019726313.ssh.w2.strato.hosting`.
 
 ## Was das Panel kann
 

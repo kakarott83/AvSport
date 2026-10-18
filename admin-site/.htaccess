@@ -8,7 +8,9 @@
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "no-referrer"
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
-  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  # ohne includeSubDomains: das Panel läuft auch unter milan-muc.de/avadmin — sonst
+  # würde HSTS alle Subdomains (auch ohne Zertifikat) auf HTTPS zwingen.
+  Header always set Strict-Transport-Security "max-age=31536000"
   Header always set X-Robots-Tag "noindex, nofollow"
   # Admin-Daten nie zwischenspeichern.
   <FilesMatch "\.(html|js)$">
