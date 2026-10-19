@@ -733,6 +733,91 @@ async function loadAudit() {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
+/** Anteil in Prozent mit einer Nachkommastelle, deutsch formatiert. */
+function pct(part, whole) {
+  const p = Number(whole) > 0 ? Math.round((Number(part) / Number(whole)) * 1000) / 10 : 0;
+  return p.toLocaleString('de-DE') + ' %';
+}
+
+function kpiTile(title, big, sub, extraClass = '') {
+  return `<div class="card kpi ${extraClass}"><h2>${title}</h2><p class="big">${big}</p><p class="muted">${sub}</p></div>`;
+}
+
+/** Vier KPI-Bereiche aus admin_get_kpi_groups() (via admin-api "metrics"). */
+function renderKpiGroups(g) {
+  if (!g) return '';
+  const n = (v) => Number(v ?? 0);
+  const gr = g.growth ?? {};
+  const f = g.features ?? {};
+  const mo = g.money ?? {};
+  const q = g.quality ?? {};
+  const users = n(f.users_total);
+  const usersOf = (v) => `${fmtNum(n(v))} Nutzer`;
+
+  // Monatsumsatz nur mit hinterlegten Preisen (config.js → prices)
+  const prices = window.ADMIN_CONFIG.prices ?? {};
+  const hasPrices = prices.monthlyEur != null && prices.yearlyEur != null;
+  const mrr = hasPrices ? n(mo.premium_monthly) * prices.monthlyEur + (n(mo.premium_yearly) * prices.yearlyEur) / 12 : 0;
+  const lookupTotal = n(q.lookup_usda_30d) + n(q.lookup_llm_30d) + n(q.lookup_cache_30d);
+  const aiTotal = n(q.ai_success_7d) + n(q.ai_errors_7d);
+
+  return `
+    <h3 class="section-title">Wachstum &amp; Bindung</h3>
+    <div class="grid kpi-grid">
+      ${kpiTile('Onboarding abgeschlossen', pct(gr.onboarded, gr.users_total), `${fmtNum(n(gr.onboarded))} von ${fmtNum(n(gr.users_total))} Nutzern`)}
+      ${kpiTile('Aktiv (30 Tage)', fmtNum(n(gr.mau)), `Ø ${n(gr.avg_dau_30d).toLocaleString('de-DE')} pro Tag`)}
+      ${kpiTile('Stickiness', `${n(gr.stickiness_pct).toLocaleString('de-DE')} %`, 'Ø tägliche ÷ monatlich aktive Nutzer')}
+      ${kpiTile('7-Tage-Retention', pct(gr.retention_active, gr.retention_cohort),
+        `${fmtNum(n(gr.retention_active))} von ${fmtNum(n(gr.retention_cohort))} Nutzern (8–60 Tage dabei) in den letzten 7 Tagen aktiv`)}
+      ${kpiTile('Inaktiv > 30 Tage', fmtNum(n(gr.inactive_30d)), `${pct(gr.inactive_30d, gr.users_total)} aller Nutzer`,
+        n(gr.inactive_30d) > n(gr.users_total) / 2 ? 'kpi-warn' : '')}
+    </div>
+
+    <h3 class="section-title">Nutzung der Funktionen <span class="muted">(letzte 30 Tage)</span></h3>
+    <div class="grid kpi-grid">
+      ${kpiTile('Ernährung', pct(f.nutrition_30d, users), usersOf(f.nutrition_30d))}
+      ${kpiTile('Training', pct(f.training_30d, users), usersOf(f.training_30d))}
+      ${kpiTile('Wasser', pct(f.water_30d, users), usersOf(f.water_30d))}
+      ${kpiTile('Zyklus-Einträge', pct(f.cycle_30d, users), usersOf(f.cycle_30d))}
+      ${kpiTile('Trainingspläne', fmtNum(n(f.plans_30d)), `davon ${fmtNum(n(f.ai_plans_30d))} per KI erstellt`)}
+      ${kpiTile('Mahlzeit per KI', fmtNum(n(f.food_photo_30d) + n(f.food_text_30d)),
+        `${fmtNum(n(f.food_photo_30d))} Foto · ${fmtNum(n(f.food_text_30d))} Text`)}
+      ${kpiTile('Health-Sync aktiv', usersOf(f.health_sync_on),
+        `eingeschaltet: Zyklus ${fmtNum(n(f.cycle_tracking_on))} · Mahlzeit-Erinnerung ${fmtNum(n(f.meal_reminder_on))} · Trink-Erinnerung ${fmtNum(n(f.water_reminder_on))}`)}
+    </div>
+
+    <h3 class="section-title">Monetarisierung &amp; Kosten</h3>
+    <div class="grid kpi-grid">
+      ${kpiTile('Premium-Abos', fmtNum(n(mo.premium_total)), `${fmtNum(n(mo.premium_monthly))} monatlich · ${fmtNum(n(mo.premium_yearly))} jährlich`)}
+      ${kpiTile('Umsatz / Monat (MRR)', hasPrices ? mrr.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) : '–',
+        hasPrices ? 'geschätzt aus Abo-Preisen (brutto)' : 'Abo-Preise in config.js eintragen (prices)')}
+      ${kpiTile('Kosten / Monat', fmtUsd(n(mo.cost_month_usd)), `KI + ${fmtNum(n(mo.pictograms_month))} Piktogramme`, 'kpi-accent')}
+      ${kpiTile('Kosten pro aktivem Nutzer', fmtUsd(n(mo.cost_per_mau_usd), 3), 'diesen Monat, bezogen auf 30-Tage-Aktive')}
+    </div>
+    <div class="card">
+      <h2>KI-Kosten nach Funktion (dieser Monat)</h2>
+      ${table(mo.cost_by_feature_month ?? [], [
+        { label: 'Funktion', render: (r) => escapeHtml(FEATURE_LABELS[r.feature] ?? r.feature) },
+        { key: 'requests', label: 'Anfragen', num: true },
+        { label: 'Kosten', num: true, render: (r) => fmtUsd(r.cost_usd, 4) },
+      ])}
+      <p class="muted">Piktogramme laufen nicht über das KI-Protokoll und sind oben in „Kosten / Monat“ enthalten (ca. $0,039 pro Bild).</p>
+    </div>
+
+    <h3 class="section-title">Qualität &amp; Betrieb</h3>
+    <div class="grid kpi-grid">
+      ${kpiTile('KI-Fehlerquote (7 Tage)', pct(q.ai_errors_7d, aiTotal), `${fmtNum(n(q.ai_errors_7d))} Fehler bei ${fmtNum(aiTotal)} Anfragen`,
+        n(q.ai_errors_7d) > 0 ? 'kpi-warn' : '')}
+      ${kpiTile('Nährwerte aus Datenbank', pct(q.lookup_usda_30d, lookupTotal),
+        `USDA ${fmtNum(n(q.lookup_usda_30d))} · KI-Schätzung ${fmtNum(n(q.lookup_llm_30d))} · Cache ${fmtNum(n(q.lookup_cache_30d))} (30 Tage)`)}
+      ${kpiTile('Feedback', `${fmtNum(n(q.feedback_open))} offen`,
+        `${fmtNum(n(q.feedback_done))} erledigt · ${fmtNum(n(q.feedback_30d))} in 30 Tagen`, n(q.feedback_open) > 0 ? 'kpi-warn' : '')}
+    </div>
+
+    <h3 class="section-title">Details</h3>
+  `;
+}
+
 async function loadDashboard() {
   const el = $('dashboard-content');
   el.innerHTML = 'Lade…';
@@ -772,6 +857,8 @@ async function loadDashboard() {
           <h2>Offenes Feedback</h2><p class="big">${fmtNum(n(k.feedback_open))}</p>
           <p class="muted">Klicken zum Öffnen</p></div>
       </div>
+
+      ${renderKpiGroups(m.kpi_groups)}
 
       <div class="card">
         <h2>Aktive User pro Tag (30 Tage)</h2>

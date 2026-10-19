@@ -20,4 +20,9 @@ window.ADMIN_CONFIG = {
   adminApiUrl: 'https://assmvtdzjegddyqqaacx.supabase.co/functions/v1/admin-api',
   /** Automatisch abmelden nach so vielen Minuten ohne Aktivität. */
   idleLogoutMinutes: 30,
+  /**
+   * Abo-Preise (Brutto, €) für den geschätzten Monatsumsatz (MRR) im Dashboard.
+   * null = noch nicht festgelegt → die Kachel zeigt einen Hinweis.
+   */
+  prices: { monthlyEur: null, yearlyEur: null },
 };

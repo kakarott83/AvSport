@@ -108,6 +108,8 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; }
 .kpi-warn { border-color: var(--warn); }
 .kpi.clickable { cursor: pointer; }
 .kpi.clickable:hover { border-color: var(--accent); }
+.section-title { font-size: 15px; font-weight: 800; margin: 26px 0 12px; color: var(--text); }
+.section-title .muted { font-weight: 400; }
 
 /* ── Toolbar ── */
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 10px; }

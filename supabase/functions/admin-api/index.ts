@@ -118,8 +118,10 @@ Deno.serve(async (req) => {
       return json({ ok: true, data: { email: user.email, mfaRequired: REQUIRE_MFA } });
 
     case 'metrics': {
-      const r = await rpc('admin_get_dashboard');
-      return r.response ?? json({ ok: true, data: r.data });
+      const [r, groups] = await Promise.all([rpc('admin_get_dashboard'), rpc('admin_get_kpi_groups')]);
+      if (r.response) return r.response;
+      // KPI-Bereiche (Wachstum, Funktionen, Kosten, Qualität) — fehlen sie, bleibt das Dashboard nutzbar
+      return json({ ok: true, data: { ...(r.data as Record<string, unknown>), kpi_groups: groups.response ? null : groups.data } });
     }
 
     case 'list_feedback': {
