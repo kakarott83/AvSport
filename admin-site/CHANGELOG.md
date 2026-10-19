@@ -5,9 +5,12 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
-## 1.5.2 – 2026-10-19
+## 1.5.3 – 2026-10-19
 - `style.css` wird nicht mehr im Browser zwischengespeichert (Design-Änderungen
   kamen sonst erst verspätet an).
+
+## 1.5.2 – 2026-10-19
+- Versehentlich ohne Änderung ausgeliefert (siehe 1.5.3).
 
 ## 1.5.1 – 2026-10-19
 - Versionsanzeige als farbiges Abzeichen (Cyan; lokale dev-Fassung orange).

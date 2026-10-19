@@ -13,7 +13,7 @@
   Header always set Strict-Transport-Security "max-age=31536000"
   Header always set X-Robots-Tag "noindex, nofollow"
   # Admin-Daten nie zwischenspeichern.
-  <FilesMatch "\.(html|js)$">
+  <FilesMatch "\.(html|js|css)$">
     Header set Cache-Control "no-store"
   </FilesMatch>
 </IfModule>
