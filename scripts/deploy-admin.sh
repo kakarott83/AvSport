@@ -15,12 +15,14 @@
 #   5. Git-Tag admin-v<Version> setzen (lokal; Push mit --push-tag).
 #
 # Zugangsdaten: netrc-Datei (Default ~/.avora-sftp.netrc, überschreibbar mit
-# ADMIN_SFTP_NETRC) im Format "machine <host> login <user> password <pw>".
+# ADMIN_SFTP_NETRC) mit "login <user> password <pw>"; Host: SFTP_HOST unten
+# (überschreibbar mit ADMIN_SFTP_HOST).
 # Das Passwort wird nur per SSH_ASKPASS an sftp gereicht, nie ausgegeben.
 # Host-Schlüssel von Strato: scripts/admin-deploy.known_hosts.
 
 set -euo pipefail
 
+SFTP_HOST="${ADMIN_SFTP_HOST:-5019726313.ssh.w2.strato.hosting}"
 REMOTE_DIR="htdocs/avadmin"
 LIVE_URL="https://milan-muc.de/avadmin"
 EXCLUDE_RE='^(README\.md|CHANGELOG\.md|VERSION)$'
@@ -104,9 +106,8 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 [ -f "$NETRC" ] || die "Zugangsdaten fehlen: $NETRC"
-HOST="$(awk '{for(i=1;i<NF;i++) if($i=="machine") {print $(i+1); exit}}' "$NETRC")"
 USER_NAME="$(awk '{for(i=1;i<NF;i++) if($i=="login") {print $(i+1); exit}}' "$NETRC")"
-[ -n "$HOST" ] && [ -n "$USER_NAME" ] || die "machine/login fehlen in $NETRC"
+[ -n "$USER_NAME" ] || die "login fehlt in $NETRC"
 
 ASKPASS="$WORK/askpass.sh"
 cat > "$ASKPASS" <<EOF
@@ -118,7 +119,7 @@ chmod 700 "$ASKPASS"
 SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 sftp \
   -o BatchMode=no -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
   -o UserKnownHostsFile="$KNOWN_HOSTS" -o StrictHostKeyChecking=yes \
-  -b "$BATCH" "$USER_NAME@$HOST" < /dev/null > "$WORK/sftp.log" 2>&1 \
+  -b "$BATCH" "$USER_NAME@$SFTP_HOST" < /dev/null > "$WORK/sftp.log" 2>&1 \
   || { cat "$WORK/sftp.log" >&2; die "SFTP-Upload fehlgeschlagen."; }
 echo "Hochgeladen: $(grep -c '^sftp> put' "$WORK/sftp.log") Dateien."
 
