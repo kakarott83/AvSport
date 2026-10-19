@@ -15,6 +15,7 @@ import home from './home';
 import legal from './legal';
 import nav from './nav';
 import nutrition from './nutrition';
+import nutritionStats from './nutritionStats';
 import onboarding from './onboarding';
 import paywall from './paywall';
 import planEditor from './planEditor';
@@ -42,6 +43,7 @@ const namespaces = {
   legal,
   nav,
   nutrition,
+  nutritionStats,
   onboarding,
   paywall,
   planEditor,

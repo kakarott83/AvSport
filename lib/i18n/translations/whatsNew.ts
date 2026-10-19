@@ -10,6 +10,16 @@ export default defineMessages(
     subtitle: 'Das hat sich mit diesem Update geändert:',
     button: "Los geht's",
     releases: {
+      r2026_10_19: {
+        nutritionStats: {
+          title: 'Ernährungs-Auswertung',
+          text: 'Im Ernährungs-Tab unter „Auswertung“: Kalorien und Makros für 7, 30, 90 Tage, Monat, Jahr oder einen eigenen Zeitraum – mit Ø pro Tag, Verlauf und Top-Gerichten.',
+        },
+        pictogramsOnly: {
+          title: 'Übungsdetails aufgeräumt',
+          text: 'Die Übungsdetails zeigen jetzt nur noch das Piktogramm – übersichtlicher und schneller geladen.',
+        },
+      },
       r2026_10_18: {
         pictograms: {
           title: 'Übungen als Piktogramm',
@@ -39,6 +49,16 @@ export default defineMessages(
     subtitle: 'This update brings:',
     button: "Let's go",
     releases: {
+      r2026_10_19: {
+        nutritionStats: {
+          title: 'Nutrition insights',
+          text: 'In the Nutrition tab under “Insights”: calories and macros for 7, 30, 90 days, this month, this year or a custom range – with daily averages, trend and top dishes.',
+        },
+        pictogramsOnly: {
+          title: 'Cleaner exercise details',
+          text: 'Exercise details now show just the pictogram – clearer and faster to load.',
+        },
+      },
       r2026_10_18: {
         pictograms: {
           title: 'Exercise pictograms',

@@ -23,6 +23,14 @@ export interface WhatsNewRelease {
 /** Neueste zuerst. */
 export const RELEASES: WhatsNewRelease[] = [
   {
+    id: '2026-10-19',
+    releasedAt: '2026-10-19T19:25:52Z',
+    items: [
+      { key: 'nutritionStats', icon: 'insights' },
+      { key: 'pictogramsOnly', icon: 'directions-run' },
+    ],
+  },
+  {
     id: '2026-10-18',
     releasedAt: '2026-10-18T22:00:00Z',
     items: [

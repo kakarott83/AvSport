@@ -123,6 +123,15 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="nutrition-stats"
+        options={{
+          title: t('nutritionStats.title'),
+          headerStyle: { backgroundColor: '#121212' },
+          headerTintColor: '#fff',
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
         name="feedback"
         options={{
           title: t('nav.screens.feedback'),

@@ -1,7 +1,7 @@
 // TODO: Kamera-Workflow: 1. expo-camera öffnen 2. Foto aufnehmen 3. Base64 an analyzeFoodImage() senden 4. Ergebnis-Modal mit Makros (JSON) anzeigen & Speichern-Option bieten.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -375,6 +375,7 @@ export default function NutritionScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [dayLogOpen, setDayLogOpen] = useState(false);
+  const router = useRouter();
   // Aus der Mahlzeiten-Erinnerung geöffnet (?dayLog=<zeitstempel>) → direkt "Tag erfassen"
   const { dayLog } = useLocalSearchParams<{ dayLog?: string }>();
   useEffect(() => { if (dayLog) setDayLogOpen(true); }, [dayLog]);
@@ -563,7 +564,19 @@ export default function NutritionScreen() {
         {/* ══ WOCHEN-VERLAUF ══ */}
         {weekData.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitlePlain}>{t('nutrition.history')}</Text>
+            <View style={styles.historyHeader}>
+              <Text style={[styles.cardTitlePlain, { marginBottom: 0 }]}>{t('nutrition.history')}</Text>
+              {/* Auswertung über frei wählbaren Zeitraum */}
+              <TouchableOpacity
+                style={styles.statsLink}
+                onPress={() => router.push('/nutrition-stats')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialIcons name="insights" size={15} color="#0a7ea4" />
+                <Text style={styles.statsLinkText}>{t('nutritionStats.open')}</Text>
+                <MaterialIcons name="chevron-right" size={16} color="#0a7ea4" />
+              </TouchableOpacity>
+            </View>
             <WeeklyChart weekData={weekData} tdee={effectiveTdee} />
           </View>
         )}
@@ -681,6 +694,9 @@ const styles = StyleSheet.create({
     color: '#999', fontSize: 11, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 20,
   },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  statsLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statsLinkText: { color: '#0a7ea4', fontSize: 12, fontWeight: '700' },
   cardTitlePlain: {
     color: '#999', fontSize: 11, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 16,
