@@ -1004,6 +1004,7 @@ function renderVersion() {
   document.querySelectorAll('.app-version').forEach((el) => {
     el.textContent = text;
     el.title = title;
+    el.classList.toggle('dev', v.version === 'dev');
   });
 }
 

@@ -5,6 +5,9 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
+## 1.5.1 – 2026-10-19
+- Versionsanzeige als farbiges Abzeichen (Cyan; lokale dev-Fassung orange).
+
 ## 1.5.0 – 2026-10-19
 - Versionierung: Version, Commit und Auslieferungsdatum im Kopf des Panels und
   auf der Login-Seite; Deploy-Skript mit Live-Prüfung und Git-Tag; Rückrollen
