@@ -84,6 +84,23 @@ Anfragen/Tag, Premium 10 $/Monat Kostenlimit, `av@test.de` unbegrenzt.
    weiterhin Anfragen an den Limits vorbei. Alte App-Versionen verlieren damit
    die KI-Funktionen.
 
+## Versionen & Ausliefern
+
+Die Version steht in `VERSION` (`MAJOR.MINOR.PATCH`), die Änderungen in
+`CHANGELOG.md`. Für eine neue Version: `VERSION` erhöhen, CHANGELOG ergänzen,
+committen, dann
+
+```sh
+scripts/deploy-admin.sh              # HEAD ausliefern, prüfen, Tag admin-vX.Y.Z setzen
+scripts/deploy-admin.sh --dry-run    # nur anzeigen
+scripts/deploy-admin.sh --ref admin-v1.5.0   # auf eine frühere Version zurückrollen
+```
+
+Das Skript lädt per SFTP nach `htdocs/avadmin` (Zugangsdaten aus
+`~/.avora-sftp.netrc`), prüft die Live-Dateien per SHA-256 und erzeugt
+`version.js` — Version, Commit und Datum stehen dann im Kopf des Panels und auf
+der Login-Seite. Die eingecheckte `version.js` ist nur die lokale „dev“-Fassung.
+
 ## Neuen Admin hinzufügen
 
 ```sql

@@ -993,7 +993,22 @@ $('feedback-filter').addEventListener('change', loadFeedback);
 
 // ── Beim Laden: bestehende Session prüfen ────────────────────────────────────
 
+/** Version aus version.js (von scripts/deploy-admin.sh erzeugt) in Kopf und Login anzeigen. */
+function renderVersion() {
+  const v = window.ADMIN_VERSION;
+  if (!v) return;
+  const parts = [v.version === 'dev' ? 'dev' : 'v' + v.version, v.commit];
+  if (v.deployedAt) parts.push(new Date(v.deployedAt).toLocaleDateString('de-DE'));
+  const text = parts.filter(Boolean).join(' · ');
+  const title = v.deployedAt ? 'Ausgeliefert am ' + new Date(v.deployedAt).toLocaleString('de-DE') : 'Lokale Fassung';
+  document.querySelectorAll('.app-version').forEach((el) => {
+    el.textContent = text;
+    el.title = title;
+  });
+}
+
 (async function init() {
+  renderVersion();
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     showScreen('login');
