@@ -102,6 +102,12 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; }
 .grid > .card { margin-bottom: 0; }
 .card .big { font-size: 28px; font-weight: 800; margin: 4px 0; font-variant-numeric: tabular-nums; }
 .kpi p { margin: 4px 0 0; }
+.kpi-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.kpi-accent { border-color: var(--accent); }
+.kpi-accent .big { color: var(--accent); }
+.kpi-warn { border-color: var(--warn); }
+.kpi.clickable { cursor: pointer; }
+.kpi.clickable:hover { border-color: var(--accent); }
 
 /* ── Toolbar ── */
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 10px; }

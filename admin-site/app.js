@@ -319,7 +319,7 @@ function enterApp(email) {
   $('user-email').textContent = email ?? '';
   showScreen('app');
   resetIdle();
-  activateTab('usage');
+  activateTab('dashboard');
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -740,18 +740,37 @@ async function loadDashboard() {
     const m = await callAdminApi('metrics');
     const dau = [...m.daily_active_users].reverse();
     const maxDau = Math.max(1, ...dau.map((d) => Number(d.active_users)));
+    const k = m.kpis ?? {};
+    const n = (v) => Number(v ?? 0);
+    const pictoCostMonth = n(k.pictograms_month) * n(k.pictogram_cost_per_image_usd);
+    const pictoCostTotal = n(k.pictograms_total) * n(k.pictogram_cost_per_image_usd);
+    const costMonth = n(k.ai_cost_month_usd) + pictoCostMonth;
+    const conversion = n(k.users_total) > 0 ? Math.round((n(k.premium_users) / n(k.users_total)) * 1000) / 10 : 0;
+    $('dashboard-updated').textContent = 'Stand: ' + fmtDateTime(new Date().toISOString());
 
     el.innerHTML = `
-      <div class="grid">
-        <div class="card">
-          <h2>Premium</h2>
-          <p class="big">${m.premium_overview.premium_users} / ${m.premium_overview.total_users}</p>
-          <p class="muted">${m.premium_overview.premium_conversion_pct}% Conversion</p>
-        </div>
-        <div class="card">
-          <h2>Aktive User heute</h2>
-          <p class="big">${dau[dau.length - 1]?.active_users ?? 0}</p>
-        </div>
+      <div class="grid kpi-grid">
+        <div class="card kpi"><h2>Nutzer</h2><p class="big">${fmtNum(n(k.users_total))}</p>
+          <p class="muted">+${fmtNum(n(k.users_new_7d))} in 7 Tagen · +${fmtNum(n(k.users_new_30d))} in 30 Tagen</p></div>
+        <div class="card kpi"><h2>Aktive Nutzer</h2><p class="big">${fmtNum(n(k.active_7d))}</p>
+          <p class="muted">in 7 Tagen · heute ${fmtNum(n(k.active_today))}</p></div>
+        <div class="card kpi"><h2>Premium</h2><p class="big">${fmtNum(n(k.premium_users))}</p>
+          <p class="muted">${String(conversion).replace('.', ',')} % Conversion</p></div>
+        <div class="card kpi kpi-accent"><h2>Kosten diesen Monat</h2><p class="big">${fmtUsd(costMonth)}</p>
+          <p class="muted">KI ${fmtUsd(n(k.ai_cost_month_usd))} · Piktogramme ${fmtUsd(pictoCostMonth)}</p></div>
+        <div class="card kpi"><h2>Kosten heute / gesamt</h2><p class="big">${fmtUsd(n(k.ai_cost_today_usd))}</p>
+          <p class="muted">gesamt ${fmtUsd(n(k.ai_cost_total_usd) + pictoCostTotal)}</p></div>
+        <div class="card kpi"><h2>KI-Anfragen</h2><p class="big">${fmtNum(n(k.ai_requests_month))}</p>
+          <p class="muted">diesen Monat · heute ${fmtNum(n(k.ai_requests_today))}</p></div>
+        <div class="card kpi ${n(k.ai_errors_7d) > 0 ? 'kpi-warn' : ''}"><h2>KI-Fehler (7 Tage)</h2><p class="big">${fmtNum(n(k.ai_errors_7d))}</p>
+          <p class="muted">Details unten</p></div>
+        <div class="card kpi"><h2>Aktivität (7 Tage)</h2><p class="big">${fmtNum(n(k.meals_logged_7d))}</p>
+          <p class="muted">Mahlzeiten · ${fmtNum(n(k.workouts_logged_7d))} Trainings</p></div>
+        <div class="card kpi"><h2>Piktogramme</h2><p class="big">${fmtNum(n(k.pictograms_total))}</p>
+          <p class="muted">erzeugt · ${fmtNum(n(k.pictograms_month))} diesen Monat</p></div>
+        <div class="card kpi clickable ${n(k.feedback_open) > 0 ? 'kpi-warn' : ''}" id="kpi-feedback" tabindex="0">
+          <h2>Offenes Feedback</h2><p class="big">${fmtNum(n(k.feedback_open))}</p>
+          <p class="muted">Klicken zum Öffnen</p></div>
       </div>
 
       <div class="card">
@@ -825,10 +844,13 @@ async function loadDashboard() {
         ])}
       </div>
     `;
+    $('kpi-feedback')?.addEventListener('click', () => activateTab('feedback'));
   } catch (err) {
     el.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
   }
 }
+
+$('dashboard-refresh').addEventListener('click', loadDashboard);
 
 // ── Feedback ──────────────────────────────────────────────────────────────
 
