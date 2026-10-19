@@ -5,6 +5,12 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
+## 1.6.0 – 2026-10-19
+- Dashboard farbig: jeder KPI-Bereich mit eigener Akzentfarbe (Übersicht cyan,
+  Wachstum grün, Funktionen blau, Kosten gold, Qualität violett).
+- Werte farbig eingestuft: gut grün, Achtung orange, kritisch rot
+  (Onboarding, Stickiness, Retention, KI-Fehlerquote, Nährwert-Datenbank, Feedback).
+
 ## 1.5.4 – 2026-10-19
 - Cache-Busting: `index.html` bindet CSS/JS mit `?v=<commit>` ein, damit
   Browser nach jeder Auslieferung die neuen Dateien laden.

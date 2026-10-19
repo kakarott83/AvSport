@@ -739,6 +739,26 @@ function pct(part, whole) {
   return p.toLocaleString('de-DE') + ' %';
 }
 
+/**
+ * Farbliche Einstufung eines Werts: 'kpi-good' (grün), 'kpi-warn' (orange),
+ * 'kpi-bad' (rot) oder '' (neutral). higher=false: kleinere Werte sind besser.
+ */
+function rate(value, good, warn, { higher = true, bad = null } = {}) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return '';
+  if (higher) {
+    if (bad != null && v <= bad) return 'kpi-bad';
+    return v >= good ? 'kpi-good' : v < warn ? 'kpi-warn' : '';
+  }
+  if (bad != null && v >= bad) return 'kpi-bad';
+  return v <= good ? 'kpi-good' : v > warn ? 'kpi-warn' : '';
+}
+
+/** Prozentwert als Zahl (für rate()). */
+function pctNum(part, whole) {
+  return Number(whole) > 0 ? (Number(part) / Number(whole)) * 100 : NaN;
+}
+
 function kpiTile(title, big, sub, extraClass = '') {
   return `<div class="card kpi ${extraClass}"><h2>${title}</h2><p class="big">${big}</p><p class="muted">${sub}</p></div>`;
 }
@@ -762,17 +782,24 @@ function renderKpiGroups(g) {
   const aiTotal = n(q.ai_success_7d) + n(q.ai_errors_7d);
 
   return `
+    <section class="kpi-section tone-growth">
     <h3 class="section-title">Wachstum &amp; Bindung</h3>
     <div class="grid kpi-grid">
-      ${kpiTile('Onboarding abgeschlossen', pct(gr.onboarded, gr.users_total), `${fmtNum(n(gr.onboarded))} von ${fmtNum(n(gr.users_total))} Nutzern`)}
+      ${kpiTile('Onboarding abgeschlossen', pct(gr.onboarded, gr.users_total), `${fmtNum(n(gr.onboarded))} von ${fmtNum(n(gr.users_total))} Nutzern`,
+        rate(pctNum(gr.onboarded, gr.users_total), 80, 50))}
       ${kpiTile('Aktiv (30 Tage)', fmtNum(n(gr.mau)), `Ø ${n(gr.avg_dau_30d).toLocaleString('de-DE')} pro Tag`)}
-      ${kpiTile('Stickiness', `${n(gr.stickiness_pct).toLocaleString('de-DE')} %`, 'Ø tägliche ÷ monatlich aktive Nutzer')}
+      ${kpiTile('Stickiness', `${n(gr.stickiness_pct).toLocaleString('de-DE')} %`, 'Ø tägliche ÷ monatlich aktive Nutzer',
+        rate(gr.stickiness_pct, 20, 10))}
       ${kpiTile('7-Tage-Retention', pct(gr.retention_active, gr.retention_cohort),
-        `${fmtNum(n(gr.retention_active))} von ${fmtNum(n(gr.retention_cohort))} Nutzern (8–60 Tage dabei) in den letzten 7 Tagen aktiv`)}
+        `${fmtNum(n(gr.retention_active))} von ${fmtNum(n(gr.retention_cohort))} Nutzern (8–60 Tage dabei) in den letzten 7 Tagen aktiv`,
+        rate(pctNum(gr.retention_active, gr.retention_cohort), 40, 20))}
       ${kpiTile('Inaktiv > 30 Tage', fmtNum(n(gr.inactive_30d)), `${pct(gr.inactive_30d, gr.users_total)} aller Nutzer`,
         n(gr.inactive_30d) > n(gr.users_total) / 2 ? 'kpi-warn' : '')}
     </div>
 
+    </section>
+
+    <section class="kpi-section tone-features">
     <h3 class="section-title">Nutzung der Funktionen <span class="muted">(letzte 30 Tage)</span></h3>
     <div class="grid kpi-grid">
       ${kpiTile('Ernährung', pct(f.nutrition_30d, users), usersOf(f.nutrition_30d))}
@@ -786,6 +813,9 @@ function renderKpiGroups(g) {
         `eingeschaltet: Zyklus ${fmtNum(n(f.cycle_tracking_on))} · Mahlzeit-Erinnerung ${fmtNum(n(f.meal_reminder_on))} · Trink-Erinnerung ${fmtNum(n(f.water_reminder_on))}`)}
     </div>
 
+    </section>
+
+    <section class="kpi-section tone-money">
     <h3 class="section-title">Monetarisierung &amp; Kosten</h3>
     <div class="grid kpi-grid">
       ${kpiTile('Premium-Abos', fmtNum(n(mo.premium_total)), `${fmtNum(n(mo.premium_monthly))} monatlich · ${fmtNum(n(mo.premium_yearly))} jährlich`)}
@@ -804,15 +834,21 @@ function renderKpiGroups(g) {
       <p class="muted">Piktogramme laufen nicht über das KI-Protokoll und sind oben in „Kosten / Monat“ enthalten (ca. $0,039 pro Bild).</p>
     </div>
 
+    </section>
+
+    <section class="kpi-section tone-quality">
     <h3 class="section-title">Qualität &amp; Betrieb</h3>
     <div class="grid kpi-grid">
       ${kpiTile('KI-Fehlerquote (7 Tage)', pct(q.ai_errors_7d, aiTotal), `${fmtNum(n(q.ai_errors_7d))} Fehler bei ${fmtNum(aiTotal)} Anfragen`,
-        n(q.ai_errors_7d) > 0 ? 'kpi-warn' : '')}
+        rate(aiTotal > 0 ? pctNum(q.ai_errors_7d, aiTotal) : 0, 0, 0, { higher: false, bad: 5 }))}
       ${kpiTile('Nährwerte aus Datenbank', pct(q.lookup_usda_30d, lookupTotal),
-        `USDA ${fmtNum(n(q.lookup_usda_30d))} · KI-Schätzung ${fmtNum(n(q.lookup_llm_30d))} · Cache ${fmtNum(n(q.lookup_cache_30d))} (30 Tage)`)}
+        `USDA ${fmtNum(n(q.lookup_usda_30d))} · KI-Schätzung ${fmtNum(n(q.lookup_llm_30d))} · Cache ${fmtNum(n(q.lookup_cache_30d))} (30 Tage)`,
+        rate(pctNum(q.lookup_usda_30d, lookupTotal), 60, 30))}
       ${kpiTile('Feedback', `${fmtNum(n(q.feedback_open))} offen`,
-        `${fmtNum(n(q.feedback_done))} erledigt · ${fmtNum(n(q.feedback_30d))} in 30 Tagen`, n(q.feedback_open) > 0 ? 'kpi-warn' : '')}
+        `${fmtNum(n(q.feedback_done))} erledigt · ${fmtNum(n(q.feedback_30d))} in 30 Tagen`, n(q.feedback_open) > 0 ? 'kpi-warn' : 'kpi-good')}
     </div>
+
+    </section>
 
     <h3 class="section-title">Details</h3>
   `;
@@ -834,6 +870,7 @@ async function loadDashboard() {
     $('dashboard-updated').textContent = 'Stand: ' + fmtDateTime(new Date().toISOString());
 
     el.innerHTML = `
+      <section class="kpi-section tone-overview">
       <div class="grid kpi-grid">
         <div class="card kpi"><h2>Nutzer</h2><p class="big">${fmtNum(n(k.users_total))}</p>
           <p class="muted">+${fmtNum(n(k.users_new_7d))} in 7 Tagen · +${fmtNum(n(k.users_new_30d))} in 30 Tagen</p></div>
@@ -847,7 +884,7 @@ async function loadDashboard() {
           <p class="muted">gesamt ${fmtUsd(n(k.ai_cost_total_usd) + pictoCostTotal)}</p></div>
         <div class="card kpi"><h2>KI-Anfragen</h2><p class="big">${fmtNum(n(k.ai_requests_month))}</p>
           <p class="muted">diesen Monat · heute ${fmtNum(n(k.ai_requests_today))}</p></div>
-        <div class="card kpi ${n(k.ai_errors_7d) > 0 ? 'kpi-warn' : ''}"><h2>KI-Fehler (7 Tage)</h2><p class="big">${fmtNum(n(k.ai_errors_7d))}</p>
+        <div class="card kpi ${n(k.ai_errors_7d) > 0 ? 'kpi-warn' : 'kpi-good'}"><h2>KI-Fehler (7 Tage)</h2><p class="big">${fmtNum(n(k.ai_errors_7d))}</p>
           <p class="muted">Details unten</p></div>
         <div class="card kpi"><h2>Aktivität (7 Tage)</h2><p class="big">${fmtNum(n(k.meals_logged_7d))}</p>
           <p class="muted">Mahlzeiten · ${fmtNum(n(k.workouts_logged_7d))} Trainings</p></div>
@@ -857,6 +894,7 @@ async function loadDashboard() {
           <h2>Offenes Feedback</h2><p class="big">${fmtNum(n(k.feedback_open))}</p>
           <p class="muted">Klicken zum Öffnen</p></div>
       </div>
+      </section>
 
       ${renderKpiGroups(m.kpi_groups)}
 

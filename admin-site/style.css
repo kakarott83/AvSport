@@ -112,11 +112,34 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; }
 .card .big { font-size: 28px; font-weight: 800; margin: 4px 0; font-variant-numeric: tabular-nums; }
 .kpi p { margin: 4px 0 0; }
 .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+/* Bereichsfarben: jede KPI-Gruppe hat einen eigenen Ton (--tone) für
+   Überschrift, Kachel-Streifen, Kachel-Titel und leichten Farbverlauf. */
+.kpi-section { --tone: var(--accent); }
+.tone-overview { --tone: var(--accent); }
+.tone-growth   { --tone: #34d399; }
+.tone-features { --tone: #60a5fa; }
+.tone-money    { --tone: #fbbf24; }
+.tone-quality  { --tone: #c084fc; }
+.kpi-section .kpi {
+  border-top: 3px solid var(--tone);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 10%, var(--card)) 0%, var(--card) 70%);
+}
+.kpi-section .kpi h2 { color: color-mix(in srgb, var(--tone) 75%, var(--text)); }
+.kpi-section .section-title { border-left: 4px solid var(--tone); padding-left: 10px; }
+
+/* Einstufung der Werte */
+.kpi-good .big { color: var(--green); }
 .kpi-accent { border-color: var(--accent); }
 .kpi-accent .big { color: var(--accent); }
 .kpi-warn { border-color: var(--warn); }
+.kpi-warn .big { color: var(--warn); }
+.kpi-bad { border-color: var(--danger); }
+.kpi-bad .big { color: var(--danger); }
+.kpi-section .kpi-accent { border-top-color: var(--accent); }
+.kpi-section .kpi-warn { border-top-color: var(--warn); }
+.kpi-section .kpi-bad { border-top-color: var(--danger); }
 .kpi.clickable { cursor: pointer; }
-.kpi.clickable:hover { border-color: var(--accent); }
+.kpi.clickable:hover { border-color: var(--tone, var(--accent)); }
 .section-title { font-size: 15px; font-weight: 800; margin: 26px 0 12px; color: var(--text); }
 .section-title .muted { font-weight: 400; }
 
