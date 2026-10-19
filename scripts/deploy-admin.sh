@@ -82,6 +82,11 @@ cat > "$SITE/version.js" <<EOF
 window.ADMIN_VERSION = { version: '${VERSION:-$COMMIT}', commit: '$COMMIT', deployedAt: '$DEPLOYED_AT' };
 EOF
 
+# Cache-Busting: eigene CSS/JS mit ?v=<commit> einbinden, damit Browser nach
+# jeder Auslieferung garantiert die neuen Dateien laden.
+sed -i -E "s#(href|src)=\"(style\.css|config\.js|version\.js|app\.js)\"#\1=\"\2?v=$COMMIT\"#g" "$SITE/index.html"
+grep -q "style.css?v=$COMMIT" "$SITE/index.html" || die "Cache-Busting in index.html fehlgeschlagen."
+
 # ── 3. Hochladen ──────────────────────────────────────────────────────────────
 FILES="$(cd "$SITE" && find . -type f | sed 's|^\./||' | grep -Ev "$EXCLUDE_RE" | sort)"
 DIRS="$(printf '%s\n' "$FILES" | grep / | sed 's|/[^/]*$||' | sort -u || true)"

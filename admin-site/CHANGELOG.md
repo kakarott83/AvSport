@@ -5,6 +5,10 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
+## 1.5.4 – 2026-10-19
+- Cache-Busting: `index.html` bindet CSS/JS mit `?v=<commit>` ein, damit
+  Browser nach jeder Auslieferung die neuen Dateien laden.
+
 ## 1.5.3 – 2026-10-19
 - `style.css` wird nicht mehr im Browser zwischengespeichert (Design-Änderungen
   kamen sonst erst verspätet an).
