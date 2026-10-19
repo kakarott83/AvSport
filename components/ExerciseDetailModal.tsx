@@ -6,21 +6,16 @@
  * Wird sowohl im aktiven Training (active-workout.tsx) als auch im
  * Plan-Editor (create-plan.tsx) verwendet.
  *
- * Ergänzend wird beim Öffnen die Bewegung als kleine Animation gezeigt: die
- * zwei Positions-Frames aus der offenen free-exercise-db
- * (services/exerciseDb/exerciseImage.ts, gematcht über den englischen Namen),
- * durchgewechselt von <ExerciseAnimation>. Ohne Treffer bleibt der Bereich leer.
+ * Oben steht das KI-Piktogramm der Ausführung (<ExercisePictogram>,
+ * Start → Endposition).
  */
 
-import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 
-import { ExerciseAnimation } from '@/components/ExerciseAnimation';
 import { ExercisePictogram } from '@/components/ExercisePictogram';
 import { useTranslation } from '@/lib/i18n';
-import { fetchExerciseFrames } from '@/services/exerciseDb/exerciseImage';
 
 export type ExerciseDetailData = {
   exercise_name: string;
@@ -47,26 +42,6 @@ export function ExerciseDetailModal({
   const exerciseName = exercise?.exercise_name ?? null;
   const exerciseNameEn = exercise?.name_en ?? null;
   const { t } = useTranslation();
-  const [frames, setFrames] = useState<string[]>([]);
-  const [framesLoading, setFramesLoading] = useState(false);
-
-  useEffect(() => {
-    if (!visible || !exerciseName) {
-      setFrames([]);
-      setFramesLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setFrames([]);
-    setFramesLoading(true);
-
-    fetchExerciseFrames(exerciseNameEn, exerciseName)
-      .then((f) => { if (!cancelled) setFrames(f); })
-      .finally(() => { if (!cancelled) setFramesLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [visible, exerciseName, exerciseNameEn]);
 
   if (!exercise) return null;
 
@@ -94,12 +69,6 @@ export function ExerciseDetailModal({
               </View>
             )}
 
-            {framesLoading && (
-              <View style={styles.imageBox}>
-                <ActivityIndicator color="#0a7ea4" />
-              </View>
-            )}
-            {!framesLoading && frames.length > 0 && <ExerciseAnimation frames={frames} />}
 
             {!!exercise.short && <Text style={styles.short}>{exercise.short}</Text>}
 
@@ -175,10 +144,6 @@ const styles = StyleSheet.create({
   title:      { color: '#fff', fontSize: 17, fontWeight: '700', flex: 1, marginRight: 12 },
   closeText:  { color: '#888', fontSize: 18 },
   body:       { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
-  imageBox: {
-    width: '100%', height: 190, borderRadius: 12, backgroundColor: '#222',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-  },
   short:      { color: '#0a7ea4', fontSize: 14, fontWeight: '600', marginBottom: 14, lineHeight: 20 },
   paragraph:  { color: '#ccc', fontSize: 14, lineHeight: 21, marginBottom: 12 },
   bulletBlock: { marginBottom: 16, gap: 6 },
