@@ -125,6 +125,7 @@ const FEATURE_LABELS = {
   nutrition_fallback: 'Nährwert-Schätzung',
   training_plan: 'KI-Trainingsplan',
   exercise_detail: 'Übungs-Details',
+  meal_plan: 'KI-Speiseplan',
   unknown: 'Unbekannt',
   unbekannt: 'Vor Tracking (alt)',
 };

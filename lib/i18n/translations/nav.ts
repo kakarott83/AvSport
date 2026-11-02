@@ -8,6 +8,7 @@ export default defineMessages(
       plans: 'Pläne',
       calendar: 'Kalender',
       nutrition: 'Ernährung',
+      mealPlan: 'Speiseplan',
       profile: 'Profil',
     },
     screens: {
@@ -27,6 +28,7 @@ export default defineMessages(
       plans: 'Plans',
       calendar: 'Calendar',
       nutrition: 'Nutrition',
+      mealPlan: 'Meal plan',
       profile: 'Profile',
     },
     screens: {

@@ -15,6 +15,10 @@ export default defineMessages(
           title: 'Tipp des Tages',
           text: 'Auf der Startseite gibt es jetzt jeden Tag einen kurzen Fitness- oder Ernährungstipp, passend zu deinem Ziel. Ausschalten kannst du ihn im Profil.',
         },
+        mealPlan: {
+          title: 'Speiseplan',
+          text: 'Im neuen Tab „Speiseplan“ erstellt dir die KI Mahlzeiten für bis zu 7 Tage, passend zu deinem Kalorien- und Proteinziel, mit Einkaufsliste. Gerichte trägst du mit einem Tipp ins Tagebuch ein.',
+        },
       },
       r2026_10_19: {
         nutritionStats: {
@@ -59,6 +63,10 @@ export default defineMessages(
         tipOfTheDay: {
           title: 'Tip of the day',
           text: 'The home screen now shows a short fitness or nutrition tip every day, matched to your goal. You can turn it off in your profile.',
+        },
+        mealPlan: {
+          title: 'Meal plan',
+          text: 'In the new “Meal plan” tab, the AI creates meals for up to 7 days that match your calorie and protein goals, with a shopping list. Log a dish to your journal with one tap.',
         },
       },
       r2026_10_19: {

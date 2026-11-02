@@ -113,6 +113,7 @@ export type AiFeature =
   | "nutrition_fallback"
   | "training_plan"
   | "exercise_detail"
+  | "meal_plan"
   | "unknown";
 
 interface ProxyErrorBody {

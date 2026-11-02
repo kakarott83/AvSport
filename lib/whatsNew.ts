@@ -27,6 +27,7 @@ export const RELEASES: WhatsNewRelease[] = [
     releasedAt: '2026-11-02T21:00:00Z',
     items: [
       { key: 'tipOfTheDay', icon: 'lightbulb' },
+      { key: 'mealPlan', icon: 'restaurant' },
     ],
   },
   {

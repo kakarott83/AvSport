@@ -36,6 +36,16 @@ export default defineMessages(
         'Tippe auf „Ziel kcal“ (oder auf dem Home-Screen auf „von … kcal“), um Schritt für Schritt zu sehen, wie dein Kalorienziel berechnet wird.',
       ],
     },
+    mealPlan: {
+      title: 'Speiseplan',
+      where: 'Tab „Speiseplan“',
+      points: [
+        'Die KI erstellt Mahlzeiten für 1 bis 7 Tage, passend zu deinem Kalorien- und Proteinziel.',
+        'Vorgaben: Ernährungsform (z. B. vegetarisch, vegan), Mahlzeiten pro Tag, Unverträglichkeiten und Kochaufwand.',
+        'Gefällt dir ein Gericht nicht, tippe auf „Neu generieren“. Mit „Als gegessen eintragen“ landet es im Ernährungstagebuch.',
+        'Die Einkaufsliste fasst die Zutaten aller Tage zusammen, zum Abhaken. Frühere Pläne findest du unter „Gespeichert“.',
+      ],
+    },
     calendar: {
       title: 'Kalender',
       where: 'Tab „Kalender“',
@@ -105,6 +115,16 @@ export default defineMessages(
         'Insights (next to “History”): calories and macros for 7, 30, 90 days, this month, this year or a custom range – with daily averages, trend and top dishes.',
         'Daily meal reminder at a time of your choice: Profile → Meal reminder.',
         'Tap “Goal kcal” (or “of … kcal” on the Home screen) to see step by step how your calorie goal is calculated.',
+      ],
+    },
+    mealPlan: {
+      title: 'Meal plan',
+      where: '“Meal plan” tab',
+      points: [
+        'The AI creates meals for 1 to 7 days that match your calorie and protein goals.',
+        'Preferences: diet (e.g. vegetarian, vegan), meals per day, intolerances and cooking effort.',
+        'Don’t like a dish? Tap “Regenerate”. “Log as eaten” adds it to your food journal.',
+        'The shopping list combines the ingredients of all days, ready to tick off. Earlier plans are under “Saved”.',
       ],
     },
     calendar: {

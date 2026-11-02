@@ -13,6 +13,7 @@ import features from './features';
 import feedback from './feedback';
 import home from './home';
 import legal from './legal';
+import mealPlan from './mealPlan';
 import nav from './nav';
 import nutrition from './nutrition';
 import nutritionStats from './nutritionStats';
@@ -42,6 +43,7 @@ const namespaces = {
   feedback,
   home,
   legal,
+  mealPlan,
   nav,
   nutrition,
   nutritionStats,

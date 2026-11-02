@@ -14,7 +14,7 @@ import { useTranslation } from '@/lib/i18n';
 
 type IconName = ComponentProps<typeof MaterialIcons>['name'];
 
-type SectionKey = 'home' | 'training' | 'nutrition' | 'calendar' | 'cycle' | 'body' | 'profile';
+type SectionKey = 'home' | 'training' | 'nutrition' | 'mealPlan' | 'calendar' | 'cycle' | 'body' | 'profile';
 
 type Section = { key: SectionKey; icon: IconName; color: string };
 
@@ -22,6 +22,7 @@ const SECTIONS: Section[] = [
   { key: 'home', icon: 'home', color: '#00E5FF' },
   { key: 'training', icon: 'fitness-center', color: '#FF9100' },
   { key: 'nutrition', icon: 'restaurant', color: '#0a7ea4' },
+  { key: 'mealPlan', icon: 'menu-book', color: '#22C55E' },
   { key: 'calendar', icon: 'event-note', color: '#BB86FC' },
   { key: 'cycle', icon: 'water-drop', color: '#FF5252' },
   { key: 'body', icon: 'monitor-weight', color: '#2ecc71' },

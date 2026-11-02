@@ -5,6 +5,10 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
+## 1.7.1 – 2026-11-02
+- KI-Nutzung: neue Funktion „KI-Speiseplan“ (Tab „Speiseplan“ in der App)
+  wird mit Namen statt als Kürzel `meal_plan` angezeigt.
+
 ## 1.7.0 – 2026-11-02
 - Neuer Bereich „Tipps“: Tipps des Tages für die App anlegen, bearbeiten,
   aktivieren/deaktivieren und löschen; DE/EN, Zielgruppe (Ziel, Geschlecht),
