@@ -56,6 +56,7 @@
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="usage">Nutzer &amp; Limits</button>
       <button class="tab-btn" data-tab="defaults">Standard-Limits</button>
+      <button class="tab-btn" data-tab="tips">Tipps</button>
       <button class="tab-btn" data-tab="feedback">Feedback</button>
       <button class="tab-btn" data-tab="audit">Protokoll</button>
     </nav>
@@ -98,6 +99,29 @@
         <div id="defaults-content" class="loading">Lade…</div>
       </section>
 
+      <section id="tab-tips" class="tab-panel">
+        <p class="muted intro">Tipp des Tages in der App. Ausgewählt wird pro Nutzer nach Ziel und Geschlecht;
+          ein Tipp mit Datum erscheint genau an diesem Tag bei allen passenden Nutzern. Deaktivierte Tipps sieht niemand.</p>
+        <div class="toolbar">
+          <input type="search" id="tips-search" placeholder="Titel suchen…" />
+          <select id="tips-category" aria-label="Kategorie">
+            <option value="">Alle Kategorien</option>
+            <option value="nutrition">Ernährung</option>
+            <option value="training">Training</option>
+            <option value="recovery">Erholung</option>
+            <option value="mindset">Mindset</option>
+          </select>
+          <select id="tips-status" aria-label="Status">
+            <option value="">Aktiv und inaktiv</option>
+            <option value="active">Nur aktive</option>
+            <option value="inactive">Nur inaktive</option>
+          </select>
+          <button id="tips-refresh" class="btn-secondary">Aktualisieren</button>
+          <button id="tips-new" class="btn-primary">Neuer Tipp</button>
+        </div>
+        <div id="tips-content" class="loading">Lade…</div>
+      </section>
+
       <section id="tab-feedback" class="tab-panel">
         <label class="filter-row">
           <input type="checkbox" id="feedback-filter" /> Nur unbearbeitete anzeigen
@@ -121,6 +145,18 @@
       <button id="detail-close" class="btn-secondary" aria-label="Schließen">Schließen</button>
     </div>
     <div id="detail-content" class="loading">Lade…</div>
+  </dialog>
+
+  <!-- ── Tipp-Editor ───────────────────────────────────────────────────── -->
+  <dialog id="tip-dialog" class="drawer">
+    <div class="drawer-head">
+      <div>
+        <h2 id="tip-dialog-title" class="detail-title">Neuer Tipp</h2>
+        <p id="tip-dialog-sub" class="muted"></p>
+      </div>
+      <button id="tip-dialog-close" class="btn-secondary" aria-label="Schließen">Schließen</button>
+    </div>
+    <div id="tip-dialog-content"></div>
   </dialog>
 
   <div id="toast" class="toast" hidden></div>

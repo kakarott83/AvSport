@@ -20,6 +20,8 @@
  *      in public.admin_audit_log.
  *
  * Body: { action: string, ...params } — siehe switch unten.
+ * Tipp des Tages: list_tips, save_tip { tip }, set_tip_active { id, active },
+ * delete_tip { id } (Migration 20261102120000_daily_tips.sql).
  *
  * Secrets (optional):
  *   ADMIN_ALLOWED_ORIGINS – kommagetrennt, Default: https://milan-muc.de,
@@ -32,6 +34,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { isOriginAllowed, isUuid, parseAllowedOrigins, parseOptionalLimit, readAal } from './security.ts';
+import { sanitizeTipInput } from './tips.ts';
 
 const ALLOWED_ORIGINS = parseAllowedOrigins(Deno.env.get('ADMIN_ALLOWED_ORIGINS'));
 const REQUIRE_MFA = Deno.env.get('ADMIN_REQUIRE_MFA') !== 'false';
@@ -254,6 +257,42 @@ Deno.serve(async (req) => {
     case 'list_audit': {
       const r = await rpc('admin_list_audit', { p_limit: 300 });
       return r.response ?? json({ ok: true, data: r.data });
+    }
+
+    // ── Tipp des Tages ──────────────────────────────────────────────────────
+    case 'list_tips': {
+      const r = await rpc('admin_list_tips');
+      return r.response ?? json({ ok: true, data: r.data });
+    }
+
+    case 'save_tip': {
+      const parsed = sanitizeTipInput(body.tip);
+      if (!parsed.ok) return json({ error: parsed.error }, 400);
+      const r = await rpc('admin_upsert_tip', { p_tip: parsed.value });
+      if (r.response) return r.response;
+      await audit(parsed.value.id ? 'update_tip' : 'create_tip', null, {
+        id: r.data,
+        title_de: parsed.value.title_de,
+        active: parsed.value.active,
+      });
+      return json({ ok: true, data: { id: r.data } });
+    }
+
+    case 'set_tip_active': {
+      if (!isUuid(body.id)) return json({ error: 'id fehlt.' }, 400);
+      const active = body.active === true;
+      const r = await rpc('admin_set_tip_active', { p_tip_id: body.id, p_active: active });
+      if (r.response) return r.response;
+      await audit(active ? 'activate_tip' : 'deactivate_tip', null, { id: body.id });
+      return json({ ok: true });
+    }
+
+    case 'delete_tip': {
+      if (!isUuid(body.id)) return json({ error: 'id fehlt.' }, 400);
+      const r = await rpc('admin_delete_tip', { p_tip_id: body.id });
+      if (r.response) return r.response;
+      await audit('delete_tip', null, { id: body.id });
+      return json({ ok: true });
     }
 
     default:

@@ -23,6 +23,11 @@ denselben Ordner, braucht aber ein eigenes SSL-Zertifikat). SFTP-Host:
   - Premium manuell geben/entziehen
 - **Standard-Limits** für Free und Premium (gelten für alle ohne eigene Limits).
 - **Protokoll:** wer hat wann was bei wem geändert.
+- **Tipps:** Tipp des Tages für die App (DE/EN) anlegen, bearbeiten, aktivieren
+  bzw. deaktivieren und löschen, mit Zielgruppe (Ziel, Geschlecht), optionalem
+  Aktions-Button, festem Tag und Statistik (gezeigt, geöffnet, 👍, „Nicht
+  relevant“, gemerkt). Tabelle `public.tips`, Migration
+  `20261102120000_daily_tips.sql`.
 - **Dashboard** und **Feedback** wie bisher.
 
 ## Wie die Limits durchgesetzt werden

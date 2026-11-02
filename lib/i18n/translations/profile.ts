@@ -45,6 +45,11 @@ export default defineMessages(
       manualGoal: 'Manuelles Ziel (0 = automatisch)',
       manualGoalHint: 'Überschreibe die Berechnung mit einem festen Wert. 0 = Automatik bleibt aktiv. Mit Health-Synchronisation erhöhen nur Schritte über diesem Ziel dein Kalorienziel.',
     },
+    tips: {
+      title: 'Tipp des Tages',
+      hint: 'Zeigt dir auf der Startseite jeden Tag einen kurzen Fitness- oder Ernährungstipp, passend zu deinem Ziel.',
+      toggle: '💡 Tipp des Tages anzeigen',
+    },
     meal: {
       title: 'Mahlzeiten-Erinnerung',
       hint: 'Erinnert dich einmal täglich daran, deine Mahlzeiten des Tages zu erfassen. Ein Tippen auf die Mitteilung öffnet direkt „Tag erfassen“.',
@@ -186,6 +191,11 @@ export default defineMessages(
       activityLevel: 'Activity level',
       manualGoal: 'Manual goal (0 = automatic)',
       manualGoalHint: 'Override the calculation with a fixed value. 0 = automatic stays active. With health sync, only steps beyond this goal increase your calorie goal.',
+    },
+    tips: {
+      title: 'Tip of the day',
+      hint: 'Shows a short fitness or nutrition tip on the home screen every day, matched to your goal.',
+      toggle: '💡 Show tip of the day',
     },
     meal: {
       title: 'Meal reminder',

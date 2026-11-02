@@ -10,6 +10,12 @@ export default defineMessages(
     subtitle: 'Das hat sich mit diesem Update geändert:',
     button: "Los geht's",
     releases: {
+      r2026_11_02: {
+        tipOfTheDay: {
+          title: 'Tipp des Tages',
+          text: 'Auf der Startseite gibt es jetzt jeden Tag einen kurzen Fitness- oder Ernährungstipp, passend zu deinem Ziel. Ausschalten kannst du ihn im Profil.',
+        },
+      },
       r2026_10_19: {
         nutritionStats: {
           title: 'Ernährungs-Auswertung',
@@ -49,6 +55,12 @@ export default defineMessages(
     subtitle: 'This update brings:',
     button: "Let's go",
     releases: {
+      r2026_11_02: {
+        tipOfTheDay: {
+          title: 'Tip of the day',
+          text: 'The home screen now shows a short fitness or nutrition tip every day, matched to your goal. You can turn it off in your profile.',
+        },
+      },
       r2026_10_19: {
         nutritionStats: {
           title: 'Nutrition insights',

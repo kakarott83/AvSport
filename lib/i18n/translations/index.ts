@@ -22,6 +22,7 @@ import planEditor from './planEditor';
 import plans from './plans';
 import profile from './profile';
 import scanner from './scanner';
+import tips from './tips';
 import whatsNew from './whatsNew';
 import workout from './workout';
 
@@ -50,6 +51,7 @@ const namespaces = {
   plans,
   profile,
   scanner,
+  tips,
   whatsNew,
   workout,
 };

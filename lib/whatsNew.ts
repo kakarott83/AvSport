@@ -9,7 +9,7 @@
 
 export type WhatsNewIcon =
   | 'directions-run' | 'notifications-active' | 'auto-awesome' | 'insights' | 'visibility'
-  | 'restaurant' | 'event' | 'fitness-center' | 'star';
+  | 'restaurant' | 'event' | 'fitness-center' | 'star' | 'lightbulb';
 
 export interface WhatsNewRelease {
   /** Eindeutige ID, z. B. "2026-10-18". */
@@ -22,6 +22,13 @@ export interface WhatsNewRelease {
 
 /** Neueste zuerst. */
 export const RELEASES: WhatsNewRelease[] = [
+  {
+    id: '2026-11-02',
+    releasedAt: '2026-11-02T21:00:00Z',
+    items: [
+      { key: 'tipOfTheDay', icon: 'lightbulb' },
+    ],
+  },
   {
     id: '2026-10-19',
     releasedAt: '2026-10-19T19:25:52Z',

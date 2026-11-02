@@ -138,6 +138,11 @@ const AUDIT_LABELS = {
   unban_account: 'Account entsperrt',
   set_premium: 'Premium geändert',
   set_defaults: 'Standard-Limits geändert',
+  create_tip: 'Tipp angelegt',
+  update_tip: 'Tipp geändert',
+  activate_tip: 'Tipp aktiviert',
+  deactivate_tip: 'Tipp deaktiviert',
+  delete_tip: 'Tipp gelöscht',
 };
 
 function isBanned(u) {
@@ -330,6 +335,7 @@ const loaders = {
   defaults: loadDefaults,
   feedback: loadFeedback,
   audit: loadAudit,
+  tips: loadTips,
 };
 
 function activateTab(name) {
@@ -711,6 +717,7 @@ function auditDetails(r) {
   if (d.reason) parts.push(`Grund: ${d.reason}`);
   if ('isPremium' in d) parts.push(d.isPremium ? 'Premium an' : 'Premium aus');
   if (d.note) parts.push(`Notiz: ${d.note}`);
+  if (d.title_de) parts.push(`Tipp: ${d.title_de}`);
   return escapeHtml(parts.join(' · '));
 }
 
@@ -1028,6 +1035,233 @@ async function loadFeedback() {
 }
 
 $('feedback-filter').addEventListener('change', loadFeedback);
+
+// ── Tipps (Tipp des Tages) ──────────────────────────────────────────────────
+// Daten: public.tips über admin-api (list_tips, save_tip, set_tip_active,
+// delete_tip). Prüfung der Eingaben serverseitig in admin-api/tips.ts.
+
+const TIP_CATEGORY_LABELS = { nutrition: 'Ernährung', training: 'Training', recovery: 'Erholung', mindset: 'Mindset' };
+const TIP_CATEGORY_COLORS = { nutrition: '#22C55E', training: '#FF9100', recovery: '#7C8CFF', mindset: '#00E5FF' };
+const TIP_GOAL_LABELS = { lose: 'Abnehmen', maintain: 'Halten', gain: 'Aufbauen' };
+const TIP_GENDER_LABELS = { female: 'Frauen', male: 'Männer' };
+const TIP_CTA_LABELS = {
+  scan: 'Mahlzeit scannen',
+  day_log: 'Tag erfassen',
+  nutrition: 'Zur Ernährung',
+  water: 'Wasser eintragen',
+  plans: 'Zu meinen Plänen',
+  create_plan: 'Plan erstellen',
+  calendar: 'Zum Kalender',
+  body_stats: 'Körperwerte öffnen',
+};
+
+let tipRows = [];
+
+async function loadTips() {
+  const el = $('tips-content');
+  el.innerHTML = 'Lade…';
+  el.className = 'loading';
+  try {
+    tipRows = (await callAdminApi('list_tips')) ?? [];
+    el.className = '';
+    renderTips();
+  } catch (err) {
+    el.className = '';
+    el.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function tipAudience(t) {
+  const parts = [];
+  if (t.goals?.length) parts.push(t.goals.map((g) => TIP_GOAL_LABELS[g] ?? g).join(', '));
+  if (t.gender) parts.push(TIP_GENDER_LABELS[t.gender] ?? t.gender);
+  return parts.length ? parts.join(' · ') : 'Alle';
+}
+
+function renderTips() {
+  const el = $('tips-content');
+  const q = $('tips-search').value.trim().toLowerCase();
+  const cat = $('tips-category').value;
+  const status = $('tips-status').value;
+  const rows = tipRows.filter((t) =>
+    (!q || `${t.title_de} ${t.title_en}`.toLowerCase().includes(q)) &&
+    (!cat || t.category === cat) &&
+    (!status || (status === 'active') === !!t.active));
+
+  const activeCount = tipRows.filter((t) => t.active).length;
+  el.innerHTML =
+    `<p class="muted count">${rows.length} von ${tipRows.length} Tipps · ${activeCount} aktiv</p>` +
+    table(rows, [
+      { label: 'Aktiv', render: (t) => `<label class="switch" title="${t.active ? 'Deaktivieren' : 'Aktivieren'}">
+          <input type="checkbox" class="tip-active" data-id="${escapeHtml(t.id)}" ${t.active ? 'checked' : ''} />
+          <span></span></label>` },
+      { label: 'Kategorie', render: (t) => `<span class="tip-cat" style="--cat:${TIP_CATEGORY_COLORS[t.category] ?? '#888'}">${escapeHtml(TIP_CATEGORY_LABELS[t.category] ?? t.category)}</span>` },
+      { label: 'Titel', render: (t) => `<span class="clip">${escapeHtml(t.title_de)}</span>` },
+      { label: 'Zielgruppe', render: (t) => escapeHtml(tipAudience(t)) },
+      { label: 'Datum', render: (t) => (t.publish_on ? escapeHtml(fmtDate(t.publish_on)) : '<span class="muted">Rotation</span>') },
+      { label: 'Gezeigt', num: true, render: (t) => fmtNum(t.views) },
+      { label: 'Geöffnet', num: true, render: (t) => `${fmtNum(t.opens)} <span class="muted">${pct(t.opens, t.views)}</span>` },
+      { label: '👍', num: true, render: (t) => fmtNum(t.likes) },
+      { label: 'Nicht rel.', num: true, render: (t) => fmtNum(t.dismisses) },
+      { label: 'Gemerkt', num: true, render: (t) => fmtNum(t.saves) },
+    ], { rowAttr: (t) => `class="clickable${t.active ? '' : ' row-inactive'}" tabindex="0" data-id="${escapeHtml(t.id)}"` });
+
+  el.querySelectorAll('tr.clickable').forEach((tr) => {
+    const open = (e) => {
+      if (e.target.closest('.switch')) return;
+      openTipEditor(tipRows.find((t) => t.id === tr.dataset.id));
+    };
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
+  });
+
+  el.querySelectorAll('.tip-active').forEach((cb) => {
+    cb.addEventListener('change', async () => {
+      cb.disabled = true;
+      try {
+        await callAdminApi('set_tip_active', { id: cb.dataset.id, active: cb.checked });
+        const row = tipRows.find((t) => t.id === cb.dataset.id);
+        if (row) row.active = cb.checked;
+        toast(cb.checked ? 'Tipp aktiviert.' : 'Tipp deaktiviert.');
+        renderTips();
+      } catch (err) {
+        cb.checked = !cb.checked;
+        cb.disabled = false;
+        toast(err.message, true);
+      }
+    });
+  });
+}
+
+['tips-search', 'tips-category', 'tips-status'].forEach((id) => $(id).addEventListener('input', renderTips));
+$('tips-refresh').addEventListener('click', loadTips);
+$('tips-new').addEventListener('click', () => openTipEditor(null));
+
+const tipDialog = $('tip-dialog');
+$('tip-dialog-close').addEventListener('click', () => tipDialog.close());
+
+function tipPreviewHtml(title, body, category) {
+  const color = TIP_CATEGORY_COLORS[category] ?? '#888';
+  return `<div class="tip-preview" style="--cat:${color}">
+    <div class="tip-preview-icon"></div>
+    <div>
+      <div class="tip-preview-label">Tipp des Tages · <span>${escapeHtml(TIP_CATEGORY_LABELS[category] ?? '')}</span></div>
+      <div class="tip-preview-title">${escapeHtml(title || 'Titel')}</div>
+      <div class="tip-preview-body">${escapeHtml(body || 'Text')}</div>
+    </div>
+  </div>`;
+}
+
+function openTipEditor(tip) {
+  const t = tip ?? { category: 'nutrition', goals: [], gender: null, cta: null, publish_on: null, active: true };
+  $('tip-dialog-title').textContent = tip ? 'Tipp bearbeiten' : 'Neuer Tipp';
+  $('tip-dialog-sub').textContent = tip
+    ? `Gezeigt ${fmtNum(tip.views)} × · geöffnet ${fmtNum(tip.opens)} × · 👍 ${fmtNum(tip.likes)} · angelegt ${fmtDate(tip.created_at)}`
+    : 'Texte kurz halten: Titel bis ca. 60 Zeichen, Text 1–3 Sätze. Keine Heilversprechen.';
+
+  const opt = (labels, selected, emptyLabel) =>
+    (emptyLabel != null ? `<option value="">${escapeHtml(emptyLabel)}</option>` : '') +
+    Object.entries(labels)
+      .map(([v, l]) => `<option value="${v}" ${selected === v ? 'selected' : ''}>${escapeHtml(l)}</option>`)
+      .join('');
+
+  const content = $('tip-dialog-content');
+  content.innerHTML = `
+    <form id="tip-form" class="form-grid tip-form">
+      <label>Kategorie<select name="category">${opt(TIP_CATEGORY_LABELS, t.category)}</select></label>
+      <label>Aktions-Button<select name="cta">${opt(TIP_CTA_LABELS, t.cta, 'Kein Button')}</select></label>
+      <label>Nur für<select name="gender">${opt(TIP_GENDER_LABELS, t.gender, 'Alle')}</select></label>
+      <label>Fester Tag (optional)<input type="date" name="publish_on" value="${escapeHtml(t.publish_on ?? '')}" /></label>
+
+      <fieldset class="wide goal-set">
+        <legend>Ziele <span class="muted">(keins ausgewählt = für alle)</span></legend>
+        ${Object.entries(TIP_GOAL_LABELS).map(([v, l]) =>
+          `<label class="checkbox"><input type="checkbox" name="goals" value="${v}" ${t.goals?.includes(v) ? 'checked' : ''} /> ${escapeHtml(l)}</label>`).join('')}
+      </fieldset>
+
+      <div class="wide tip-langs">
+        <div class="tip-lang">
+          <label>Titel (DE)<input name="title_de" maxlength="80" required value="${escapeHtml(t.title_de ?? '')}" /><span class="muted char-count" data-for="title_de"></span></label>
+          <label>Text (DE)<textarea name="body_de" maxlength="600" rows="5" required>${escapeHtml(t.body_de ?? '')}</textarea><span class="muted char-count" data-for="body_de"></span></label>
+        </div>
+        <div class="tip-lang">
+          <label>Titel (EN)<input name="title_en" maxlength="80" required value="${escapeHtml(t.title_en ?? '')}" /><span class="muted char-count" data-for="title_en"></span></label>
+          <label>Text (EN)<textarea name="body_en" maxlength="600" rows="5" required>${escapeHtml(t.body_en ?? '')}</textarea><span class="muted char-count" data-for="body_en"></span></label>
+        </div>
+      </div>
+
+      <label class="checkbox wide"><input type="checkbox" name="active" ${t.active ? 'checked' : ''} /> Aktiv (in der App sichtbar)</label>
+
+      <div class="wide">
+        <h2>Vorschau in der App</h2>
+        <div id="tip-preview"></div>
+      </div>
+
+      <div class="form-actions wide">
+        <button type="submit" class="btn-primary">Speichern</button>
+        ${tip ? '<button type="button" id="tip-delete" class="btn-danger">Löschen</button>' : ''}
+        <span class="muted">Deaktivieren statt Löschen behält die Statistik.</span>
+      </div>
+    </form>`;
+
+  const form = $('tip-form');
+  const updatePreview = () => {
+    $('tip-preview').innerHTML = tipPreviewHtml(form.title_de.value, form.body_de.value, form.category.value);
+    form.querySelectorAll('.char-count').forEach((span) => {
+      const field = form[span.dataset.for];
+      span.textContent = `${field.value.trim().length} / ${field.maxLength}`;
+    });
+  };
+  form.addEventListener('input', updatePreview);
+  updatePreview();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    const f = new FormData(form);
+    btn.disabled = true;
+    try {
+      await callAdminApi('save_tip', {
+        tip: {
+          id: tip?.id ?? null,
+          slug: tip?.slug ?? null,
+          category: f.get('category'),
+          cta: f.get('cta') || null,
+          gender: f.get('gender') || null,
+          publish_on: f.get('publish_on') || null,
+          goals: f.getAll('goals'),
+          title_de: f.get('title_de'),
+          title_en: f.get('title_en'),
+          body_de: f.get('body_de'),
+          body_en: f.get('body_en'),
+          active: f.get('active') === 'on',
+        },
+      });
+      toast('Tipp gespeichert.');
+      tipDialog.close();
+      loadTips();
+    } catch (err) {
+      toast(err.message, true);
+      btn.disabled = false;
+    }
+  });
+
+  $('tip-delete')?.addEventListener('click', async (e) => {
+    if (!confirm('Tipp endgültig löschen? Die Statistik geht dabei verloren. Zum Ausblenden lieber deaktivieren.')) return;
+    e.currentTarget.disabled = true;
+    try {
+      await callAdminApi('delete_tip', { id: tip.id });
+      toast('Tipp gelöscht.');
+      tipDialog.close();
+      loadTips();
+    } catch (err) {
+      toast(err.message, true);
+      e.currentTarget.disabled = false;
+    }
+  });
+
+  if (!tipDialog.open) tipDialog.showModal();
+}
 
 // ── Beim Laden: bestehende Session prüfen ────────────────────────────────────
 

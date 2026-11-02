@@ -28,16 +28,20 @@ import Svg, { Circle } from "react-native-svg";
 
 import { CalorieBreakdownModal } from "@/components/CalorieBreakdownModal";
 import { FoodScanner } from "@/components/FoodScanner";
+import { TipDetailModal } from "@/components/TipDetailModal";
+import { TipOfTheDayCard } from "@/components/TipOfTheDayCard";
 import { Toast } from "@/components/Toast";
 import { useCalorieGoal } from "@/hooks/useCalorieGoal";
 import { useHealthData } from "@/hooks/useHealthData";
 import { useStepGoal } from "@/hooks/useStepGoal";
+import { useTipOfTheDay } from "@/hooks/useTipOfTheDay";
 import { useWaterIntake } from "@/hooks/useWaterIntake";
 import { isStale, loadCache, saveCache } from "@/lib/dashboardCache";
 import { clearCredentials } from "@/lib/credentialStore";
 import { HealthManager } from "@/lib/healthManager";
 import { formatNumber, getLanguage, getLocale, t, tList, useTranslation } from "@/lib/i18n";
 import { syncHealthToSupabase } from "@/lib/healthSync";
+import { CTA_ROUTES, type TipCta } from "@/lib/tips";
 import { resolveDayIndexForDate } from "@/services/gemini/trainingProvider";
 import { supabase } from "@/services/supabaseClient";
 import type { FoodAnalysis } from "@/types/vision";
@@ -436,6 +440,30 @@ export default function HomeScreen() {
   // Food scanner
   const [scannerOpen, setScannerOpen] = useState(false);
 
+  // Tipp des Tages (lib/tips.ts)
+  const tipOfDay = useTipOfTheDay();
+  const [tipOpen, setTipOpen] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const waterSectionY = useRef(0);
+
+  function openTip() {
+    setTipOpen(true);
+    tipOfDay.markOpened();
+  }
+
+  function handleTipCta(cta: TipCta) {
+    setTipOpen(false);
+    if (cta === "scan") {
+      setScannerOpen(true);
+    } else if (cta === "water") {
+      scrollRef.current?.scrollTo({ y: Math.max(0, waterSectionY.current - 16), animated: true });
+    } else if (cta === "day_log") {
+      router.push({ pathname: CTA_ROUTES.day_log.pathname as never, params: { dayLog: String(Date.now()) } });
+    } else {
+      router.push(CTA_ROUTES[cta].pathname as never);
+    }
+  }
+
   // Wasser: frei eingegebene Menge
   const [customWaterMl, setCustomWaterMl] = useState("");
   const [waterToast, setWaterToast] = useState<string | null>(null);
@@ -661,6 +689,14 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // Tipp des Tages bei jedem Fokus neu bestimmen (neuer Tag, Profil-Schalter)
+  const reloadTip = tipOfDay.reload;
+  useFocusEffect(
+    useCallback(() => {
+      void reloadTip();
+    }, [reloadTip]),
+  );
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -819,6 +855,7 @@ export default function HomeScreen() {
         proteinGoal={proteinGoal > 0 ? proteinGoal : undefined}
       />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -883,6 +920,13 @@ export default function HomeScreen() {
 
         {!loading && (
           <>
+            {/* ── Tipp des Tages ── */}
+            {tipOfDay.tip && (
+              <Animated.View entering={FadeInDown.delay(0).duration(600).springify()}>
+                <TipOfTheDayCard tip={tipOfDay.tip} onPress={openTip} />
+              </Animated.View>
+            )}
+
             {/* ── Ernährungs-Widget ── */}
             {currentGoal > 0 && (
               <Animated.View
@@ -1331,6 +1375,7 @@ export default function HomeScreen() {
             {/* ── Wasser ── */}
             <Animated.View
               entering={FadeInDown.delay(280).duration(600).springify()}
+              onLayout={(e) => { waterSectionY.current = e.nativeEvent.layout.y; }}
             >
               <Text style={styles.sectionTitle}>{t("home.water")}</Text>
 
@@ -1400,6 +1445,16 @@ export default function HomeScreen() {
       >
         <MaterialIcons name="camera-alt" size={24} color="#121212" />
       </TouchableOpacity>
+
+      <TipDetailModal
+        visible={tipOpen}
+        tip={tipOfDay.currentTip}
+        state={tipOfDay.state}
+        onClose={() => setTipOpen(false)}
+        onReact={tipOfDay.react}
+        onToggleSaved={tipOfDay.toggleSaved}
+        onCta={handleTipCta}
+      />
 
       <CalorieBreakdownModal
         visible={breakdownOpen}

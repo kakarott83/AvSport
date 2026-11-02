@@ -5,6 +5,13 @@ PATCH, grundlegender Umbau → MAJOR. Die aktuelle Version steht in `VERSION`.
 Ausgeliefert wird mit `scripts/deploy-admin.sh` (setzt den Git-Tag
 `admin-v<Version>` und blendet Version + Commit im Panel ein).
 
+## 1.7.0 – 2026-11-02
+- Neuer Bereich „Tipps“: Tipps des Tages für die App anlegen, bearbeiten,
+  aktivieren/deaktivieren und löschen; DE/EN, Zielgruppe (Ziel, Geschlecht),
+  Aktions-Button, fester Tag und Live-Vorschau im App-Stil.
+- Statistik je Tipp: gezeigt, geöffnet, 👍, „Nicht relevant“, gemerkt.
+- Tipp-Änderungen erscheinen im Protokoll.
+
 ## 1.6.0 – 2026-10-19
 - Dashboard farbig: jeder KPI-Bereich mit eigener Akzentfarbe (Übersicht cyan,
   Wachstum grün, Funktionen blau, Kosten gold, Qualität violett).

@@ -80,6 +80,7 @@ type ProfileForm = {
   meal_reminder_enabled: boolean;
   meal_reminder_hour: number;
   meal_reminder_minute: number;
+  tips_enabled: boolean;
 };
 
 const EMPTY: ProfileForm = {
@@ -109,6 +110,7 @@ const EMPTY: ProfileForm = {
   meal_reminder_enabled: false,
   meal_reminder_hour: 20,
   meal_reminder_minute: 0,
+  tips_enabled: true,
 };
 
 // ─────────────────────────────────────────
@@ -151,7 +153,8 @@ export default function ProfileScreen() {
                  activity_level, manual_step_goal, sync_health,
                  water_goal_ml, water_reminder_enabled, water_reminder_start_hour,
                  water_reminder_end_hour, water_reminder_interval_hours,
-                 meal_reminder_enabled, meal_reminder_hour, meal_reminder_minute`)
+                 meal_reminder_enabled, meal_reminder_hour, meal_reminder_minute,
+                 tips_enabled`)
         .eq('id', user.id)
         .single();
 
@@ -183,6 +186,7 @@ export default function ProfileScreen() {
           meal_reminder_enabled:         data.meal_reminder_enabled ?? false,
           meal_reminder_hour:            data.meal_reminder_hour ?? 20,
           meal_reminder_minute:          data.meal_reminder_minute ?? 0,
+          tips_enabled:                  data.tips_enabled ?? true,
         });
       }
       setLoading(false);
@@ -363,6 +367,11 @@ export default function ProfileScreen() {
     resyncMealReminder(updated);
   }
 
+  function onTipsToggle(enabled: boolean) {
+    setForm((prev) => ({ ...prev, tips_enabled: enabled }));
+    syncCycleField({ tips_enabled: enabled });
+  }
+
   function onWaterReminderToggle(enabled: boolean) {
     const updated = { ...form, water_reminder_enabled: enabled };
     setForm(updated);
@@ -440,6 +449,7 @@ export default function ProfileScreen() {
         meal_reminder_enabled:         form.meal_reminder_enabled,
         meal_reminder_hour:            form.meal_reminder_hour,
         meal_reminder_minute:          form.meal_reminder_minute,
+        tips_enabled:                  form.tips_enabled,
       },
       { onConflict: 'id' }
     );
@@ -685,6 +695,27 @@ export default function ProfileScreen() {
             onIncrement={() => stepperChange('manual_step_goal', +STEPPER_BOUNDS.manual_step_goal.step, STEPPER_BOUNDS.manual_step_goal.min, STEPPER_BOUNDS.manual_step_goal.max)}
             accentColor="#FF9100"
           />
+        </View>
+
+        {/* ── Tipp des Tages ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('profile.tips.title')}</Text>
+          <Text style={styles.hint}>{t('profile.tips.hint')}</Text>
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.toggleLabel}>{t('profile.tips.toggle')}</Text>
+              <Text style={styles.toggleSub}>
+                {form.tips_enabled ? t('common.active') : t('common.inactive')}
+              </Text>
+            </View>
+            <Switch
+              value={form.tips_enabled}
+              onValueChange={onTipsToggle}
+              trackColor={{ false: '#2a2a2a', true: '#0a2a30' }}
+              thumbColor={form.tips_enabled ? '#00E5FF' : '#555'}
+            />
+          </View>
         </View>
 
         {/* ── Mahlzeiten-Erinnerung ── */}
