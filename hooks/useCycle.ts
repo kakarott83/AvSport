@@ -12,7 +12,11 @@
  * in `daily_logs` (Kalender-Statistik, Altbestand).
  *
  * Ist Apple Health / Health Connect verknüpft, werden vor dem Laden die
- * Periodendaten von dort übernommen (services/cycleHealthSync.ts).
+ * Periodendaten und Ovulationstests von dort übernommen
+ * (services/cycleHealthSync.ts).
+ *
+ * Ovulationstests (`cycle_ovulation_tests`) verschieben den Eisprung eines
+ * Zyklus auf den Tag nach dem ersten positiven LH-Test (lib/cycle.ts).
  */
 
 import { useFocusEffect } from 'expo-router';
@@ -25,9 +29,16 @@ import {
   type CycleOverview,
   type CycleProfile,
   type DayPhase,
+  type OvulationTest,
+  type OvulationTestResult,
 } from '@/lib/cycle';
 import { sanitizeCycleReminderSettings } from '@/lib/cycleReminders';
-import { isCycleHealthLinked, linkCycleHealth, syncCycleFromHealth } from '@/services/cycleHealthSync';
+import {
+  isCycleHealthLinked,
+  isOvulationHealthRequested,
+  linkCycleHealth,
+  syncCycleFromHealth,
+} from '@/services/cycleHealthSync';
 import { syncCycleReminders } from '@/services/notifications/cycleReminderService';
 import { supabase } from '@/services/supabaseClient';
 
@@ -65,6 +76,12 @@ export interface CycleResult {
   healthDates: Set<string>;
   /** Whether Apple Health / Health Connect is linked for cycle data. */
   healthLinked: boolean;
+  /** Linked before ovulation tests existed → offer to request that permission once. */
+  ovulationHealthPending: boolean;
+  /** Ovulation test result keyed by ISO date. */
+  testByDate: Map<string, OvulationTest>;
+  logOvulationTest: (date: string, result: OvulationTestResult) => Promise<void>;
+  removeOvulationTest: (date: string) => Promise<void>;
   /** Ask for read access and import right away. Returns false if denied/unavailable. */
   linkHealth: () => Promise<boolean>;
   /** Phases for an arbitrary visible range, keyed by ISO date. Pure + cheap. */
@@ -81,6 +98,8 @@ export interface CycleResult {
 /** `enabled = false` → lädt nichts (z. B. Zyklus-Tracking im Profil aus). */
 export function useCycle(enabled = true): CycleResult {
   const [events, setEvents] = useState<CycleEvent[]>([]);
+  const [tests, setTests] = useState<OvulationTest[]>([]);
+  const [ovulationHealthPending, setOvulationHealthPending] = useState(false);
   const [profile, setProfile] = useState<CycleProfileRow>(EMPTY_PROFILE);
   const [loading, setLoading] = useState(true);
   const [healthLinked, setHealthLinked] = useState(false);
@@ -95,16 +114,22 @@ export function useCycle(enabled = true): CycleResult {
       const linked = await isCycleHealthLinked();
       if (signal?.cancelled) return;
       setHealthLinked(linked);
+      setOvulationHealthPending(linked && !(await isOvulationHealthRequested()));
       if (linked) await syncCycleFromHealth();
       if (signal?.cancelled) return;
 
-      const [eventsRes, profileRes] = await Promise.all([
+      const [eventsRes, profileRes, testsRes] = await Promise.all([
         supabase
           .from('cycle_events')
           .select('date, flow, source')
           .eq('user_id', user.id)
           .order('date', { ascending: true }),
         supabase.from('profiles').select(CYCLE_PROFILE_COLUMNS).eq('id', user.id).maybeSingle(),
+        supabase
+          .from('cycle_ovulation_tests')
+          .select('date, result, source')
+          .eq('user_id', user.id)
+          .order('date', { ascending: true }),
       ]);
 
       if (signal?.cancelled) return;
@@ -112,10 +137,14 @@ export function useCycle(enabled = true): CycleResult {
       const rows = (eventsRes.data ?? []) as CycleEvent[];
       const profileRow = { ...EMPTY_PROFILE, ...(profileRes.data as CycleProfileRow | null) };
 
+      // Tabelle fehlt (Migration noch nicht eingespielt) → ohne Tests weiter
+      const testRows = testsRes.error ? [] : ((testsRes.data ?? []) as OvulationTest[]);
+
       setEvents(rows);
       setProfile(profileRow);
+      setTests(testRows);
 
-      const overview = getCycleOverview(rows, profileRow, todayISO());
+      const overview = getCycleOverview(rows, profileRow, todayISO(), testRows);
       void syncCycleReminders({
         settings: sanitizeCycleReminderSettings({
           periodEnabled: profileRow.cycle_period_reminder ?? false,
@@ -178,6 +207,35 @@ export function useCycle(enabled = true): CycleResult {
     void refresh();
   }, [refresh]);
 
+  const logOvulationTest = useCallback(async (date: string, result: OvulationTestResult) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from('cycle_ovulation_tests')
+      .upsert({ user_id: user.id, date, result, source: 'manual' }, { onConflict: 'user_id,date' });
+    if (error) { console.warn('[useCycle] logOvulationTest failed:', error.message); return; }
+    setTests((prev) =>
+      [...prev.filter((t) => t.date !== date), { date, result, source: 'manual' as const }]
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    void refresh();
+  }, [refresh]);
+
+  const removeOvulationTest = useCallback(async (date: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from('cycle_ovulation_tests')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('date', date);
+    if (error) { console.warn('[useCycle] removeOvulationTest failed:', error.message); return; }
+    setTests((prev) => prev.filter((t) => t.date !== date));
+    void refresh();
+  }, [refresh]);
+
+  const testByDate = useMemo(() => new Map(tests.map((t) => [t.date, t])), [tests]);
+
   const flowByDate = useMemo(
     () => new Map(events.map((e) => [e.date, e.flow])),
     [events],
@@ -192,22 +250,23 @@ export function useCycle(enabled = true): CycleResult {
     const ok = await linkCycleHealth();
     if (ok) {
       setHealthLinked(true);
+      setOvulationHealthPending(false);
       await fetchData();
     }
     return ok;
   }, [fetchData]);
 
   const overview = useMemo(
-    () => getCycleOverview(events, profile, todayISO()),
-    [events, profile],
+    () => getCycleOverview(events, profile, todayISO(), tests),
+    [events, profile, tests],
   );
 
   const phasesForRange = useCallback(
     (rangeStart: string, rangeEnd: string) =>
       new Map(
-        buildPhaseCalendar(events, profile, rangeStart, rangeEnd, todayISO()).map((p) => [p.date, p]),
+        buildPhaseCalendar(events, profile, rangeStart, rangeEnd, todayISO(), tests).map((p) => [p.date, p]),
       ),
-    [events, profile],
+    [events, profile, tests],
   );
 
   const applyAverages = useCallback(async () => {
@@ -233,6 +292,10 @@ export function useCycle(enabled = true): CycleResult {
     flowByDate,
     healthDates,
     healthLinked,
+    ovulationHealthPending,
+    testByDate,
+    logOvulationTest,
+    removeOvulationTest,
     linkHealth,
     phasesForRange,
     logFlow,

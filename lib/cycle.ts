@@ -9,7 +9,13 @@
  * Phase model (per the product spec — deliberately the simple, fixed rule):
  *
  *   ovulation date  = cycle start + OVULATION_OFFSET_DAYS  (14 days → cycle day 15)
- *   fertile window  = ovulation date ± FERTILE_WINDOW_RADIUS_DAYS  (cycle day 12–18)
+ *                     — or, when a positive LH ovulation test was logged in that
+ *                     cycle, the day after the first positive test
+ *                     ("confirmed" ovulation, see confirmedOvulationDate)
+ *   fertile window  = ovulation − 5 … ovulation + 3 (estimated, cycle day 10–18)
+ *                     ovulation − 5 … ovulation + 1 (confirmed by LH test)
+ *                     Sperm survive up to ~5 days, the egg ~1 day; the extra
+ *                     days after an estimated ovulation cover its uncertainty.
  *   menstruation    = cycle day 1 … period length (or any logged bleeding day)
  *   follicular      = after menstruation, before ovulation
  *   luteal          = after ovulation, until the next cycle starts
@@ -31,8 +37,14 @@ export const DEFAULT_PERIOD_LENGTH_DAYS = 5;
 /** Ovulation = cycle start + 14 days (strict, independent of cycle length). */
 export const OVULATION_OFFSET_DAYS = 14;
 
-/** Fertile window spans the ovulation date ± this many days. */
-export const FERTILE_WINDOW_RADIUS_DAYS = 3;
+/** Fertile window opens this many days before the ovulation date (sperm survival). */
+export const FERTILE_DAYS_BEFORE = 5;
+/** …and closes this many days after an estimated (calendar) ovulation. */
+export const FERTILE_DAYS_AFTER_ESTIMATED = 3;
+/** …or this many days after an ovulation confirmed by a positive LH test. */
+export const FERTILE_DAYS_AFTER_CONFIRMED = 1;
+/** Ovulation follows the first positive LH test by about one day (24–36 h). */
+export const LH_TO_OVULATION_DAYS = 1;
 
 /** A logged bleeding day may be up to this many days after the previous one
  *  and still count as the same series (tolerates a missed log). */
@@ -63,11 +75,25 @@ export type PhaseKind = 'menstruation' | 'follicular' | 'ovulation' | 'luteal';
 export type Regularity = 'unknown' | 'low' | 'medium' | 'high';
 
 /**
- * Purely calendar-derived estimate of the pregnancy probability for a day.
- * This is the (unreliable) "Kalendermethode" — never a contraceptive method.
+ * Calendar-derived (optionally LH-test-refined) estimate of the pregnancy
+ * probability for a day. Never a contraceptive method: 'low' only means
+ * "outside the calculated fertile window" and is shown neutrally, never as safe.
  * See rechnerischeSicherheitHinweis() for the wording shown to the user.
  */
 export type ConceptionRisk = 'low' | 'elevated' | 'high';
+
+/**
+ * Ovulation test (LH) for one day. 'positive' = LH surge, 'estrogen' = rising
+ * estrogen (some digital tests, "high fertility"), 'indeterminate' = unclear.
+ */
+export type OvulationTestResult = 'positive' | 'negative' | 'indeterminate' | 'estrogen';
+
+export interface OvulationTest {
+  /** ISO date, YYYY-MM-DD. */
+  date: string;
+  result: OvulationTestResult;
+  source?: 'manual' | 'health' | null;
+}
 
 export interface CycleEvent {
   /** ISO date, YYYY-MM-DD. */
@@ -117,8 +143,10 @@ export interface DayPhase {
   cycleDay: number;
   /** Length of the cycle this day belongs to (real length or the average). */
   cycleLength: number;
-  /** True when this day falls in the fertile window (ovulation ± 3). */
+  /** True when this day falls in the fertile window (see FERTILE_DAYS_*). */
   fertileWindow: boolean;
+  /** True when this cycle's ovulation date comes from a positive LH test. */
+  ovulationConfirmed: boolean;
   /** True when this day is a (logged or expected) bleeding day. */
   bleeding: boolean;
   /** True when this day is a projection rather than confirmed data. */
@@ -138,6 +166,8 @@ export interface UpcomingEvent {
 
 export interface CycleOverview {
   stats: CycleStats;
+  /** True when `nextOvulation` comes from a positive LH test (not the calendar rule). */
+  nextOvulationConfirmed: boolean;
   /** Phase of `today`, or null when there is no history to anchor on. */
   today: DayPhase | null;
   nextPeriod: UpcomingEvent | null;
@@ -165,9 +195,10 @@ export const CONCEPTION_RISK_META: Record<
   ConceptionRisk,
   { label: string; color: string; hint: string }
 > = {
+  // Bewusst neutral (grau, nicht grün): außerhalb des Fensters ist kein „sicherer Tag“.
   low: {
     get label() { return t('cycle.risk.lowLabel'); },
-    color: '#4CAF50',
+    color: '#9E9E9E',
     get hint() { return t('cycle.risk.lowHint'); },
   },
   elevated: {
@@ -370,11 +401,29 @@ export function predictNextOvulation(stats: CycleStats, today: string): Upcoming
  * uncertainty. When the recorded history is too short or irregular to trust,
  * `capLow` forces the result up to 'elevated' — we never claim 'low'.
  */
-export function conceptionRiskFor(distToOvulation: number, capLow: boolean): ConceptionRisk {
+export function conceptionRiskFor(distToOvulation: number, capLow: boolean, confirmed = false): ConceptionRisk {
   const d = distToOvulation;
-  if (d >= -5 && d <= 3) return 'high';
-  if (d >= -8 && d <= 5) return 'elevated';
+  const after = confirmed ? FERTILE_DAYS_AFTER_CONFIRMED : FERTILE_DAYS_AFTER_ESTIMATED;
+  if (d >= -FERTILE_DAYS_BEFORE && d <= after) return 'high';
+  if (d >= -FERTILE_DAYS_BEFORE - 3 && d <= after + 2) return 'elevated';
   return capLow ? 'elevated' : 'low';
+}
+
+/**
+ * Ovulation date of one real cycle from logged ovulation tests: the day after
+ * the first positive LH test that falls after the cycle's bleeding series and
+ * before the next cycle starts. null = no usable test → calendar rule.
+ */
+export function confirmedOvulationDate(span: CycleSpan, tests: OvulationTest[]): string | null {
+  const bleedingEnd = span.seriesDates[span.seriesDates.length - 1] ?? span.start;
+  const positives = tests
+    .filter((t) => t.result === 'positive' && t.date > bleedingEnd && (span.end == null || t.date <= span.end))
+    .map((t) => t.date)
+    .sort();
+  if (positives.length === 0) return null;
+  const ovulation = addDays(positives[0], LH_TO_OVULATION_DAYS);
+  if (span.end != null && ovulation > span.end) return null;
+  return ovulation;
 }
 
 function classifyDay(
@@ -386,11 +435,15 @@ function classifyDay(
   isRealCycle: boolean,
   today: string,
   capLowRisk: boolean,
+  confirmedOvulation: string | null,
 ): DayPhase {
   const cycleDay = diffDays(cStart, date) + 1;
-  const ovulationDate = addDays(cStart, OVULATION_OFFSET_DAYS);
+  const ovulationConfirmed = confirmedOvulation != null;
+  const ovulationDate = confirmedOvulation ?? addDays(cStart, OVULATION_OFFSET_DAYS);
   const distToOvulation = diffDays(ovulationDate, date);
-  const fertileWindow = Math.abs(distToOvulation) <= FERTILE_WINDOW_RADIUS_DAYS;
+  const fertileWindow =
+    distToOvulation >= -FERTILE_DAYS_BEFORE &&
+    distToOvulation <= (ovulationConfirmed ? FERTILE_DAYS_AFTER_CONFIRMED : FERTILE_DAYS_AFTER_ESTIMATED);
   const isFuture = diffDays(today, date) > 0;
 
   // Confirmed bleeding for past days of a real cycle only comes from the log;
@@ -411,9 +464,10 @@ function classifyDay(
     cycleDay,
     cycleLength,
     fertileWindow,
+    ovulationConfirmed,
     bleeding,
     predicted: !isRealCycle || isFuture,
-    conceptionRisk: conceptionRiskFor(distToOvulation, capLowRisk),
+    conceptionRisk: conceptionRiskFor(distToOvulation, capLowRisk, ovulationConfirmed),
   };
 }
 
@@ -423,7 +477,8 @@ function classifyDay(
  * Real cycles (anchored on logged bleeding series) use their actual length;
  * once history runs out, cycles are projected forward with `avgCycleLength`
  * for up to `PREDICTION_CYCLES` beyond `rangeEnd`. Days before the first
- * logged cycle cannot be classified and are omitted.
+ * logged cycle cannot be classified and are omitted. A positive LH test in a
+ * real cycle moves that cycle's ovulation (see confirmedOvulationDate).
  */
 export function buildPhaseCalendar(
   events: CycleEvent[],
@@ -431,6 +486,7 @@ export function buildPhaseCalendar(
   rangeStart: string,
   rangeEnd: string,
   today: string,
+  tests: OvulationTest[] = [],
 ): DayPhase[] {
   const stats = computeCycleStats(events, profile);
   const spans = buildCycleSpans(events);
@@ -461,12 +517,13 @@ export function buildPhaseCalendar(
     const cycleLength = span?.length ?? diffDays(cStart, cEnd);
     const periodLen = span && span.periodDays > 0 ? span.periodDays : avgPeriodLength;
     const loggedSet = new Set(span?.seriesDates ?? []);
+    const confirmed = span && isRealCycle ? confirmedOvulationDate(span, tests) : null;
 
     const from = cStart > rangeStart ? cStart : rangeStart;
     const to = addDays(cEnd, -1) < rangeEnd ? addDays(cEnd, -1) : rangeEnd;
 
     for (let d = from; d <= to; d = addDays(d, 1)) {
-      out.push(classifyDay(d, cStart, cycleLength, periodLen, loggedSet, isRealCycle, today, capLowRisk));
+      out.push(classifyDay(d, cStart, cycleLength, periodLen, loggedSet, isRealCycle, today, capLowRisk, confirmed));
     }
   }
 
@@ -481,21 +538,57 @@ export function getCycleOverview(
   events: CycleEvent[],
   profile: CycleProfile,
   today: string,
+  tests: OvulationTest[] = [],
 ): CycleOverview {
   const stats = computeCycleStats(events, profile);
 
   let todayPhase: DayPhase | null = null;
   if (stats.lastStart) {
-    const phases = buildPhaseCalendar(events, profile, today, today, today);
+    const phases = buildPhaseCalendar(events, profile, today, today, today, tests);
     todayPhase = phases.find((p) => p.date === today) ?? null;
+  }
+
+  // A positive LH test in the current (open) cycle overrides the calendar rule
+  // for the upcoming ovulation as long as that ovulation is today or later.
+  let nextOvulation = predictNextOvulation(stats, today);
+  let nextOvulationConfirmed = false;
+  const spans = buildCycleSpans(events);
+  const current = spans[spans.length - 1];
+  if (current && current.end == null) {
+    const confirmed = confirmedOvulationDate(current, tests);
+    if (confirmed && diffDays(today, confirmed) >= 0) {
+      nextOvulation = { date: confirmed, inDays: diffDays(today, confirmed) };
+      nextOvulationConfirmed = true;
+    } else if (confirmed && nextOvulation && nextOvulation.date <= addDays(current.start, stats.avgCycleLength - 1)) {
+      // Ovulation of this cycle already happened (confirmed) → next one is in the following cycle.
+      const nextStart = addDays(current.start, stats.avgCycleLength);
+      const date = addDays(nextStart, OVULATION_OFFSET_DAYS);
+      nextOvulation = { date, inDays: diffDays(today, date) };
+    }
   }
 
   return {
     stats,
+    nextOvulationConfirmed,
     today: todayPhase,
     nextPeriod: predictNextPeriod(stats, today),
-    nextOvulation: predictNextOvulation(stats, today),
+    nextOvulation,
   };
+}
+
+/** Rank used when several tests exist for one day: positive wins. */
+const OVULATION_RESULT_RANK: Record<OvulationTestResult, number> = {
+  positive: 3, estrogen: 2, indeterminate: 1, negative: 0,
+};
+
+/** Merge tests to one result per day (the most significant one wins). */
+export function mergeOvulationTests<T extends OvulationTest>(tests: T[]): T[] {
+  const byDate = new Map<string, T>();
+  for (const t of tests) {
+    const cur = byDate.get(t.date);
+    if (!cur || OVULATION_RESULT_RANK[t.result] > OVULATION_RESULT_RANK[cur.result]) byDate.set(t.date, t);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

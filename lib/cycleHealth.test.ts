@@ -2,6 +2,9 @@ import {
   expandDays,
   mapHealthConnectFlow,
   mapHealthKitFlow,
+  mapHealthKitOvulation,
+  mapHealthConnectOvulation,
+  planOvulationSync,
   mergeHealthDays,
   planHealthSync,
   type StoredCycleEvent,
@@ -71,5 +74,41 @@ describe('planHealthSync', () => {
       ...W,
     );
     expect(plan).toEqual({ upserts: [], deletes: [] });
+  });
+});
+
+describe('Ovulationstests aus Health', () => {
+  it('mappt HealthKit-Werte', () => {
+    expect([1, 2, 3, 4, 9].map(mapHealthKitOvulation)).toEqual(['negative', 'positive', 'indeterminate', 'estrogen', null]);
+  });
+
+  it('mappt Health-Connect-Werte (High zählt nicht als positiv)', () => {
+    expect([0, 1, 2, 3, undefined].map(mapHealthConnectOvulation)).toEqual(
+      ['indeterminate', 'positive', 'estrogen', 'negative', 'indeterminate'],
+    );
+  });
+
+  it('übernimmt neue Tests, aktualisiert Health-Tests und lässt manuelle in Ruhe', () => {
+    const plan = planOvulationSync(
+      [
+        { date: '2026-03-10', result: 'negative', source: 'manual' },
+        { date: '2026-03-11', result: 'negative', source: 'health' },
+        { date: '2026-03-12', result: 'positive', source: 'health' },
+        { date: '2026-01-01', result: 'positive', source: 'health' }, // außerhalb des Fensters
+      ],
+      [
+        { date: '2026-03-10', result: 'positive' }, // manuell → bleibt
+        { date: '2026-03-11', result: 'positive' }, // geändert
+        { date: '2026-03-13', result: 'negative' }, // neu
+        { date: '2026-03-13', result: 'positive' }, // gleicher Tag → positiv gewinnt
+      ],
+      '2026-03-01',
+      '2026-03-31',
+    );
+    expect(plan.upserts).toEqual([
+      { date: '2026-03-11', result: 'positive' },
+      { date: '2026-03-13', result: 'positive' },
+    ]);
+    expect(plan.deletes).toEqual(['2026-03-12']);
   });
 });

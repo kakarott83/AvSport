@@ -5,10 +5,14 @@ import {
   expandDays,
   localISODate,
   mapHealthConnectFlow,
+  mapHealthConnectOvulation,
   mapHealthKitFlow,
+  mapHealthKitOvulation,
   mergeHealthDays,
   type HealthCycleDay,
+  type HealthOvulationTest,
 } from "@/lib/cycleHealth";
+import { mergeOvulationTests } from "@/lib/cycle";
 import { mockHealthService } from "@/services/mockHealthService";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,9 +59,13 @@ function hk<T>(call: (cb: (err: unknown, res: T) => void) => void): Promise<T> {
 }
 
 const HK_READ_PERMISSIONS = ["Steps", "ActiveEnergyBurned"];
-// "MenstrualFlow" needs patches/react-native-health+1.19.0.patch (permission + getMenstrualFlowSamples).
-const HK_CYCLE_PERMISSIONS = ["MenstrualFlow"];
-const HC_CYCLE_RECORDS = ["MenstruationFlow", "MenstruationPeriod"];
+// "MenstrualFlow" / "OvulationTestResult" need patches/react-native-health+1.19.0.patch
+// (permissions + getMenstrualFlowSamples / getOvulationTestSamples).
+const HK_CYCLE_PERMISSIONS = ["MenstrualFlow", "OvulationTestResult"];
+const HC_MENSTRUATION_RECORDS = ["MenstruationFlow", "MenstruationPeriod"];
+const HC_OVULATION_RECORDS = ["OvulationTest"];
+/** Requested together when the cycle calendar is linked (each may be granted separately). */
+const HC_CYCLE_RECORDS = [...HC_MENSTRUATION_RECORDS, ...HC_OVULATION_RECORDS];
 
 /** Sums Steps + ActiveEnergyBurned from HealthKit for the given range. */
 async function fetchHealthKit(range: DateRange): Promise<StepsAndCalories> {
@@ -552,13 +560,22 @@ export const HealthManager = {
    * (HealthKit hides read status) → null; callers track that themselves.
    */
   async hasMenstruationPermission(): Promise<boolean | null> {
+    return this._hasHcRead(HC_MENSTRUATION_RECORDS);
+  },
+
+  /** Android: whether ovulation-test read access is granted (iOS → null, see above). */
+  async hasOvulationTestPermission(): Promise<boolean | null> {
+    return this._hasHcRead(HC_OVULATION_RECORDS);
+  },
+
+  async _hasHcRead(records: string[]): Promise<boolean | null> {
     if (Platform.OS === "ios") return null;
     if (Platform.OS !== "android" || !Device.isDevice) return false;
     try {
       if (!(await this.init()) || !hc) return false;
       const granted = await hc.getGrantedPermissions();
       return (granted as any[]).some(
-        (p) => p.accessType === "read" && HC_CYCLE_RECORDS.includes(p.recordType),
+        (p) => p.accessType === "read" && records.includes(p.recordType),
       );
     } catch {
       return false;
@@ -620,6 +637,48 @@ export const HealthManager = {
       return mergeHealthDays(days);
     } catch (e) {
       console.warn("[HealthManager] fetchMenstruationDays() failed:", e);
+      return null;
+    }
+  },
+
+  /**
+   * Ovulation tests (local date + result) in the given range, one per day
+   * (positive wins). null = not readable (unavailable, no permission, error) —
+   * callers must then NOT treat it as "no tests".
+   */
+  async fetchOvulationTests(range: DateRange): Promise<HealthOvulationTest[] | null> {
+    if (USE_MOCK) return null;
+    if (Platform.OS === "android" && !Device.isDevice) return null;
+    try {
+      if (!(await this.init())) return null;
+
+      if (Platform.OS === "ios") {
+        if (!ahk || typeof (ahk as any).getOvulationTestSamples !== "function") return null;
+        const samples = await hk<{ startDate: string; value: number }[]>((cb) =>
+          (ahk as any).getOvulationTestSamples(
+            { startDate: range.startTime, endDate: range.endTime },
+            cb,
+          ),
+        );
+        const tests: HealthOvulationTest[] = [];
+        for (const s of samples ?? []) {
+          const result = mapHealthKitOvulation(Number(s.value));
+          if (result) tests.push({ date: localISODate(new Date(s.startDate)), result });
+        }
+        return mergeOvulationTests(tests);
+      }
+
+      if (!hc || !(await this.hasOvulationTestPermission())) return null;
+      const res = await hc.readRecords("OvulationTest", {
+        timeRangeFilter: { operator: "between", startTime: range.startTime, endTime: range.endTime },
+      });
+      const tests: HealthOvulationTest[] = ((res as any).records ?? []).map((r: any) => ({
+        date: localISODate(new Date(r.time)),
+        result: mapHealthConnectOvulation(r.result),
+      }));
+      return mergeOvulationTests(tests);
+    } catch (e) {
+      console.warn("[HealthManager] fetchOvulationTests() failed:", e);
       return null;
     }
   },

@@ -10,9 +10,11 @@
  *    oder automatisch gelöscht.
  *  - Ein früher importierter Health-Tag, der im abgeglichenen Zeitraum nicht
  *    mehr in Health vorhanden ist, wird entfernt.
+ *
+ * Dieselben Regeln gelten für Ovulationstests (cycle_ovulation_tests).
  */
 
-import { addDays } from '@/lib/cycle';
+import { addDays, mergeOvulationTests, type OvulationTestResult } from '@/lib/cycle';
 
 export type CycleEventSource = 'manual' | 'health';
 
@@ -103,6 +105,80 @@ export function planHealthSync(
       upserts.push(day);
     }
     // manuell erfasst → bleibt unverändert
+  }
+
+  const deletes = existing
+    .filter((e) => e.source === 'health' && inWindow(e.date) && !healthDates.has(e.date))
+    .map((e) => e.date);
+
+  return { upserts, deletes };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ovulationstests (LH) — gleiche Regeln wie bei den Blutungstagen
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface HealthOvulationTest {
+  date: string;
+  result: OvulationTestResult;
+}
+
+export interface StoredOvulationTest extends HealthOvulationTest {
+  source: CycleEventSource | null;
+}
+
+export interface OvulationSyncPlan {
+  upserts: HealthOvulationTest[];
+  deletes: string[];
+}
+
+/**
+ * HealthKit HKCategoryValueOvulationTestResult → App
+ * (1 negative, 2 luteinizingHormoneSurge, 3 indeterminate, 4 estrogenSurge).
+ */
+export function mapHealthKitOvulation(value: number): OvulationTestResult | null {
+  switch (value) {
+    case 1: return 'negative';
+    case 2: return 'positive';
+    case 3: return 'indeterminate';
+    case 4: return 'estrogen';
+    default: return null;
+  }
+}
+
+/**
+ * Health Connect OvulationTestRecord.result → App
+ * (0 inconclusive, 1 positive, 2 high, 3 negative). „High“ = Östrogen- bzw.
+ * beginnender LH-Anstieg, noch kein Peak → zählt nicht als positiv.
+ */
+export function mapHealthConnectOvulation(result: number | null | undefined): OvulationTestResult {
+  switch (result) {
+    case 1: return 'positive';
+    case 2: return 'estrogen';
+    case 3: return 'negative';
+    default: return 'indeterminate';
+  }
+}
+
+/** Wie planHealthSync, nur für Ovulationstests (manuelle Einträge bleiben unangetastet). */
+export function planOvulationSync(
+  existing: StoredOvulationTest[],
+  health: HealthOvulationTest[],
+  windowStart: string,
+  windowEnd: string,
+): OvulationSyncPlan {
+  const inWindow = (date: string) => date >= windowStart && date <= windowEnd;
+  const stored = new Map(existing.map((e) => [e.date, e]));
+  const healthDates = new Set<string>();
+
+  const upserts: HealthOvulationTest[] = [];
+  for (const test of mergeOvulationTests(health)) {
+    if (!inWindow(test.date)) continue;
+    healthDates.add(test.date);
+    const current = stored.get(test.date);
+    if (!current || (current.source === 'health' && current.result !== test.result)) {
+      upserts.push({ date: test.date, result: test.result });
+    }
   }
 
   const deletes = existing

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 
-import { CycleLegend, CyclePanel, PERIOD_COLOR } from '@/components/CyclePanel';
+import { CycleLegend, CyclePanel, LH_POSITIVE_COLOR, PERIOD_COLOR } from '@/components/CyclePanel';
 import { useCycle } from '@/hooks/useCycle';
 import {
   buildMarked,
@@ -170,13 +170,20 @@ export default function CalendarScreen() {
     return result;
   }, [allLogs, tags]);
 
+  // Positive LH-Tests als kleiner Punkt im Kalender
+  const { testByDate } = cycle;
+  const lhPositiveDates = useMemo(() => {
+    if (!cycleTracking) return new Set<string>();
+    return new Set([...testByDate.values()].filter((t) => t.result === 'positive').map((t) => t.date));
+  }, [cycleTracking, testByDate]);
+
   // ── Custom day renderer (memoised to avoid recreation on every render) ────
 
   const DayCellRenderer = useCallback(
     (props: any) => (
-      <DayCell {...props} tagsByDate={tagsByDate} selectedDate={selectedDate} phases={phases} />
+      <DayCell {...props} tagsByDate={tagsByDate} selectedDate={selectedDate} phases={phases} lhPositive={lhPositiveDates} />
     ),
-    [tagsByDate, selectedDate, phases],
+    [tagsByDate, selectedDate, phases, lhPositiveDates],
   );
 
   // ── data loading ───────────────────────────────────────────────────────────
@@ -693,6 +700,7 @@ function DayCell({
   tagsByDate,
   selectedDate,
   phases,
+  lhPositive,
 }: {
   date?: DateData;
   state?: 'disabled' | 'today' | '';
@@ -701,6 +709,7 @@ function DayCell({
   tagsByDate: Map<string, Tag[]>;
   selectedDate: string;
   phases: Map<string, DayPhase>;
+  lhPositive: Set<string>;
 }) {
   if (!date) return <View style={{ flex: 1 }} />;
 
@@ -728,6 +737,7 @@ function DayCell({
       disabled={isDisabled}
     >
       {phase?.phase === 'ovulation' && <Text style={dayStyles.egg}>{'🥚'}</Text>}
+      {lhPositive.has(date.dateString) && <View style={dayStyles.lhDot} />}
       {/* Date number with selection / today indicator */}
       <View style={[
         dayStyles.circle,
@@ -771,6 +781,7 @@ const dayStyles = StyleSheet.create({
   fertile:         { backgroundColor: FERTILE_WINDOW_COLOR + '14', borderColor: FERTILE_WINDOW_COLOR, borderStyle: 'dotted' },
   cycleDisabled:   { opacity: 0.4 },
   egg: { position: 'absolute', top: 1, right: 2, fontSize: 8 },
+  lhDot: { position: 'absolute', top: 3, left: 3, width: 5, height: 5, borderRadius: 2.5, backgroundColor: LH_POSITIVE_COLOR },
   circle: {
     width: 28,
     height: 28,

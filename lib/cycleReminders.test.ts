@@ -47,7 +47,7 @@ describe('planCycleReminders', () => {
     expect(REMINDER_LEAD_DAYS).toBe(1);
   });
 
-  it('schedules the fertile reminder one day before the window opens (ovulation − 3)', () => {
+  it('schedules the fertile reminder one day before the window opens (ovulation − 5)', () => {
     const [reminder] = planCycleReminders({
       settings: { periodEnabled: false, fertileEnabled: true },
       nextPeriod: null,
@@ -55,8 +55,8 @@ describe('planCycleReminders', () => {
       today,
     });
     expect(reminder.kind).toBe('fertile');
-    expect(reminder.eventDate).toBe('2026-03-17'); // window start = ovulation − 3
-    expect(reminder.fireDate).toBe('2026-03-16'); // − 1 more day
+    expect(reminder.eventDate).toBe('2026-03-15'); // window start = ovulation − 5
+    expect(reminder.fireDate).toBe('2026-03-14'); // − 1 more day
   });
 
   it('drops a reminder whose fire date is today or already past', () => {

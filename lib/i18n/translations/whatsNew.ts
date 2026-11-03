@@ -19,6 +19,10 @@ export default defineMessages(
           title: 'Speiseplan',
           text: 'Im neuen Tab „Speiseplan“ erstellt dir die KI Mahlzeiten für bis zu 7 Tage, passend zu deinem Kalorien- und Proteinziel, mit Einkaufsliste. Gerichte trägst du mit einem Tipp ins Tagebuch ein.',
         },
+        ovulationTests: {
+          title: 'Ovulationstests im Zykluskalender',
+          text: 'Trag deine LH-Tests im Kalender ein oder übernimm sie aus Apple Health bzw. Health Connect. Ein positiver Test macht Eisprung und fruchtbares Fenster genauer. Keine Verhütungsmethode.',
+        },
       },
       r2026_10_19: {
         nutritionStats: {
@@ -67,6 +71,10 @@ export default defineMessages(
         mealPlan: {
           title: 'Meal plan',
           text: 'In the new “Meal plan” tab, the AI creates meals for up to 7 days that match your calorie and protein goals, with a shopping list. Log a dish to your journal with one tap.',
+        },
+        ovulationTests: {
+          title: 'Ovulation tests in the cycle calendar',
+          text: 'Log your LH tests in the calendar or import them from Apple Health or Health Connect. A positive test makes ovulation and the fertile window more accurate. Not a method of contraception.',
         },
       },
       r2026_10_19: {

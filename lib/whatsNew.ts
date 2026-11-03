@@ -28,6 +28,7 @@ export const RELEASES: WhatsNewRelease[] = [
     items: [
       { key: 'tipOfTheDay', icon: 'lightbulb' },
       { key: 'mealPlan', icon: 'restaurant' },
+      { key: 'ovulationTests', icon: 'event' },
     ],
   },
   {

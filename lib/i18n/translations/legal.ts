@@ -26,14 +26,14 @@ export default defineMessages(
       liabilityTitle: '3. Haftung',
       liability:
         'Der Anbieter haftet unbeschränkt bei Vorsatz und grober Fahrlässigkeit, bei Verletzung des Lebens, des Körpers oder der Gesundheit sowie nach dem Produkthaftungsgesetz. Bei leicht fahrlässiger Verletzung wesentlicher Vertragspflichten ist die Haftung auf den vorhersehbaren, vertragstypischen Schaden begrenzt. Im Übrigen ist die Haftung für Schäden, die auf der Verwendung errechneter Werte beruhen, ausgeschlossen.',
-      asOf: 'Stand: Oktober 2026',
+      asOf: 'Stand: November 2026',
     },
     cycle: {
       title: 'Hinweis zum Zyklus- und Perioden-Tracking',
       method:
-        'Die angezeigten Phasen (Menstruation, Follikelphase, Eisprung, Lutealphase), das fruchtbare Fenster und die Einschätzung „rechnerisch geringes Risiko“ beruhen auf der sogenannten Kalendermethode. Der errechnete Eisprung 14 Tage nach Beginn der Blutung ist ein Mittelwert; der tatsächliche Eisprung kann um mehrere Tage abweichen – besonders bei unregelmäßigem Zyklus, nach Absetzen hormoneller Verhütung, bei Stress, Krankheit, Reisen, Stillzeit oder in den Wechseljahren.',
+        'Die angezeigten Phasen (Menstruation, Follikelphase, Eisprung, Lutealphase) und das fruchtbare Fenster beruhen auf der sogenannten Kalendermethode. Der errechnete Eisprung 14 Tage nach Beginn der Blutung ist ein Mittelwert; der tatsächliche Eisprung kann um mehrere Tage abweichen – besonders bei unregelmäßigem Zyklus, nach Absetzen hormoneller Verhütung, bei Stress, Krankheit, Reisen, Stillzeit oder in den Wechseljahren. Hast du einen positiven Ovulationstest (LH) erfasst oder aus Apple Health bzw. Health Connect übernommen, setzt die App den Eisprung dieses Zyklus auf den Folgetag. Auch das ist nur eine Schätzung: Ein LH-Test zeigt den Eisprung erst kurz vorher an und kann falsch positiv oder negativ sein.',
       safeDays:
-        'Eine Tageskennzeichnung als „unbedenklich“ bedeutet ausschließlich eine rechnerisch geringere Wahrscheinlichkeit – nicht Sicherheit. Zur Verhütung oder bei Kinderwunsch ersetzt die App keine ärztliche Beratung und keine anerkannte Verhütungs- bzw. Zyklusmethode.',
+        'Die App zeigt keine „sicheren Tage“. Tage außerhalb des fruchtbaren Fensters bedeuten nur, dass die berechnete Wahrscheinlichkeit geringer ist – nicht, dass eine Schwangerschaft ausgeschlossen ist. Die App ist kein Medizinprodukt und keine Verhütungsmethode. Zur Verhütung oder bei Kinderwunsch ersetzt sie keine ärztliche Beratung und keine anerkannte Verhütungs- bzw. Zyklusmethode.',
     },
     subscription: {
       title: 'AvoraSport Premium (Abonnement)',
@@ -76,14 +76,14 @@ export default defineMessages(
       liabilityTitle: '3. Liability',
       liability:
         'The provider is liable without limitation for intent and gross negligence, for injury to life, body or health, and under the German Product Liability Act. In the event of slightly negligent breach of essential contractual obligations, liability is limited to the foreseeable damage typical for the contract. Otherwise, liability for damages based on the use of calculated values is excluded.',
-      asOf: 'As of: October 2026',
+      asOf: 'As of: November 2026',
     },
     cycle: {
       title: 'Note on cycle and period tracking',
       method:
-        'The phases shown (menstruation, follicular phase, ovulation, luteal phase), the fertile window and the “low calculated risk” estimate are based on the so-called calendar method. The calculated ovulation 14 days after the start of bleeding is an average; actual ovulation can vary by several days – especially with an irregular cycle, after stopping hormonal contraception, with stress, illness, travel, breastfeeding or during menopause.',
+        'The phases shown (menstruation, follicular phase, ovulation, luteal phase) and the fertile window are based on the so-called calendar method. The calculated ovulation 14 days after the start of bleeding is an average; actual ovulation can vary by several days – especially with an irregular cycle, after stopping hormonal contraception, with stress, illness, travel, breastfeeding or during menopause. If you have logged a positive ovulation test (LH) or imported one from Apple Health or Health Connect, the app sets that cycle’s ovulation to the following day. This is also only an estimate: an LH test only indicates ovulation shortly beforehand and can be falsely positive or negative.',
       safeDays:
-        'Marking a day as “safe” only means a lower calculated probability – not certainty. For contraception or when trying to conceive, the app does not replace medical advice or a recognized contraceptive or cycle method.',
+        'The app does not show any “safe days”. Days outside the fertile window only mean that the calculated probability is lower – not that pregnancy is ruled out. The app is not a medical device and not a method of contraception. For contraception or when trying to conceive, it does not replace medical advice or a recognized contraceptive or cycle method.',
     },
     subscription: {
       title: 'AvoraSport Premium (subscription)',
