@@ -25,8 +25,11 @@ import {
   OVULATION_OFFSET_DAYS,
   predictNextOvulation,
   predictNextPeriod,
+  confirmedOvulationDate,
+  mergeOvulationTests,
   type CycleEvent,
   type CycleProfile,
+  type OvulationTest,
 } from '@/lib/cycle';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -245,13 +248,14 @@ describe('buildPhaseCalendar', () => {
     expect(map.get('2026-03-18')?.phase).toBe('luteal');       // day 21
   });
 
-  it('marks the fertile window as ovulation ± 3 days', () => {
+  it('marks the fertile window as ovulation − 5 … + 3 days (estimated)', () => {
     const map = byDate(THREE_REGULAR_CYCLES, '2026-03-01', '2026-03-25', '2026-04-01');
-    expect(map.get('2026-03-08')?.fertileWindow).toBe(false); // day 11
-    expect(map.get('2026-03-09')?.fertileWindow).toBe(true);  // day 12 (ovu - 3)
+    expect(map.get('2026-03-06')?.fertileWindow).toBe(false); // day 9
+    expect(map.get('2026-03-07')?.fertileWindow).toBe(true);  // day 10 (ovu - 5)
     expect(map.get('2026-03-12')?.fertileWindow).toBe(true);  // ovulation
     expect(map.get('2026-03-15')?.fertileWindow).toBe(true);  // day 18 (ovu + 3)
     expect(map.get('2026-03-16')?.fertileWindow).toBe(false); // day 19
+    expect(map.get('2026-03-12')?.ovulationConfirmed).toBe(false);
   });
 
   it('flags confirmed vs. predicted days relative to today', () => {
@@ -365,5 +369,89 @@ describe('formatting helpers', () => {
 
   it('OVULATION_OFFSET_DAYS is the documented 14', () => {
     expect(OVULATION_OFFSET_DAYS).toBe(14);
+  });
+});
+
+// ── Ovulation tests (LH) ──────────────────────────────────────────────────────
+
+describe('ovulation tests', () => {
+  // Third cycle starts 2026-02-26 (bleeding until 03-02); calendar ovulation = 03-12.
+  const positiveOn = (date: string): OvulationTest[] => [
+    { date: addDays(date, -1), result: 'negative' },
+    { date, result: 'positive' },
+    { date: addDays(date, 1), result: 'positive' },
+  ];
+
+  it('confirmedOvulationDate = day after the first positive test', () => {
+    const spans = buildCycleSpans(THREE_REGULAR_CYCLES);
+    expect(confirmedOvulationDate(spans[2], positiveOn('2026-03-15'))).toBe('2026-03-16');
+  });
+
+  it('ignores tests outside the cycle, during bleeding, or negative only', () => {
+    const spans = buildCycleSpans(THREE_REGULAR_CYCLES);
+    expect(confirmedOvulationDate(spans[2], [{ date: '2026-02-27', result: 'positive' }])).toBeNull();
+    expect(confirmedOvulationDate(spans[1], [{ date: '2026-03-15', result: 'positive' }])).toBeNull();
+    expect(confirmedOvulationDate(spans[2], [{ date: '2026-03-15', result: 'negative' }])).toBeNull();
+    // positive on the last day of a closed cycle → ovulation would fall into the next cycle
+    expect(confirmedOvulationDate(spans[1], [{ date: '2026-02-25', result: 'positive' }])).toBeNull();
+  });
+
+  it('moves the ovulation day and narrows the window after a positive test', () => {
+    const map = new Map(
+      buildPhaseCalendar(THREE_REGULAR_CYCLES, NO_PROFILE, '2026-03-01', '2026-03-25', '2026-04-01', positiveOn('2026-03-15'))
+        .map((p) => [p.date, p]),
+    );
+    expect(map.get('2026-03-12')?.phase).toBe('follicular');
+    expect(map.get('2026-03-16')?.phase).toBe('ovulation');
+    expect(map.get('2026-03-16')?.ovulationConfirmed).toBe(true);
+    expect(map.get('2026-03-10')?.fertileWindow).toBe(false); // ovu − 6
+    expect(map.get('2026-03-11')?.fertileWindow).toBe(true);  // ovu − 5
+    expect(map.get('2026-03-17')?.fertileWindow).toBe(true);  // ovu + 1
+    expect(map.get('2026-03-18')?.fertileWindow).toBe(false); // ovu + 2
+    expect(map.get('2026-03-18')?.phase).toBe('luteal');
+    expect(map.get('2026-03-16')?.conceptionRisk).toBe('high');
+  });
+
+  it('does not affect projected cycles', () => {
+    const phases = buildPhaseCalendar(THREE_REGULAR_CYCLES, NO_PROFILE, '2026-04-01', '2026-04-30', '2026-03-20', positiveOn('2026-03-15'));
+    expect(phases.every((p) => !p.ovulationConfirmed)).toBe(true);
+  });
+
+  it('getCycleOverview uses a positive test for the upcoming ovulation', () => {
+    const o = getCycleOverview(THREE_REGULAR_CYCLES, NO_PROFILE, '2026-03-15', positiveOn('2026-03-15'));
+    expect(o.nextOvulation).toEqual({ date: '2026-03-16', inDays: 1 });
+    expect(o.nextOvulationConfirmed).toBe(true);
+  });
+
+  it('getCycleOverview skips to the next cycle once a confirmed ovulation has passed', () => {
+    // Positive on 03-08 → ovulation 03-09; calendar rule would still say 03-12.
+    const o = getCycleOverview(THREE_REGULAR_CYCLES, NO_PROFILE, '2026-03-10', [{ date: '2026-03-08', result: 'positive' }]);
+    expect(o.nextOvulationConfirmed).toBe(false);
+    expect(o.nextOvulation?.date).toBe(addDays('2026-03-26', OVULATION_OFFSET_DAYS));
+  });
+
+  it('without tests the overview is unchanged', () => {
+    const o = getCycleOverview(THREE_REGULAR_CYCLES, NO_PROFILE, '2026-03-05');
+    expect(o.nextOvulation?.date).toBe('2026-03-12');
+    expect(o.nextOvulationConfirmed).toBe(false);
+  });
+
+  it('mergeOvulationTests keeps the most significant result per day', () => {
+    const merged = mergeOvulationTests<OvulationTest>([
+      { date: '2026-03-02', result: 'negative' },
+      { date: '2026-03-01', result: 'negative' },
+      { date: '2026-03-01', result: 'positive' },
+      { date: '2026-03-01', result: 'indeterminate' },
+    ]);
+    expect(merged).toEqual([
+      { date: '2026-03-01', result: 'positive' },
+      { date: '2026-03-02', result: 'negative' },
+    ]);
+  });
+
+  it('conceptionRiskFor uses the shorter span after a confirmed ovulation', () => {
+    expect(conceptionRiskFor(3, false, false)).toBe('high');
+    expect(conceptionRiskFor(3, false, true)).toBe('elevated');
+    expect(conceptionRiskFor(-5, false, true)).toBe('high');
   });
 });

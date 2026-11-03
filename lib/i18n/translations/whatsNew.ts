@@ -10,6 +10,12 @@ export default defineMessages(
     subtitle: 'Das hat sich mit diesem Update geändert:',
     button: "Los geht's",
     releases: {
+      r2026_11_03: {
+        ovulationTests: {
+          title: 'Ovulationstests im Zykluskalender',
+          text: 'Trag deine LH-Tests im Kalender ein oder übernimm sie aus Apple Health bzw. Health Connect. Ein positiver Test macht Eisprung und fruchtbares Fenster genauer. Keine Verhütungsmethode.',
+        },
+      },
       r2026_11_02: {
         tipOfTheDay: {
           title: 'Tipp des Tages',
@@ -59,6 +65,12 @@ export default defineMessages(
     subtitle: 'This update brings:',
     button: "Let's go",
     releases: {
+      r2026_11_03: {
+        ovulationTests: {
+          title: 'Ovulation tests in the cycle calendar',
+          text: 'Log your LH tests in the calendar or import them from Apple Health or Health Connect. A positive test makes ovulation and the fertile window more accurate. Not a method of contraception.',
+        },
+      },
       r2026_11_02: {
         tipOfTheDay: {
           title: 'Tip of the day',

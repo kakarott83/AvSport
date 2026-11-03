@@ -1,7 +1,7 @@
 {
   "ios": {
     "CFBundleDisplayName": "AvoraSport",
-    "NSHealthShareUsageDescription": "AvoraSport liest deine Schritte und Aktivitätskalorien aus Apple Health, um sie in deinem Tagesziel zu berücksichtigen, und – falls du es erlaubst – deine Periodendaten für den Zykluskalender.",
+    "NSHealthShareUsageDescription": "AvoraSport liest deine Schritte und Aktivitätskalorien aus Apple Health, um sie in deinem Tagesziel zu berücksichtigen, und – falls du es erlaubst – deine Periodendaten und Ovulationstests für den Zykluskalender.",
     "NSHealthUpdateUsageDescription": "AvoraSport schreibt keine Daten in Apple Health; diese Angabe wird nur von iOS vorausgesetzt.",
     "NSCameraUsageDescription": "AvoraSport braucht Zugriff auf deine Kamera, um dein Essen zu scannen."
   }

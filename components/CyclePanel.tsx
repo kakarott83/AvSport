@@ -2,8 +2,12 @@
  * components/CyclePanel.tsx
  *
  * Zyklus-Bereich im Kalender-Tab (ehemals eigener "Periode"-Tab): Status für
- * den gewählten Tag, Blutung erfassen, Verknüpfung mit Apple Health /
- * Health Connect, Ø-Vorschlag und Zyklus-Verlauf. Datenquelle: useCycle().
+ * den gewählten Tag, Blutung und Ovulationstest erfassen, Verknüpfung mit
+ * Apple Health / Health Connect, Ø-Vorschlag und Zyklus-Verlauf.
+ * Datenquelle: useCycle().
+ *
+ * Das fruchtbare Fenster ist eine Info, keine Verhütung: Tage außerhalb werden
+ * neutral (grau) gezeigt, nie als „sicher“ (siehe CONCEPTION_RISK_META).
  *
  * `CycleLegend` gehört direkt unter den Kalender.
  */
@@ -23,6 +27,7 @@ import {
   rechnerischeSicherheitHinweis,
   REGULARITY_LABEL,
   type DayPhase,
+  type OvulationTestResult,
 } from '@/lib/cycle';
 import { getLocale, useTranslation } from '@/lib/i18n';
 
@@ -34,6 +39,21 @@ const FLOW_LEVELS = [
   { value: 3, label: 'cycle.flow.medium' },
   { value: 4, label: 'cycle.flow.heavy' },
 ] as const;
+
+/** Manuell erfassbare Ergebnisse; „Hohe Fruchtbarkeit“/„Unklar“ kommen nur aus Health. */
+const TEST_RESULTS = [
+  { value: 'positive', label: 'cycle.testPositive' },
+  { value: 'negative', label: 'cycle.testNegative' },
+] as const;
+
+const TEST_LABELS: Record<OvulationTestResult, 'cycle.testPositive' | 'cycle.testNegative' | 'cycle.testEstrogen' | 'cycle.testIndeterminate'> = {
+  positive: 'cycle.testPositive',
+  negative: 'cycle.testNegative',
+  estrogen: 'cycle.testEstrogen',
+  indeterminate: 'cycle.testIndeterminate',
+};
+
+export const LH_POSITIVE_COLOR = '#00E5FF';
 
 const HEALTH_NAME = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 
@@ -58,6 +78,7 @@ export function CyclePanel({
   const {
     loading, overview, events, flowByDate, healthDates, healthLinked, linkHealth,
     profileCycleLength, profilePeriodLength, logFlow, removeFlow, applyAverages,
+    testByDate, logOvulationTest, removeOvulationTest, ovulationHealthPending,
   } = cycle;
   const [linking, setLinking] = useState(false);
   const { t } = useTranslation();
@@ -67,6 +88,7 @@ export function CyclePanel({
   const hasHistory = stats.lastStart != null;
   const selectedFlow = flowByDate.get(selectedDate) ?? null;
   const fromHealth = healthDates.has(selectedDate);
+  const selectedTest = testByDate.get(selectedDate) ?? null;
   const isFuture = selectedDate > today;
 
   const suggestionVisible =
@@ -127,6 +149,9 @@ export function CyclePanel({
                     {t('cycle.dayOf', { day: selectedPhase.cycleDay, length: selectedPhase.cycleLength })}
                     {selectedPhase.predicted ? t('cycle.predictedSuffix') : ''}
                   </Text>
+                  {selectedPhase.ovulationConfirmed && (
+                    <Text style={styles.confirmedText}>🧪 {t('cycle.ovulationConfirmed')}</Text>
+                  )}
                 </View>
               </View>
             ) : (
@@ -143,7 +168,9 @@ export function CyclePanel({
               <Metric
                 label={t('cycle.ovulation')}
                 value={nextOvulation ? describeInDays(nextOvulation.inDays) : '–'}
-                sub={nextOvulation ? formatDate(nextOvulation.date) : undefined}
+                sub={nextOvulation
+                  ? formatDate(nextOvulation.date) + (overview.nextOvulationConfirmed ? ` · ${t('cycle.ovulationConfirmedShort')}` : '')
+                  : undefined}
                 color={CYCLE_PHASE_META.ovulation.color}
               />
             </View>
@@ -211,12 +238,44 @@ export function CyclePanel({
                 <Text style={styles.removeText}>{t('cycle.removeBleeding')}</Text>
               </TouchableOpacity>
             )}
+
+            {/* ── Ovulationstest erfassen ── */}
+            <View style={styles.separator} />
+            <Text style={styles.sectionLabel}>{t('cycle.ovulationTest').toUpperCase()}</Text>
+            <View style={styles.flowRow}>
+              {TEST_RESULTS.map((r) => {
+                const active = selectedTest?.result === r.value;
+                return (
+                  <TouchableOpacity
+                    key={r.value}
+                    style={[styles.flowChip, active && styles.testChipActive]}
+                    onPress={() => (active ? removeOvulationTest(selectedDate) : logOvulationTest(selectedDate, r.value))}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.flowLabel, active && styles.testLabelActive]}>{t(r.label)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {selectedTest && (selectedTest.result === 'estrogen' || selectedTest.result === 'indeterminate') && (
+              <Text style={styles.healthHint}>{t(TEST_LABELS[selectedTest.result])}</Text>
+            )}
+            {selectedTest?.source === 'health' && (
+              <Text style={styles.healthHint}>{t('cycle.testFromHealth', { source: HEALTH_NAME })}</Text>
+            )}
+            <Text style={styles.healthHint}>{t('cycle.testHint')}</Text>
+            {selectedTest != null && (
+              <TouchableOpacity style={styles.removeRow} onPress={() => removeOvulationTest(selectedDate)} activeOpacity={0.7}>
+                <Ionicons name="close-circle-outline" size={16} color={LH_POSITIVE_COLOR} />
+                <Text style={[styles.removeText, { color: LH_POSITIVE_COLOR }]}>{t('cycle.removeTest')}</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
         {/* ── Health-Verknüpfung ── */}
         {Platform.OS !== 'web' && (
-          healthLinked ? (
+          healthLinked && !ovulationHealthPending ? (
             <View style={styles.healthRow}>
               <Ionicons name="checkmark-circle" size={15} color="#4CAF50" />
               <Text style={styles.healthLinkedText}>{t('cycle.healthLinked', { source: HEALTH_NAME })}</Text>
@@ -228,7 +287,11 @@ export function CyclePanel({
               ) : (
                 <>
                   <Ionicons name="heart-circle-outline" size={18} color={PERIOD_COLOR} />
-                  <Text style={styles.healthBtnText}>{t('cycle.importFromHealth', { source: HEALTH_NAME })}</Text>
+                  <Text style={styles.healthBtnText}>
+                    {healthLinked
+                      ? t('cycle.importOvulationTests', { source: HEALTH_NAME })
+                      : t('cycle.importFromHealth', { source: HEALTH_NAME })}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -277,6 +340,10 @@ export function CycleLegend() {
         <View style={styles.legendItem}>
           <Text style={styles.legendEgg}>🥚</Text>
           <Text style={styles.legendText}>{t('cycle.legendOvulation')}</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={styles.lhDot} />
+          <Text style={styles.legendText}>{t('cycle.legendTest')}</Text>
         </View>
       </View>
       <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7}>
@@ -342,6 +409,10 @@ const styles = StyleSheet.create({
   riskLabel: { flex: 1, color: '#ddd', fontSize: 13 },
   riskHint: { color: '#999', fontSize: 12, lineHeight: 16 },
   riskDisclaimer: { color: '#00E5FF', fontSize: 11, fontWeight: '700', marginTop: 2 },
+  confirmedText: { color: LH_POSITIVE_COLOR, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  testChipActive: { backgroundColor: LH_POSITIVE_COLOR + '1F', borderColor: LH_POSITIVE_COLOR },
+  testLabelActive: { color: LH_POSITIVE_COLOR, fontWeight: '800' },
+  lhDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: LH_POSITIVE_COLOR },
 
   flowRow: { flexDirection: 'row', gap: 8 },
   flowChip: {

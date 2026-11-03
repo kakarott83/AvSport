@@ -4,7 +4,7 @@
  *
  * The user opts in to two reminders in their profile:
  *   - "period"  → one day before the predicted next period start
- *   - "fertile" → one day before the fertile window opens (ovulation − 3)
+ *   - "fertile" → one day before the fertile window opens (ovulation − 5)
  *
  * Both fire at REMINDER_HOUR local time. `planCycleReminders` turns the
  * predictions from lib/cycle.ts into the concrete list of notifications to
@@ -14,7 +14,7 @@
 import {
   addDays,
   diffDays,
-  FERTILE_WINDOW_RADIUS_DAYS,
+  FERTILE_DAYS_BEFORE,
   type UpcomingEvent,
 } from '@/lib/cycle';
 import { t } from '@/lib/i18n';
@@ -84,7 +84,7 @@ export function planCycleReminders(input: {
   }
 
   if (settings.fertileEnabled && input.nextOvulation) {
-    const windowStart = addDays(input.nextOvulation.date, -FERTILE_WINDOW_RADIUS_DAYS);
+    const windowStart = addDays(input.nextOvulation.date, -FERTILE_DAYS_BEFORE);
     const fireDate = addDays(windowStart, -REMINDER_LEAD_DAYS);
     if (diffDays(input.today, fireDate) > 0) {
       out.push({
