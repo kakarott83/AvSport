@@ -23,12 +23,18 @@ export interface WhatsNewRelease {
 /** Neueste zuerst. */
 export const RELEASES: WhatsNewRelease[] = [
   {
+    id: '2026-11-03',
+    releasedAt: '2026-11-03T19:00:00Z',
+    items: [
+      { key: 'ovulationTests', icon: 'event' },
+    ],
+  },
+  {
     id: '2026-11-02',
     releasedAt: '2026-11-02T21:00:00Z',
     items: [
       { key: 'tipOfTheDay', icon: 'lightbulb' },
       { key: 'mealPlan', icon: 'restaurant' },
-      { key: 'ovulationTests', icon: 'event' },
     ],
   },
   {
