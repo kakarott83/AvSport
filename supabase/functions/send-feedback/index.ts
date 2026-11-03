@@ -36,6 +36,8 @@ const SMTP_HOST = Deno.env.get('SMTP_HOST') ?? 'smtp.strato.de';
 const SMTP_PORT = Number(Deno.env.get('SMTP_PORT') ?? '465');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
 const FEEDBACK_TO = Deno.env.get('FEEDBACK_TO') ?? 'support@milan-muc.de';
+/** Schutz vor Spam ins Support-Postfach (und vor Strato-Versandsperren). */
+const MAX_FEEDBACK_PER_HOUR = 5;
 const FEEDBACK_FROM =
   Deno.env.get('FEEDBACK_FROM') ??
   (SMTP_USER ? `AvoraSport Feedback <${SMTP_USER}>` : 'AvoraSport Feedback <onboarding@resend.dev>');
@@ -133,6 +135,18 @@ Deno.serve(async (req) => {
   if (message.length > 5000) return json({ error: 'Feedback ist zu lang (max. 5000 Zeichen).' }, 400);
 
   const admin = createClient(supabaseUrl, serviceKey);
+
+  // 0) Rate-Limit pro Nutzer
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error: countErr } = await admin
+    .from('feedback')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', since);
+  if (countErr) return json({ error: 'Speichern fehlgeschlagen: ' + countErr.message }, 500);
+  if ((count ?? 0) >= MAX_FEEDBACK_PER_HOUR) {
+    return json({ error: 'Zu viele Feedbacks. Bitte versuch es später noch einmal.', code: 'rate_limited' }, 429);
+  }
 
   // 1) Immer speichern
   const { data: row, error: insErr } = await admin

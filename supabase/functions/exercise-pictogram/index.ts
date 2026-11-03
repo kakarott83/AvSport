@@ -22,6 +22,7 @@ import {
   buildPictogramPrompt,
   COST_PER_IMAGE_USD,
   DAILY_NEW_PICTOGRAM_LIMIT,
+  sanitizeExerciseName,
   slugifyExercise,
 } from './pictogram.ts';
 
@@ -66,11 +67,15 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: 'Ungültiger Request-Body.' }, 400);
   }
-  const nameEn = typeof body.nameEn === 'string' ? body.nameEn.trim() : '';
-  const nameDe = typeof body.nameDe === 'string' ? body.nameDe.trim() : '';
-  const name = nameEn || nameDe;
+  const rawEn = typeof body.nameEn === 'string' ? body.nameEn.trim() : '';
+  const rawDe = typeof body.nameDe === 'string' ? body.nameDe.trim() : '';
+  if (!rawEn && !rawDe) return json({ error: 'Übungsname fehlt.' }, 400);
+  // Ungültige Namen nie in den Prompt geben (siehe sanitizeExerciseName)
+  const nameEn = rawEn ? sanitizeExerciseName(rawEn) : null;
+  const nameDe = rawDe ? sanitizeExerciseName(rawDe) : null;
+  const name = nameEn ?? nameDe;
+  if (!name) return json({ error: 'Ungültiger Übungsname.', code: 'invalid_name' }, 400);
   const slug = slugifyExercise(name);
-  if (!slug) return json({ error: 'Übungsname fehlt.' }, 400);
 
   const admin = createClient(supabaseUrl, serviceKey);
   const publicUrl = admin.storage.from(BUCKET).getPublicUrl(`${slug}.png`).data.publicUrl;

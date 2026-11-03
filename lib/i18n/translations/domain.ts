@@ -48,6 +48,7 @@ export default defineMessages(
       tooLong: 'Feedback ist zu lang (max. {{max}} Zeichen).',
       network: 'Senden fehlgeschlagen. Bitte prüfe deine Internetverbindung.',
       failed: 'Senden fehlgeschlagen.',
+      tooMany: 'Du hast gerade schon mehrmals Feedback geschickt. Bitte versuch es in einer Stunde noch einmal.',
     },
     socialAuth: {
       googleStartFailed: 'Google-Login konnte nicht gestartet werden.',
@@ -103,6 +104,7 @@ export default defineMessages(
       tooLong: 'Feedback is too long (max. {{max}} characters).',
       network: 'Sending failed. Please check your internet connection.',
       failed: 'Sending failed.',
+      tooMany: 'You’ve already sent feedback several times. Please try again in an hour.',
     },
     socialAuth: {
       googleStartFailed: 'Google sign-in could not be started.',

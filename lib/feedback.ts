@@ -45,6 +45,9 @@ export async function sendFeedback(input: {
   });
 
   if (error) {
+    // Non-2xx: FunctionsHttpError trägt die Response in `context`
+    const status = (error as { context?: { status?: number } }).context?.status;
+    if (status === 429) return { ok: false, message: t('domain.feedback.tooMany') };
     return { ok: false, message: t('domain.feedback.network') };
   }
   if (data && typeof data === 'object' && 'ok' in data && data.ok) {

@@ -23,6 +23,31 @@ export function slugifyExercise(name: string): string {
     .slice(0, 80);
 }
 
+/** Länger wird kein echter Übungsname; hält den Slug unter seiner 80-Zeichen-Grenze. */
+export const MAX_EXERCISE_NAME_LENGTH = 60;
+
+/**
+ * Prüft den Übungsnamen, bevor er in den Bild-Prompt geht. Das Bild wird unter
+ * slugifyExercise(name) für ALLE Nutzer gespeichert — deshalb darf der Name
+ * nichts enthalten, was der Slug verschluckt (z. B. kyrillische Zusatztexte
+ * oder Text hinter der Längengrenze). Sonst könnte jemand als Erste:r das
+ * Bild einer Übung mit eigenen Anweisungen erzeugen lassen.
+ * Erlaubt: lateinische Buchstaben (auch mit Akzenten/Umlauten), Ziffern,
+ * Leerzeichen und - ( ) / ' . , & +. Liefert den bereinigten Namen oder null.
+ */
+export function sanitizeExerciseName(raw: string): string | null {
+  // Typografische Zeichen aus KI-Texten auf ASCII bringen („Farmer’s Walk“, „Push–Up“)
+  const name = raw.replace(/[‘’`´]/g, "'").replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
+  if (!name || name.length > MAX_EXERCISE_NAME_LENGTH) return null;
+  const folded = name
+    .toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!/^[a-z0-9 \-()/'.,&+]+$/.test(folded)) return null;
+  return slugifyExercise(name) ? name : null;
+}
+
 /** Einheitliche Bildvorgabe, damit alle Piktogramme gleich aussehen. */
 export function buildPictogramPrompt(exerciseName: string): string {
   const name = exerciseName.replace(/["\n\r]/g, ' ').trim().slice(0, 120);
