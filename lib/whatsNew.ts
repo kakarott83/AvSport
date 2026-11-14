@@ -23,6 +23,13 @@ export interface WhatsNewRelease {
 /** Neueste zuerst. */
 export const RELEASES: WhatsNewRelease[] = [
   {
+    id: '2026-11-15',
+    releasedAt: '2026-11-15T12:00:00Z',
+    items: [
+      { key: 'trainingMethods', icon: 'fitness-center' },
+    ],
+  },
+  {
     id: '2026-11-03',
     releasedAt: '2026-11-03T19:00:00Z',
     items: [

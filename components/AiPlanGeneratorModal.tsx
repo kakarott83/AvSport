@@ -27,7 +27,7 @@ import { FITNESS_LEVEL_LABEL } from '@/services/gemini/trainingProvider';
 import { supabase } from '@/services/supabaseClient';
 import type {
   AiPlanInput, Environment, FitnessGoal, FitnessLevel, FocusArea,
-  SessionMinutes, TargetWeeks, WorkoutPlanInsert,
+  SessionMinutes, TargetWeeks, TrainingMethod, WorkoutPlanInsert,
 } from '@/types/workout';
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
@@ -59,15 +59,25 @@ const SESSION_OPTIONS: SessionMinutes[] = [30, 45, 60, 90];
 
 const FITNESS_LEVEL_OPTIONS: FitnessLevel[] = ['anfaenger', 'fortgeschritten', 'profi'];
 
+/** Standard-Trainingsmethoden in Anzeige-Reihenfolge, mit Symbol für den Chip. */
+const METHOD_OPTIONS: { key: TrainingMethod; icon: string }[] = [
+  { key: 'klassisch',    icon: 'fitness-center' },
+  { key: 'hiit',         icon: 'bolt' },
+  { key: 'crossfit',     icon: 'sports-mma' },
+  { key: 'zirkel',       icon: 'loop' },
+  { key: 'calisthenics', icon: 'sports-gymnastics' },
+  { key: 'ausdauer',     icon: 'directions-run' },
+];
+
 type Step =
-  | 'goal' | 'environment' | 'equipment' | 'focus' | 'weeks' | 'days'
+  | 'goal' | 'method' | 'environment' | 'equipment' | 'focus' | 'weeks' | 'days'
   | 'duration' | 'level' | 'restrictions' | 'loading' | 'preview';
 
 const LOADING_MESSAGE_COUNT = 4;
 
 /** Frage-Schritte in Reihenfolge — hängt von Umgebung (Geräte-Schritt) und bekanntem Fitnesslevel ab. */
 function questionSteps(environment: Environment | null, needsLevelStep: boolean): Step[] {
-  const steps: Step[] = ['goal', 'environment'];
+  const steps: Step[] = ['goal', 'method', 'environment'];
   if (environment === 'home') steps.push('equipment');
   steps.push('focus', 'weeks', 'days', 'duration');
   if (needsLevelStep) steps.push('level');
@@ -77,7 +87,8 @@ function questionSteps(environment: Environment | null, needsLevelStep: boolean)
 
 function prevStep(step: Step, environment: Environment | null, needsLevelStep: boolean): Step | undefined {
   switch (step) {
-    case 'environment':  return 'goal';
+    case 'method':       return 'goal';
+    case 'environment':  return 'method';
     case 'equipment':    return 'environment';
     case 'focus':        return environment === 'home' ? 'equipment' : 'environment';
     case 'weeks':        return 'focus';
@@ -174,6 +185,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
   const { t } = useTranslation();
   const [step,          setStep]          = useState<Step>('goal');
   const [goal,          setGoal]          = useState<FitnessGoal | null>(null);
+  const [method,        setMethod]        = useState<TrainingMethod | null>(null);
   const [environment,   setEnvironment]   = useState<Environment | null>(null);
   const [equipment,     setEquipment]     = useState<EquipmentKey[]>([]);
   const [focusArea,     setFocusArea]     = useState<FocusArea | null>(null);
@@ -222,6 +234,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
     if (!visible) return;
     setStep('goal');
     setGoal(null);
+    setMethod(null);
     setEnvironment(null);
     setEquipment([]);
     setFocusArea(null);
@@ -267,13 +280,14 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
   // ── API-Call ─────────────────────────────────────────────────────────────────
 
   async function triggerGeneration() {
-    if (!goal || !environment || !focusArea || !weeks || !sessionMinutes) return;
+    if (!goal || !method || !environment || !focusArea || !weeks || !sessionMinutes) return;
     const level = fitnessLevel ?? 'anfaenger';
     setStep('loading');
     setError(null);
 
     const input: AiPlanInput = {
       goal,
+      trainingMethod: method,
       focusArea,
       targetWeeks:    weeks,
       scheduledDays,
@@ -382,15 +396,35 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                   sub={t('aiPlan.goalLoseSub')}
                   icon="local-fire-department"
                   selected={goal === 'abnehmen'}
-                  onPress={() => { setGoal('abnehmen'); setStep('environment'); }}
+                  onPress={() => { setGoal('abnehmen'); setStep('method'); }}
                 />
                 <OptionChip
                   label={t('aiPlan.goalMuscle')}
                   sub={t('aiPlan.goalMuscleSub')}
                   icon="fitness-center"
                   selected={goal === 'muskeln'}
-                  onPress={() => { setGoal('muskeln'); setStep('environment'); }}
+                  onPress={() => { setGoal('muskeln'); setStep('method'); }}
                 />
+              </View>
+            </>
+          )}
+
+          {/* ── SCHRITT: Trainingsmethode ── */}
+          {step === 'method' && (
+            <>
+              <Text style={styles.coachText}>{t('aiPlan.methodQuestion')}</Text>
+              <Text style={styles.coachSub}>{t('aiPlan.methodSubtitle')}</Text>
+              <View style={styles.chipRow}>
+                {METHOD_OPTIONS.map(({ key, icon }) => (
+                  <OptionChip
+                    key={key}
+                    label={t(`aiPlan.method.${key}`)}
+                    sub={t(`aiPlan.methodSub.${key}`)}
+                    icon={icon}
+                    selected={method === key}
+                    onPress={() => { setMethod(key); setStep('environment'); }}
+                  />
+                ))}
               </View>
             </>
           )}
@@ -608,6 +642,7 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                 <View style={styles.loadingMeta}>
                   <Text style={styles.loadingMetaText}>
                     {goal === 'abnehmen' ? t('aiPlan.fatBurn') : t('aiPlan.muscleGain')}
+                    {method ? `  ·  ${t(`aiPlan.method.${method}`)}` : ''}
                     {'  ·  '}
                     {t(`aiPlan.focusShort.${focusArea === 'ganzkörper' ? 'ganzkoerper' : focusArea}`)}
                     {'  ·  '}{t('aiPlan.weeksShort', { n: weeks })}
@@ -636,6 +671,11 @@ export function AiPlanGeneratorModal({ visible, onClose, onSaved }: Props) {
                     {plan.fitness_goal === 'abnehmen' ? t('aiPlan.fatBurn') : t('aiPlan.muscleGain')}
                   </Text>
                 </View>
+                {plan.training_method && (
+                  <View style={styles.metaChip}>
+                    <Text style={styles.metaText}>{t(`aiPlan.method.${plan.training_method}`)}</Text>
+                  </View>
+                )}
                 <View style={styles.metaChip}>
                   <Text style={styles.metaText}>
                     {plan.environment === 'gym' ? t('aiPlan.studio') : t('aiPlan.home')}

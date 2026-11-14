@@ -10,6 +10,12 @@ export default defineMessages(
     subtitle: 'Das hat sich mit diesem Update geändert:',
     button: "Los geht's",
     releases: {
+      r2026_11_15: {
+        trainingMethods: {
+          title: 'Trainingsmethode frei wählbar',
+          text: 'Der KI-Coach fragt jetzt nach deiner Trainingsmethode: Krafttraining, HIIT, CrossFit, Zirkeltraining, Calisthenics oder Ausdauer. Sie bestimmt Sätze, Pausen und Übungsauswahl deines Plans.',
+        },
+      },
       r2026_11_03: {
         ovulationTests: {
           title: 'Ovulationstests im Zykluskalender',
@@ -65,6 +71,12 @@ export default defineMessages(
     subtitle: 'This update brings:',
     button: "Let's go",
     releases: {
+      r2026_11_15: {
+        trainingMethods: {
+          title: 'Pick your training method',
+          text: 'The AI coach now asks how you want to train: strength training, HIIT, CrossFit, circuit training, calisthenics or endurance. Your choice drives the sets, rest and exercises in your plan.',
+        },
+      },
       r2026_11_03: {
         ovulationTests: {
           title: 'Ovulation tests in the cycle calendar',

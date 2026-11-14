@@ -1,11 +1,18 @@
 /**
- * Unit-Tests: reine Hilfsfunktionen aus trainingProvider.ts
- * (sanitizeScheduledDays, resolveDayIndexForDate)
+ * Unit-Tests: Hilfsfunktionen und Methoden-Logik aus trainingProvider.ts
+ * (sanitizeScheduledDays, resolveDayIndexForDate, generateWorkoutPlan)
  */
 
 jest.mock('@/services/supabaseClient');
 
-import { resolveDayIndexForDate, sanitizeScheduledDays } from './trainingProvider';
+jest.mock('./client', () => ({
+  geminiRequest: jest.fn(),
+  GeminiDailyLimitError: class GeminiDailyLimitError extends Error {},
+}));
+
+import { geminiRequest } from './client';
+import { generateWorkoutPlan, resolveDayIndexForDate, sanitizeScheduledDays } from './trainingProvider';
+import type { AiPlanInput, TrainingMethod } from '@/types/workout';
 
 describe('sanitizeScheduledDays', () => {
   it('sortiert aufsteigend und entfernt Duplikate', () => {
@@ -40,5 +47,88 @@ describe('resolveDayIndexForDate', () => {
   it('gibt Tag 1 zurück ohne feste Tage (leer/null)', () => {
     expect(resolveDayIndexForDate([], new Date(2026, 7, 24))).toBe(1);
     expect(resolveDayIndexForDate(null, new Date(2026, 7, 24))).toBe(1);
+  });
+});
+
+describe('generateWorkoutPlan — Trainingsmethode', () => {
+  const geminiRequestMock = geminiRequest as jest.MockedFunction<typeof geminiRequest>;
+
+  function makeInput(trainingMethod: TrainingMethod): AiPlanInput {
+    return {
+      goal:           'muskeln',
+      trainingMethod,
+      focusArea:      'ganzkörper',
+      targetWeeks:    8,
+      scheduledDays:  [1, 3, 5],
+      environment:    'gym',
+      equipment:      [],
+      sessionMinutes: 60,
+      fitnessLevel:   'fortgeschritten',
+      restrictions:   null,
+    };
+  }
+
+  /** Minimal gültige KI-Antwort mit frei wählbarem is_circuit. */
+  function aiResponse(isCircuit: boolean): string {
+    return JSON.stringify({
+      title: 'Testplan',
+      is_circuit: isCircuit,
+      progression_notes: null,
+      days: [1, 2, 3].map((n) => ({
+        day_index: n,
+        label: `Tag ${n}`,
+        warmup: 'Warm-up',
+        cooldown: 'Cool-down',
+        exercises: [
+          { exercise_name: 'Kniebeuge', description: 'Tief absenken.', muscle_group: 'Beine', equipment_type: 'Langhantel', sets: 4, reps: 10, target_weight_kg: 60, target_duration: null, rest_seconds: 90 },
+        ],
+      })),
+    });
+  }
+
+  beforeEach(() => geminiRequestMock.mockReset());
+
+  it('erzwingt is_circuit aus der Methode, auch gegen die KI-Antwort', async () => {
+    geminiRequestMock.mockResolvedValue(aiResponse(false));
+    await expect(generateWorkoutPlan(makeInput('hiit'))).resolves.toMatchObject({ is_circuit: true });
+
+    geminiRequestMock.mockResolvedValue(aiResponse(true));
+    await expect(generateWorkoutPlan(makeInput('klassisch'))).resolves.toMatchObject({ is_circuit: false });
+  });
+
+  it('formt den Fallback bei HIIT auf Zeitintervalle um', async () => {
+    geminiRequestMock.mockRejectedValue(new Error('Gemini nicht erreichbar'));
+
+    const plan = await generateWorkoutPlan(makeInput('hiit'));
+    const exercises = plan.days.flatMap((d) => d.exercises);
+
+    expect(plan.is_circuit).toBe(true);
+    expect(exercises.length).toBeGreaterThan(0);
+    for (const ex of exercises) {
+      expect(ex.target_duration).not.toBeNull();
+      expect(ex.reps).toBe(1);
+      expect(ex.target_weight_kg).toBeNull();
+      expect(ex.rest_seconds).toBe(20);
+    }
+  });
+
+  it('lässt den Fallback bei klassischem Krafttraining wiederholungsbasiert', async () => {
+    geminiRequestMock.mockRejectedValue(new Error('Gemini nicht erreichbar'));
+
+    const plan = await generateWorkoutPlan(makeInput('klassisch'));
+    const exercises = plan.days.flatMap((d) => d.exercises);
+
+    expect(plan.is_circuit).toBe(false);
+    expect(exercises.some((ex) => ex.reps > 1)).toBe(true);
+  });
+
+  it('plant bei Calisthenics ausschließlich ohne Zusatzgewicht', async () => {
+    geminiRequestMock.mockRejectedValue(new Error('Gemini nicht erreichbar'));
+
+    const plan = await generateWorkoutPlan(makeInput('calisthenics'));
+
+    for (const ex of plan.days.flatMap((d) => d.exercises)) {
+      expect(ex.target_weight_kg).toBeNull();
+    }
   });
 });

@@ -4,6 +4,9 @@
 
 export type FitnessGoal    = 'abnehmen' | 'muskeln';
 export type FocusArea      = 'bauch' | 'beine' | 'oberkoerper' | 'ganzkörper';
+/** Standard-Trainingsmethode — bestimmt Satz-/Pausen-Struktur und Übungsauswahl. */
+export type TrainingMethod =
+  | 'klassisch' | 'hiit' | 'crossfit' | 'zirkel' | 'calisthenics' | 'ausdauer';
 export type TargetWeeks    = 4 | 8 | 12;
 export type Environment    = 'gym' | 'home';
 export type FitnessLevel   = 'anfaenger' | 'fortgeschritten' | 'profi';
@@ -11,6 +14,7 @@ export type SessionMinutes = 30 | 45 | 60 | 90;
 
 export interface AiPlanInput {
   goal:            FitnessGoal;
+  trainingMethod:  TrainingMethod;
   focusArea:       FocusArea;
   targetWeeks:     TargetWeeks;
   /** DB-Integers: 0 = So, 1 = Mo, 2 = Di, 3 = Mi, 4 = Do, 5 = Fr, 6 = Sa */
@@ -76,6 +80,7 @@ export interface WorkoutPlanInsert {
   is_ai_generated:             true;
   focus_area:                  FocusArea;
   fitness_goal:                FitnessGoal;
+  training_method:             TrainingMethod;
   target_weeks:                TargetWeeks;
   is_circuit:                  boolean;
   scheduled_days:              number[] | null;

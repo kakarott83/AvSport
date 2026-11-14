@@ -74,6 +74,7 @@ beforeEach(() => {
 
 const BASE_INPUT: AiPlanInput = {
   goal:            'muskeln',
+  trainingMethod:  'klassisch',
   focusArea:       'beine',
   targetWeeks:     8,
   scheduledDays:   [1, 3, 5], // Mo, Mi, Fr → 3 Split-Tage
@@ -155,12 +156,25 @@ describe('generateAiPlan — API-Erfolg', () => {
     expect(plan.progression_notes).toBe('Steigere wöchentlich Gewicht oder Wiederholungen.');
   });
 
-  it('übernimmt is_circuit aus der KI-Antwort', async () => {
+  it('mappt die Trainingsmethode aus der Eingabe', async () => {
+    const plan = await generateAiPlan({ ...BASE_INPUT, trainingMethod: 'crossfit' });
+    expect(plan.training_method).toBe('crossfit');
+  });
+
+  // is_circuit kommt aus der gewählten Methode, nicht aus der KI-Antwort —
+  // sonst passt der gespeicherte Ablauf nicht zur angezeigten Methode.
+  it('leitet is_circuit aus der Trainingsmethode ab, nicht aus der KI-Antwort', async () => {
     (globalThis.fetch as jest.Mock).mockResolvedValue(
       makeProxyResponse('Zirkel-Plan', true),
     );
-    const plan = await generateAiPlan(BASE_INPUT);
-    expect(plan.is_circuit).toBe(true);
+    const klassisch = await generateAiPlan({ ...BASE_INPUT, trainingMethod: 'klassisch' });
+    expect(klassisch.is_circuit).toBe(false);
+
+    (globalThis.fetch as jest.Mock).mockResolvedValue(
+      makeProxyResponse('Kraft-Plan', false),
+    );
+    const zirkel = await generateAiPlan({ ...BASE_INPUT, trainingMethod: 'zirkel' });
+    expect(zirkel.is_circuit).toBe(true);
   });
 });
 

@@ -17,6 +17,7 @@ export default defineMessages(
       where: 'Tab „Pläne“',
       points: [
         'Trainingspläne selbst anlegen oder per „✨ KI-Plan“ erstellen lassen.',
+        'Trainingsmethode wählbar: Krafttraining, HIIT, CrossFit, Zirkel, Calisthenics oder Ausdauer.',
         'Übungsbeschreibungen kommen von der KI und lassen sich anpassen.',
         'Geführtes Training mit Sätzen, Zirkeln und Pausen-Timer.',
         'Der geschätzte Kalorienverbrauch deines Trainings erhöht dein Tagesziel.',
@@ -98,6 +99,7 @@ export default defineMessages(
       where: '“Plans” tab',
       points: [
         'Create training plans yourself or let “✨ AI plan” build one for you.',
+        'Choose your training method: strength, HIIT, CrossFit, circuit, calisthenics or endurance.',
         'Exercise descriptions come from the AI and can be customized.',
         'Guided workouts with sets, circuits and a rest timer.',
         'The estimated calorie burn of your workout increases your daily goal.',

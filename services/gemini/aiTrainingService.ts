@@ -22,6 +22,7 @@ export async function generateAiPlan(input: AiPlanInput): Promise<WorkoutPlanIns
     is_ai_generated:             true,
     focus_area:                  input.focusArea,
     fitness_goal:                input.goal,
+    training_method:             input.trainingMethod,
     target_weeks:                input.targetWeeks,
     is_circuit:                  ai.is_circuit,
     scheduled_days:              ai.scheduled_days,

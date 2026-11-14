@@ -8,7 +8,7 @@
 import { getLanguage, t } from '@/lib/i18n';
 import { geminiRequest, GeminiDailyLimitError } from './client';
 import type {
-  AiPlanInput, FocusArea, GeneratedDay, GeneratedExercise, FitnessLevel,
+  AiPlanInput, FocusArea, GeneratedDay, GeneratedExercise, FitnessLevel, TrainingMethod,
 } from '@/types/workout';
 
 // ─── Öffentliche Interfaces (KI-Antwort-Shape) ────────────────────────────────
@@ -49,6 +49,60 @@ export const FITNESS_LEVEL_LABEL: Record<FitnessLevel, string> = {
   get anfaenger()       { return t('aiPlan.level.anfaenger'); },
   get fortgeschritten() { return t('aiPlan.level.fortgeschritten'); },
   get profi()           { return t('aiPlan.level.profi'); },
+};
+
+export const TRAINING_METHOD_LABEL: Record<TrainingMethod, string> = {
+  get klassisch()    { return t('aiPlan.method.klassisch'); },
+  get hiit()         { return t('aiPlan.method.hiit'); },
+  get crossfit()     { return t('aiPlan.method.crossfit'); },
+  get zirkel()       { return t('aiPlan.method.zirkel'); },
+  get calisthenics() { return t('aiPlan.method.calisthenics'); },
+  get ausdauer()     { return t('aiPlan.method.ausdauer'); },
+};
+
+/**
+ * Satz-/Pausen-Struktur je Trainingsmethode — geht als Hauptvorgabe in den Prompt
+ * und sticht die rein zielbasierte Wiederholungsempfehlung.
+ */
+const METHOD_GUIDE: Record<TrainingMethod, string> = {
+  klassisch:
+    'Klassisches Krafttraining: 3–5 Sätze pro Übung, saubere Technik vor Tempo, feste Satzpausen. ' +
+    'Compound-Übungen zuerst, Isolation danach.',
+  hiit:
+    'HIIT: kurze, hochintensive Intervalle (20–45 Sekunden Belastung) mit knappen Pausen (10–30 Sekunden), 3–5 Runden. ' +
+    'Überwiegend explosive, dynamische Übungen (z. B. Burpees, Mountain Climbers, Jump Squats, Sprints). ' +
+    'Belastungszeit IMMER in "target_duration" (Sekunden) angeben und "reps" auf 1 setzen.',
+  crossfit:
+    'CrossFit / Functional Training: WOD-Stil mit funktionellen Ganzkörperbewegungen ' +
+    '(Kettlebell Swing, Thruster, Wall Ball, Box Jump, Burpee, Kreuzheben). ' +
+    'Baue jeden Tag als AMRAP- oder EMOM-Runde auf und nenne das Format im "label" (z. B. "AMRAP 15") ' +
+    'sowie die Rundenvorgabe in "warmup". Hohe Intensität, kurze Pausen (30–60 Sekunden).',
+  zirkel:
+    'Zirkeltraining: 5–8 Stationen direkt hintereinander mit nur 10–20 Sekunden Stationswechsel, ' +
+    '3–4 Runden mit 60–90 Sekunden Rundenpause. Belastung gleichmäßig über den Körper verteilen, ' +
+    'damit keine Muskelgruppe zweimal in Folge drankommt.',
+  calisthenics:
+    'Calisthenics: ausschließlich Körpergewichtsübungen und deren Progressionen ' +
+    '(Liegestütz-Varianten, Klimmzüge, Dips, Pistol Squats, L-Sit, Negativwiederholungen). ' +
+    '"target_weight_kg" IMMER null, "equipment_type" ist "Körpergewicht" oder die genutzte Stange/Barren.',
+  ausdauer:
+    'Ausdauer / Cardio: überwiegend zyklische Belastungen (Laufen, Rudern, Radfahren, Seilspringen) ' +
+    'ergänzt um Kraftausdauer-Übungen mit leichtem Gewicht. ' +
+    'Bei zyklischen Einheiten die Dauer in "target_duration" (Sekunden) angeben und "reps" auf 1 setzen.',
+};
+
+/**
+ * Ob die Methode einen Zirkel-Ablauf bedeutet. Wird deterministisch gesetzt (statt der
+ * KI überlassen), damit der gespeicherte Plan zur angezeigten Methode passt — der
+ * aktive Workout-Screen steuert daraus Rundenlogik und Kalorienschätzung.
+ */
+const METHOD_IS_CIRCUIT: Record<TrainingMethod, boolean> = {
+  klassisch:    false,
+  hiit:         true,
+  crossfit:     true,
+  zirkel:       true,
+  calisthenics: false,
+  ausdauer:     false,
 };
 
 /** Sprache, in der Gemini alle Texte des Plans formulieren soll. */
@@ -115,10 +169,29 @@ function buildPrompt(input: AiPlanInput, sanitizedDays: number[] | null): string
         ? 'Empfehlung: Push/Pull/Beine oder 3× Ganzkörper mit unterschiedlichem Fokus.'
         : 'Empfehlung: Ganzkörper-Einheiten (Compound-Übungen bevorzugen), pro Tag leicht variiert.';
 
+  // Zielvorgabe setzt den Rahmen, die Methode ist die konkretere Vorgabe und sticht sie.
   const repGuide =
     input.goal === 'abnehmen'
-      ? 'Höhere Wiederholungszahlen (12–20), moderate Gewichte, kurze Pausen (30–60s). is_circuit: true bei ≥ 3 Tagen.'
-      : 'Moderate Wiederholungen (6–12), progressiv schwerere Gewichte, längere Pausen (60–120s). is_circuit: false.';
+      ? 'Tendenziell höhere Wiederholungszahlen (12–20), moderate Gewichte, kurze Pausen (30–60s).'
+      : 'Tendenziell moderate Wiederholungen (6–12), progressiv schwerere Gewichte, längere Pausen (60–120s).';
+
+  const methodGuide =
+    `Trainingsmethode (hat Vorrang vor der Zielvorgabe): ${METHOD_GUIDE[input.trainingMethod]} ` +
+    `Setze "is_circuit" auf ${METHOD_IS_CIRCUIT[input.trainingMethod]}.`;
+
+  const exerciseCountRule =
+    input.trainingMethod === 'zirkel'
+      ? '5–8 Stationen pro Tag'
+      : '4–7 Übungen pro Tag';
+
+  // Grundregel: nur allgemein verständliche Übungen. Bei CrossFit und Calisthenics
+  // sind die etablierten Fachbewegungen aber genau das, was die Methode ausmacht.
+  const knownExercisesRule =
+    input.trainingMethod === 'crossfit' || input.trainingMethod === 'calisthenics'
+      ? `Nur etablierte Standardbewegungen der Methode "${TRAINING_METHOD_LABEL[input.trainingMethod]}" ` +
+        '(z. B. Thruster, Wall Ball, Box Jump, Kettlebell Swing, Burpee bzw. Liegestütz, Klimmzug, Dip, Pistol Squat) ' +
+        '— keine erfundenen oder überspezialisierten Namen. Was nicht selbsterklärend ist, muss die "description" erklären.'
+      : 'Nur bekannte, gängige Standardübungen (z. B. Kniebeuge, Bankdrücken, Latziehen, Plank, Glute Bridge, Russian Twist, Romanian Deadlift, Rudern) — keine ungewöhnlichen, überspezialisierten oder unbekannten Namen. Jede Übung muss auch ohne Fachwissen sofort verständlich sein.';
 
   const restrictionsText = input.restrictions?.trim()
     ? `Einschränkungen: ${input.restrictions.trim()} — betroffene Übungen meiden oder durch gelenkschonende Alternativen ersetzen.`
@@ -132,6 +205,7 @@ AUSGABESPRACHE: Formuliere ALLE Textwerte im JSON (title, progression_notes, lab
 
 Nutzerprofil:
 - Ziel: ${GOAL_LABEL[input.goal]}
+- Trainingsmethode: ${TRAINING_METHOD_LABEL[input.trainingMethod]}
 - Trainingsfokus: ${FOCUS_LABEL[input.focusArea]}
 - Trainingsniveau: ${FITNESS_LEVEL_LABEL[input.fitnessLevel]}
 - Programmdauer: ${input.targetWeeks} Wochen
@@ -142,6 +216,7 @@ Nutzerprofil:
 
 ${splitHint}
 ${repGuide}
+${methodGuide}
 
 Erstelle GENAU ${daySplitCount} unterschiedliche Trainingstage (Day 1 bis Day ${daySplitCount}), passend zum Split. Jeder Tag braucht ein kurzes Warm-up (5–10 Min Mobilisation/Aktivierung) und ein Cool-down (Stretching), jeweils passend zu den Übungen des Tages.
 
@@ -175,9 +250,9 @@ Liefere NUR ein valides JSON-Objekt (kein Markdown, keine Erklärung, kein Code-
 
 Regeln:
 - Genau ${daySplitCount} Einträge im "days"-Array, day_index von 1 bis ${daySplitCount}
-- 4–7 Übungen pro Tag, passend zum Fokusbereich "${FOCUS_LABEL[input.focusArea]}" und zur verfügbaren Zeit
+- ${exerciseCountRule}, passend zum Fokusbereich "${FOCUS_LABEL[input.focusArea]}" und zur verfügbaren Zeit
 - NUR Übungen mit den verfügbaren Geräten (${equipmentText(input)})
-- Nur bekannte, gängige Standardübungen (z. B. Kniebeuge, Bankdrücken, Latziehen, Plank, Glute Bridge, Russian Twist, Romanian Deadlift, Rudern) — keine ungewöhnlichen, überspezialisierten oder unbekannten Namen. Jede Übung muss auch ohne Fachwissen sofort verständlich sein.
+- ${knownExercisesRule}
 - Realistisches Gewicht für ${FITNESS_LEVEL_LABEL[input.fitnessLevel]} (oder null wenn bodyweight)
 - "muscle_group" und "equipment_type" sind das Piktogramm der Übung (Anzeige als "[muscle_group / equipment_type]") — keine Emojis oder Symbole, nur diese zwei kurzen, eindeutigen Textwerte. "equipment_type" kann auch ein Bewegungstyp sein, wenn das treffender ist (z. B. "Boden" bei Bodenübungen, "Rotation" bei Drehbewegungen)
 - "description": knapp und leicht verständlich, ein Satz, keine Fachbegriffe ohne Erklärung
@@ -369,29 +444,57 @@ function localizeFallbackExercise(ex: GeneratedExercise): GeneratedExercise {
   };
 }
 
+/**
+ * Formt eine Fallback-Übung auf die gewählte Trainingsmethode um.
+ * Läuft NACH der zielbasierten Anpassung, damit die Methode sie sticht —
+ * genauso wie der Prompt es der KI vorgibt.
+ */
+function applyMethodToFallback(ex: GeneratedExercise, method: TrainingMethod): GeneratedExercise {
+  switch (method) {
+    case 'hiit':
+      // Alles auf Zeit: 40s Belastung, 20s Pause, 4 Runden, kein Zusatzgewicht.
+      return { ...ex, sets: 4, reps: 1, target_duration: ex.target_duration ?? 40, target_weight_kg: null, rest_seconds: 20 };
+    case 'zirkel':
+      return { ...ex, sets: 3, rest_seconds: 15 };
+    case 'crossfit':
+      return { ...ex, sets: 3, rest_seconds: 45 };
+    case 'ausdauer':
+      return { ...ex, sets: 2, reps: 1, target_duration: ex.target_duration ?? 90, target_weight_kg: null, rest_seconds: 45 };
+    case 'calisthenics':
+      return { ...ex, target_weight_kg: null };
+    case 'klassisch':
+      return ex;
+  }
+}
+
 function buildFallback(input: AiPlanInput, sanitizedDays: number[] | null): WorkoutPlanAiResponse {
   const daySplitCount = resolveDaySplitCount(sanitizedDays);
 
-  // Bei Zuhause ohne Geräte: nur Körpergewichtsübungen aus dem Pool übernehmen.
-  const bodyweightOnly = input.environment === 'home' && input.equipment.length === 0;
+  // Bei Zuhause ohne Geräte — und bei Calisthenics generell: nur Körpergewichtsübungen.
+  const bodyweightOnly =
+    (input.environment === 'home' && input.equipment.length === 0) ||
+    input.trainingMethod === 'calisthenics';
   const basePool = FALLBACK_POOL[input.focusArea];
   const filtered = bodyweightOnly ? basePool.filter((ex) => ex.target_weight_kg === null) : basePool;
   const pool = filtered.length > 0 ? filtered : basePool;
 
-  const exercises = pool.map(localizeFallbackExercise).map((ex) =>
-    input.goal === 'abnehmen'
-      ? {
-          ...ex,
-          reps: ex.target_duration ? ex.reps : Math.round(ex.reps * 1.25),
-          target_weight_kg: ex.target_weight_kg ? Math.round(ex.target_weight_kg * 0.75) : null,
-          rest_seconds: 30,
-        }
-      : {
-          ...ex,
-          sets: ex.sets + 1,
-          target_weight_kg: ex.target_weight_kg ? Math.round(ex.target_weight_kg * 1.2) : null,
-        },
-  );
+  const exercises = pool
+    .map(localizeFallbackExercise)
+    .map((ex) =>
+      input.goal === 'abnehmen'
+        ? {
+            ...ex,
+            reps: ex.target_duration ? ex.reps : Math.round(ex.reps * 1.25),
+            target_weight_kg: ex.target_weight_kg ? Math.round(ex.target_weight_kg * 0.75) : null,
+            rest_seconds: 30,
+          }
+        : {
+            ...ex,
+            sets: ex.sets + 1,
+            target_weight_kg: ex.target_weight_kg ? Math.round(ex.target_weight_kg * 1.2) : null,
+          },
+    )
+    .map((ex) => applyMethodToFallback(ex, input.trainingMethod));
 
   const days: GeneratedDay[] = Array.from({ length: daySplitCount }, (_, i) => ({
     day_index: i + 1,
@@ -403,7 +506,7 @@ function buildFallback(input: AiPlanInput, sanitizedDays: number[] | null): Work
 
   return {
     title:              t('aiPlan.fallback.title', { weeks: input.targetWeeks, focus: FOCUS_LABEL[input.focusArea] }),
-    is_circuit:         input.goal === 'abnehmen',
+    is_circuit:         METHOD_IS_CIRCUIT[input.trainingMethod],
     progression_notes:  t('aiPlan.fallback.progression'),
     days,
     scheduled_days:     sanitizedDays,
@@ -437,6 +540,8 @@ export async function generateWorkoutPlan(input: AiPlanInput): Promise<WorkoutPl
 
     return {
       ...validated,
+      // Zirkel-Ablauf ergibt sich aus der gewählten Methode, nicht aus der KI-Antwort.
+      is_circuit:     METHOD_IS_CIRCUIT[input.trainingMethod],
       scheduled_days: sanitizedDays,
     };
   } catch (err) {
